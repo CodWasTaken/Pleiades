@@ -6,5 +6,5 @@
 pub mod store;
 pub mod tiers;
 
-pub use store::MemoryStore;
-pub use tiers::{WorkingMemory, SessionMemory, ProjectMemory, UserMemory};
+pub use store::{FileStore, InMemoryStore, MemoryEntry, MemoryStore};
+pub use tiers::{ProjectMemory, SessionMemory, UserMemory, WorkingMemory};

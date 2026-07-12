@@ -10,6 +10,8 @@ use pleiades_core::model::ModelRegistry;
 
 use pleiades_config::types::Config;
 
+use crate::memory::MemoryManager;
+
 /// The main engine that orchestrates AI interactions.
 ///
 /// The engine ties together providers, tools, conversations,
@@ -20,18 +22,41 @@ pub struct Engine {
     model_registry: ModelRegistry,
     config: Arc<Config>,
     event_sender: Option<tokio::sync::mpsc::Sender<Event>>,
+    memory: MemoryManager,
 }
 
 impl Engine {
     /// Create a new engine with the given configuration.
     pub fn new(config: Config) -> Self {
+        let mem_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("pleiades")
+            .join("memory");
         Self {
             providers: HashMap::new(),
             tools: Vec::new(),
             model_registry: ModelRegistry::new(),
             config: Arc::new(config),
             event_sender: None,
+            memory: MemoryManager::persisted(mem_dir),
         }
+    }
+
+    /// Create a new engine with a custom memory manager.
+    pub fn with_memory(config: Config, memory: MemoryManager) -> Self {
+        Self {
+            providers: HashMap::new(),
+            tools: Vec::new(),
+            model_registry: ModelRegistry::new(),
+            config: Arc::new(config),
+            event_sender: None,
+            memory,
+        }
+    }
+
+    /// Get a reference to the memory manager.
+    pub fn memory(&self) -> &MemoryManager {
+        &self.memory
     }
 
     /// Register a provider with the engine.
@@ -74,7 +99,8 @@ impl Engine {
 
     /// Process a chat message through the engine.
     pub async fn chat(&self, conversation: &mut Conversation, provider_name: &str) -> Result<Message, Error> {
-        self.prepare_conversation(conversation);
+        self.inject_memory_context(conversation);
+        self.prepare_conversation(conversation).await;
         let provider = self.get_provider(provider_name)?;
         let model = self.config.core.default_model.clone()
             .unwrap_or_else(|| provider.default_model().to_string());
@@ -112,7 +138,8 @@ impl Engine {
         conversation: &mut Conversation,
         provider_name: &str,
     ) -> Result<tokio::sync::mpsc::Receiver<StreamEvent>, Error> {
-        self.prepare_conversation(conversation);
+        self.inject_memory_context(conversation);
+        self.prepare_conversation(conversation).await;
         let provider = self.get_provider(provider_name)?;
         let model = self.config.core.default_model.clone()
             .unwrap_or_else(|| provider.default_model().to_string());
@@ -241,10 +268,72 @@ impl Engine {
         remove_count
     }
 
+    /// Summarize a batch of messages using the provider.
+    ///
+    /// Uses a simple heuristic: runs the provider with a summarization prompt.
+    /// Falls back to a text-based summary if the provider call fails.
+    pub async fn summarize_messages(&self, messages: &[Message]) -> String {
+        if messages.is_empty() {
+            return String::new();
+        }
+
+        let provider_name = self.config.core.default_provider.clone()
+            .unwrap_or_else(|| "openai".to_string());
+        let model = self.config.core.default_model.clone()
+            .unwrap_or_else(|| "gpt-4o".to_string());
+
+        let conversation_text: String = messages.iter()
+            .map(|m| {
+                let role = format!("{:?}", m.role).to_lowercase();
+                format!("<{}>\n{}\n</{}>", role, m.text_content(), role)
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let prompt = format!(
+            "Summarize the following conversation concisely in 2-3 sentences. \
+             Focus on key decisions, code changes, and important context.\n\n{}",
+            conversation_text,
+        );
+
+        let request = ChatRequest {
+            model,
+            messages: vec![Message::user(prompt)],
+            system_prompt: Some("You are a precise summarizer. Output ONLY the summary, no preamble.".to_string()),
+            temperature: Some(0.3),
+            top_p: None,
+            max_tokens: Some(256),
+            stop: None,
+            tools: None,
+        };
+
+        if let Ok(provider) = self.get_provider(&provider_name) {
+            if let Ok(response) = provider.chat(request).await {
+                let summary = response.message.text_content();
+                if !summary.is_empty() {
+                    return summary;
+                }
+            }
+        }
+
+        // Fallback: simple text compression
+        let words: Vec<&str> = conversation_text.split_whitespace().collect();
+        if words.len() > 50 {
+            format!(
+                "Summary of {} messages: {}...",
+                messages.len(),
+                words[..50].join(" ")
+            )
+        } else {
+            conversation_text
+        }
+    }
+
     /// Apply automatic compression when the conversation exceeds the threshold.
     ///
+    /// Uses LLM-based summarization and stores summaries in persistent memory.
     /// Returns a summary message if compression was applied.
-    pub fn compress_conversation(&self, conversation: &mut Conversation) -> Option<String> {
+    pub async fn compress_conversation(&self, conversation: &mut Conversation) -> Option<String> {
         if !conversation.config.auto_compress {
             return None;
         }
@@ -271,39 +360,47 @@ impl Engine {
             return None;
         }
 
-        let removed_count = compress_up_to;
-        let kept: Vec<Message> = conversation.messages.drain(compress_up_to..).collect();
-        let removed_summary: Vec<String> = conversation.messages.iter().map(|m| {
-            let text = m.text_content();
-            let words: Vec<&str> = text.split_whitespace().collect();
-            if words.len() > 10 {
-                format!("{}...", words[..10.min(words.len())].join(" "))
-            } else {
-                text
+        let removed: Vec<Message> = conversation.messages.drain(..compress_up_to).collect();
+
+        let summary_text = self.summarize_messages(&removed).await;
+
+        self.memory.store_summary(&summary_text).ok();
+
+        let summary_msg = Message::system(format!(
+            "[Conversation History Summary]\n{}",
+            summary_text,
+        ));
+
+        conversation.messages.insert(0, summary_msg);
+
+        tracing::info!("Compressed {} messages. Summary: {}", removed.len(), summary_text);
+        Some(summary_text)
+    }
+
+    /// Inject relevant memory context into the conversation as system messages.
+    pub fn inject_memory_context(&self, conversation: &mut Conversation) {
+        if let Ok(summaries) = self.memory.recent_summaries(3) {
+            if !summaries.is_empty() {
+                let context = summaries.join("\n---\n");
+                let memory_msg = Message::system(format!(
+                    "[Previous Session Context]\n{}",
+                    context,
+                ));
+                conversation.messages.insert(0, memory_msg);
             }
-        }).collect::<Vec<_>>();
-
-        conversation.messages = kept;
-
-        let summary = format!(
-            "[{} earlier messages compressed. Topics discussed: {}]",
-            removed_count,
-            removed_summary.join(" | "),
-        );
-
-        Some(summary)
+        }
     }
 
     /// Ensure the conversation fits within the context window before a request.
-    pub fn prepare_conversation(&self, conversation: &mut Conversation) {
+    pub async fn prepare_conversation(&self, conversation: &mut Conversation) {
         let removed = self.truncate_conversation(conversation);
         if removed > 0 {
             tracing::info!("Truncated {} messages from conversation", removed);
         }
 
-        let compression = self.compress_conversation(conversation);
-        if let Some(summary) = compression {
-            tracing::info!("Compressed conversation: {}", summary);
+        let compression = self.compress_conversation(conversation).await;
+        if compression.is_some() {
+            tracing::info!("Conversation compressed with LLM summary");
         }
     }
 

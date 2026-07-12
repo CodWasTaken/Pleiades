@@ -1,9 +1,10 @@
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use pleiades_core::error::Error;
 use pleiades_core::conversation::Message;
 
-use crate::store::{InMemoryStore, MemoryEntry, MemoryStore};
+use crate::store::{FileStore, InMemoryStore, MemoryEntry, MemoryStore};
 
 /// Working memory for the current conversation context.
 pub struct WorkingMemory {
@@ -48,6 +49,19 @@ impl SessionMemory {
         }
     }
 
+    pub fn with_store(store: Box<dyn MemoryStore>) -> Self {
+        Self {
+            store: Mutex::new(store),
+        }
+    }
+
+    pub fn persisted(base_dir: PathBuf) -> Self {
+        let dir = base_dir.join("session");
+        Self {
+            store: Mutex::new(Box::new(FileStore::new(dir))),
+        }
+    }
+
     pub fn add(&self, content: impl Into<String>, source: impl Into<String>) -> Result<(), Error> {
         let entry = MemoryEntry {
             id: uuid::Uuid::new_v4().to_string(),
@@ -64,6 +78,14 @@ impl SessionMemory {
 
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
         self.store.lock().unwrap().search(query, limit)
+    }
+
+    pub fn recent(&self, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
+        self.store.lock().unwrap().recent(limit)
+    }
+
+    pub fn clear(&self) -> Result<(), Error> {
+        self.store.lock().unwrap().clear()
     }
 }
 
@@ -85,6 +107,19 @@ impl ProjectMemory {
         }
     }
 
+    pub fn with_store(store: Box<dyn MemoryStore>) -> Self {
+        Self {
+            store: Mutex::new(store),
+        }
+    }
+
+    pub fn persisted(base_dir: PathBuf) -> Self {
+        let dir = base_dir.join("project");
+        Self {
+            store: Mutex::new(Box::new(FileStore::new(dir))),
+        }
+    }
+
     pub fn add(&self, content: impl Into<String>, source: impl Into<String>) -> Result<(), Error> {
         let entry = MemoryEntry {
             id: uuid::Uuid::new_v4().to_string(),
@@ -101,6 +136,14 @@ impl ProjectMemory {
 
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
         self.store.lock().unwrap().search(query, limit)
+    }
+
+    pub fn recent(&self, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
+        self.store.lock().unwrap().recent(limit)
+    }
+
+    pub fn clear(&self) -> Result<(), Error> {
+        self.store.lock().unwrap().clear()
     }
 }
 
@@ -122,6 +165,19 @@ impl UserMemory {
         }
     }
 
+    pub fn with_store(store: Box<dyn MemoryStore>) -> Self {
+        Self {
+            store: Mutex::new(store),
+        }
+    }
+
+    pub fn persisted(base_dir: PathBuf) -> Self {
+        let dir = base_dir.join("user");
+        Self {
+            store: Mutex::new(Box::new(FileStore::new(dir))),
+        }
+    }
+
     pub fn add(&self, content: impl Into<String>, source: impl Into<String>) -> Result<(), Error> {
         let entry = MemoryEntry {
             id: uuid::Uuid::new_v4().to_string(),
@@ -138,6 +194,14 @@ impl UserMemory {
 
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
         self.store.lock().unwrap().search(query, limit)
+    }
+
+    pub fn recent(&self, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
+        self.store.lock().unwrap().recent(limit)
+    }
+
+    pub fn clear(&self) -> Result<(), Error> {
+        self.store.lock().unwrap().clear()
     }
 }
 
