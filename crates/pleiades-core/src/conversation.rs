@@ -133,7 +133,7 @@ impl Default for ConversationConfig {
 }
 
 /// A complete conversation with message history.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Conversation {
     pub id: String,
     pub messages: Vec<Message>,

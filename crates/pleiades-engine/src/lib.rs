@@ -6,6 +6,8 @@
 pub mod engine;
 pub mod chat;
 pub mod agent;
+pub mod session;
 
 pub use engine::Engine;
 pub use chat::ChatSession;
+pub use session::{SessionStore, SessionInfo};

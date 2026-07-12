@@ -21,6 +21,15 @@ impl<'a> ChatSession<'a> {
         }
     }
 
+    /// Create a chat session with an existing conversation (for resume).
+    pub fn from_conversation(engine: &'a Engine, conversation: Conversation, provider: impl Into<String>) -> Self {
+        Self {
+            engine,
+            conversation,
+            provider: provider.into(),
+        }
+    }
+
     /// Send a message and get a response (blocking, non-streaming).
     pub async fn send(&mut self, content: impl Into<String>) -> Result<Message, Error> {
         let message = Message::user(content);
@@ -28,7 +37,7 @@ impl<'a> ChatSession<'a> {
         self.engine.chat(&mut self.conversation, &self.provider).await
     }
 
-    /// Send a message and stream the response.
+    /// Stream a chat response, processing tokens as they arrive.
     pub async fn send_stream(
         &mut self,
         content: impl Into<String>,
@@ -53,5 +62,10 @@ impl<'a> ChatSession<'a> {
     /// Get the conversation ID.
     pub fn id(&self) -> &str {
         &self.conversation.id
+    }
+
+    /// Get the provider name.
+    pub fn provider(&self) -> &str {
+        &self.provider
     }
 }

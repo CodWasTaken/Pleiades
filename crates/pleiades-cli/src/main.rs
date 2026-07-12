@@ -61,6 +61,10 @@ enum Commands {
     /// Manage models
     #[command(subcommand)]
     Model(ModelCommand),
+
+    /// Manage chat sessions
+    #[command(subcommand)]
+    Session(SessionCommand),
 }
 
 #[derive(Subcommand)]
@@ -209,6 +213,39 @@ enum ModelCommand {
 
     /// Discover models from configured providers
     Discover,
+}
+
+#[derive(Subcommand)]
+enum SessionCommand {
+    /// List saved sessions
+    List,
+
+    /// Show session details
+    Show {
+        /// Session ID
+        id: String,
+    },
+
+    /// Delete a saved session
+    Delete {
+        /// Session ID
+        id: String,
+    },
+
+    /// Export a session to a file
+    Export {
+        /// Session ID
+        id: String,
+        /// Output format (markdown, json)
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+        /// Output file path (defaults to <id>.<format>)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+
+    /// Show session store location
+    Path,
 }
 
 fn get_config_dirs() -> (PathBuf, PathBuf) {
@@ -982,6 +1019,157 @@ fn build_test_provider(name: &str, api_key: &str, base_url: &str) -> Box<dyn ple
     }
 }
 
+fn handle_session_list(loader: &ConfigLoader) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_engine::SessionStore::from_config(&config);
+
+    match store.list() {
+        Ok(sessions) => {
+            if sessions.is_empty() {
+                println!("No saved sessions.");
+                println!("Sessions are saved to: {}", store.dir().display());
+                return;
+            }
+            println!("Sessions ({} total):", sessions.len());
+            println!();
+            for session in &sessions {
+                let title = session.metadata.title.as_deref().unwrap_or("Untitled");
+                let created = session.metadata.created_at.format("%Y-%m-%d %H:%M");
+                let model = session.metadata.model.as_deref().unwrap_or("?");
+                let count = session.metadata.total_tokens.map(|t| t.to_string()).unwrap_or_else(|| "?".to_string());
+                println!("  {}  {}  {}", &session.id[..8], created, title);
+                println!("      model: {} | tokens: {}", model, count);
+                println!();
+            }
+        }
+        Err(e) => {
+            eprintln!("Error listing sessions: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_session_show(loader: &ConfigLoader, id: &str) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_engine::SessionStore::from_config(&config);
+
+    match store.load(id) {
+        Ok(conv) => {
+            println!("Session: {}", conv.id);
+            println!("  Title:    {}", conv.metadata.title.as_deref().unwrap_or("Untitled"));
+            println!("  Created:  {}", conv.metadata.created_at.format("%Y-%m-%d %H:%M UTC"));
+            println!("  Updated:  {}", conv.metadata.updated_at.format("%Y-%m-%d %H:%M UTC"));
+            if let Some(ref model) = conv.metadata.model {
+                println!("  Model:    {}", model);
+            }
+            if let Some(ref provider) = conv.metadata.provider {
+                println!("  Provider: {}", provider);
+            }
+            if let Some(tokens) = conv.metadata.total_tokens {
+                println!("  Tokens:   {}", tokens);
+            }
+            if !conv.metadata.tags.is_empty() {
+                println!("  Tags:     {}", conv.metadata.tags.join(", "));
+            }
+            println!("  Messages: {}", conv.messages.len());
+            println!();
+            for msg in &conv.messages {
+                let role = format!("{:?}", msg.role).to_lowercase();
+                let preview = &msg.text_content()[..msg.text_content().len().min(100)];
+                println!("  [{}] {}", role, preview);
+                if msg.text_content().len() > 100 {
+                    println!("    ... ({} more chars)", msg.text_content().len() - 100);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_session_delete(loader: &ConfigLoader, id: &str) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_engine::SessionStore::from_config(&config);
+
+    match store.delete(id) {
+        Ok(_) => println!("Session '{}' deleted", id),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_session_export(loader: &ConfigLoader, id: &str, format: &str, output: Option<String>) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_engine::SessionStore::from_config(&config);
+
+    let content = match format {
+        "json" => store.export_json(id),
+        _ => store.export_markdown(id),
+    };
+
+    match content {
+        Ok(data) => {
+            let path = output.unwrap_or_else(|| format!("{}.{}", id, if format == "json" { "json" } else { "md" }));
+            match std::fs::write(&path, &data) {
+                Ok(_) => println!("Exported to {}", path),
+                Err(e) => {
+                    eprintln!("Error writing file: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Error exporting session: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_session_path(loader: &ConfigLoader) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_engine::SessionStore::from_config(&config);
+    println!("{}", store.dir().display());
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
@@ -1018,6 +1206,13 @@ fn main() {
             ModelCommand::Alias { alias, model } => handle_model_alias(&loader, &alias, &model),
             ModelCommand::Unalias { alias } => handle_model_unalias(&loader, &alias),
             ModelCommand::Discover => handle_model_discover(&loader),
+        },
+        Some(Commands::Session(cmd)) => match cmd {
+            SessionCommand::List => handle_session_list(&loader),
+            SessionCommand::Show { id } => handle_session_show(&loader, &id),
+            SessionCommand::Delete { id } => handle_session_delete(&loader, &id),
+            SessionCommand::Export { id, format, output } => handle_session_export(&loader, &id, &format, output),
+            SessionCommand::Path => handle_session_path(&loader),
         },
         None => {
             if cli.chat {
