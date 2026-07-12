@@ -42,3 +42,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Community**: ISSUE_TEMPLATE, PR_TEMPLATE, CODE_OF_CONDUCT, SECURITY,
   CONTRIBUTING, Makefile
 - **Documentation**: Professional README with feature overview
+
+## [0.2.0] - 2026-07-12
+
+### Added (Milestone 10: Terminal UI)
+- **pleiades-tui** crate with `TuiApp`, `TerminalRenderer`, `LineEditor`
+- Markdown→ANSI rendering using pulldown-cmark + syntect syntax highlighting
+- Streaming token renderer with `MarkdownStreamState` for incremental output
+- `Spinner` with braille frames for progress indication
+- `LineEditor` with slash-command tab completion (rustyline v14)
+- Engine integration, permission prompts, session auto-save
+- Tests: markdown rendering, code highlighting, tables, lists, links, streaming, spinner
+
+### Added (Milestone 11: Plugin System)
+- **pleiades-plugins** crate: manifest, hooks, plugin, registry, manager modules
+- Plugin trait + Builtin/Bundled/External plugin kinds
+- `plugin.json` manifest parsing and validation
+- `HookRunner` for PreToolUse / PostToolUse / PostToolUseFailure hooks
+- `PluginManager` with install/uninstall/enable/disable from local dirs
+- `PluginRegistry` with aggregated hooks/tools and enabled state
+- CLI: `pleiades plugin {list,install,uninstall,enable,disable}`
+- Tests: hook execution (allow/deny/fail), plugin lifecycle (install/list/enable/disable/uninstall), hook aggregation
+
+### Added (Milestone 12: Prompt Library)
+- **pleiades-prompts** crate: template, library, builtin, error modules
+- `PromptTemplate` engine with `{{var}}` and `{{var|default}}` substitution
+- 8 built-in prompts: default-assistant, summarizer, code-reviewer, commit-message, pr-summary, explain-diff, refactor, test-generator
+- `PromptLibrary` with custom prompt persistence to `~/.config/pleiades/prompts/`
+- Wired into Engine: default assistant system prompt used when none configured
+- CLI: `pleiades prompt {list,show,render,save}`
+- Tests: template substitution, defaults, missing var errors, JSON rendering, library override, persistence
