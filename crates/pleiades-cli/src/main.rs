@@ -76,6 +76,10 @@ enum Commands {
     #[command(subcommand)]
     Tool(ToolCommand),
 
+    /// Manage plugins
+    #[command(subcommand)]
+    Plugin(PluginCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -282,6 +286,36 @@ enum ToolCommand {
         name: String,
         /// JSON input for the tool
         input: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PluginCommand {
+    /// List installed and discoverable plugins
+    List,
+
+    /// Install a plugin from a directory
+    Install {
+        /// Path to the plugin directory
+        path: String,
+    },
+
+    /// Uninstall a plugin by ID
+    Uninstall {
+        /// Plugin ID (e.g., "my-plugin-external")
+        id: String,
+    },
+
+    /// Enable a plugin
+    Enable {
+        /// Plugin ID
+        id: String,
+    },
+
+    /// Disable a plugin
+    Disable {
+        /// Plugin ID
+        id: String,
     },
 }
 
@@ -1315,6 +1349,82 @@ fn handle_session_path(loader: &ConfigLoader) {
     println!("{}", store.dir().display());
 }
 
+fn plugin_config_home() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("~/.config"))
+        .join("pleiades")
+}
+
+fn build_plugin_manager() -> pleiades_plugins::PluginManager {
+    pleiades_plugins::PluginManager::new(plugin_config_home())
+}
+
+fn handle_plugin_list(_loader: &ConfigLoader) {
+    let manager = build_plugin_manager();
+    match manager.list_plugins() {
+        Ok(plugins) => {
+            if plugins.is_empty() {
+                println!("No plugins found.");
+                return;
+            }
+            for p in &plugins {
+                let status = if p.enabled { "\x1b[1;32menabled\x1b[0m" } else { "\x1b[2mdisabled\x1b[0m" };
+                println!("  {:<30}  {:<8}  {}  {} tools  {}", p.id, p.version, status, p.tool_count, p.description);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error listing plugins: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_plugin_install(_loader: &ConfigLoader, path: &str) {
+    let mut manager = build_plugin_manager();
+    match manager.install(path) {
+        Ok(outcome) => {
+            println!("\x1b[1;32m✓\x1b[0m Plugin installed: {} v{}", outcome.plugin_id, outcome.version);
+        }
+        Err(e) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Install failed: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_plugin_uninstall(_loader: &ConfigLoader, id: &str) {
+    let mut manager = build_plugin_manager();
+    match manager.uninstall(id) {
+        Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin uninstalled: {}", id),
+        Err(e) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Uninstall failed: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_plugin_enable(_loader: &ConfigLoader, id: &str) {
+    let mut manager = build_plugin_manager();
+    match manager.enable(id) {
+        Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin enabled: {}", id),
+        Err(e) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Enable failed: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_plugin_disable(_loader: &ConfigLoader, id: &str) {
+    let mut manager = build_plugin_manager();
+    match manager.disable(id) {
+        Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin disabled: {}", id),
+        Err(e) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Disable failed: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
@@ -1363,6 +1473,13 @@ fn main() {
             ToolCommand::List => handle_tool_list(&loader),
             ToolCommand::Info { name } => handle_tool_info(&loader, &name),
             ToolCommand::Call { name, input } => handle_tool_call(&loader, &name, &input),
+        },
+        Some(Commands::Plugin(cmd)) => match cmd {
+            PluginCommand::List => handle_plugin_list(&loader),
+            PluginCommand::Install { path } => handle_plugin_install(&loader, &path),
+            PluginCommand::Uninstall { id } => handle_plugin_uninstall(&loader, &id),
+            PluginCommand::Enable { id } => handle_plugin_enable(&loader, &id),
+            PluginCommand::Disable { id } => handle_plugin_disable(&loader, &id),
         },
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {

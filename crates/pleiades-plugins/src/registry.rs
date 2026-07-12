@@ -1,100 +1,115 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-use pleiades_core::error::Error;
+use crate::hooks::HookRunner;
+use crate::manifest::{PluginError, PluginHooks};
+use crate::plugin::{Plugin, PluginDefinition, PluginKind, PluginMetadata, PluginTool};
 
-use crate::manifest::PluginManifest;
-
-/// Plugin state.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PluginState {
-    Installed,
-    Loaded,
-    Enabled,
-    Disabled,
-    Error(String),
-}
-
-/// A registered plugin.
 #[derive(Debug, Clone)]
 pub struct PluginEntry {
-    pub manifest: PluginManifest,
-    pub state: PluginState,
-    pub path: std::path::PathBuf,
+    pub definition: PluginDefinition,
+    pub enabled: bool,
 }
 
-/// Plugin registry managing all installed plugins.
+impl PluginEntry {
+    pub fn metadata(&self) -> &PluginMetadata {
+        self.definition.metadata()
+    }
+
+    pub fn hooks(&self) -> &PluginHooks {
+        self.definition.hooks()
+    }
+
+    pub fn tools(&self) -> &[PluginTool] {
+        self.definition.tools()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct PluginRegistry {
-    plugins: HashMap<String, PluginEntry>,
+    plugins: Vec<PluginEntry>,
 }
 
 impl PluginRegistry {
-    pub fn new() -> Self {
-        Self {
-            plugins: HashMap::new(),
+    pub fn new(plugins: Vec<PluginEntry>) -> Self {
+        Self { plugins }
+    }
+
+    pub fn plugins(&self) -> &[PluginEntry] {
+        &self.plugins
+    }
+
+    pub fn get(&self, plugin_id: &str) -> Option<&PluginEntry> {
+        self.plugins
+            .iter()
+            .find(|p| p.metadata().id == plugin_id)
+    }
+
+    pub fn contains(&self, plugin_id: &str) -> bool {
+        self.get(plugin_id).is_some()
+    }
+
+    pub fn enabled_plugins(&self) -> impl Iterator<Item = &PluginEntry> {
+        self.plugins.iter().filter(|p| p.enabled)
+    }
+
+    pub fn aggregated_hooks(&self) -> PluginHooks {
+        self.enabled_plugins()
+            .map(|p| p.hooks())
+            .fold(PluginHooks::default(), |acc, hooks| acc.merged_with(hooks))
+    }
+
+    pub fn hook_runner(&self) -> HookRunner {
+        HookRunner::new(self.aggregated_hooks())
+    }
+
+    pub fn aggregated_tools(&self) -> Result<Vec<PluginTool>, PluginError> {
+        let mut tools = Vec::new();
+        let mut seen_names = BTreeMap::new();
+        for entry in self.enabled_plugins() {
+            for tool in entry.tools() {
+                if let Some(existing) = seen_names.insert(tool.name.clone(), tool.plugin_id.clone()) {
+                    return Err(PluginError::CommandFailed(format!(
+                        "tool `{}` is defined by both `{}` and `{}`",
+                        tool.name, existing, tool.plugin_id
+                    )));
+                }
+                tools.push(tool.clone());
+            }
         }
+        Ok(tools)
     }
 
-    /// Install a plugin from a path.
-    pub fn install(&mut self, path: &std::path::Path) -> Result<&PluginEntry, Error> {
-        let manifest_path = path.join("pleiades.toml");
-        let manifest_content = std::fs::read_to_string(&manifest_path)
-            .map_err(|e| Error::plugin(format!("Failed to read manifest: {}", e)))?;
-
-        let manifest: PluginManifest = toml::from_str(&manifest_content)
-            .map_err(|e| Error::plugin(format!("Failed to parse manifest: {}", e)))?;
-
-        let name = manifest.plugin.name.clone();
-
-        if self.plugins.contains_key(&name) {
-            return Err(Error::plugin(format!("Plugin '{}' is already installed", name)));
-        }
-
-        let entry = PluginEntry {
-            manifest,
-            state: PluginState::Installed,
-            path: path.to_path_buf(),
-        };
-
-        self.plugins.insert(name.clone(), entry);
-        Ok(self.plugins.get(&name).unwrap())
-    }
-
-    /// Remove a plugin.
-    pub fn remove(&mut self, name: &str) -> Result<(), Error> {
-        self.plugins.remove(name)
-            .ok_or_else(|| Error::plugin(format!("Plugin '{}' not found", name)))?;
-        Ok(())
-    }
-
-    /// Enable a plugin.
-    pub fn enable(&mut self, name: &str) -> Result<(), Error> {
-        let entry = self.plugins.get_mut(name)
-            .ok_or_else(|| Error::plugin(format!("Plugin '{}' not found", name)))?;
-        entry.state = PluginState::Enabled;
-        Ok(())
-    }
-
-    /// Disable a plugin.
-    pub fn disable(&mut self, name: &str) -> Result<(), Error> {
-        let entry = self.plugins.get_mut(name)
-            .ok_or_else(|| Error::plugin(format!("Plugin '{}' not found", name)))?;
-        entry.state = PluginState::Disabled;
-        Ok(())
-    }
-
-    /// List all plugins.
-    pub fn list(&self) -> Vec<&PluginEntry> {
-        self.plugins.values().collect()
-    }
-
-    /// Get a specific plugin.
-    pub fn get(&self, name: &str) -> Option<&PluginEntry> {
-        self.plugins.get(name)
+    pub fn summaries(&self) -> Vec<PluginSummary> {
+        self.plugins
+            .iter()
+            .map(|p| PluginSummary {
+                id: p.metadata().id.clone(),
+                name: p.metadata().name.clone(),
+                version: p.metadata().version.clone(),
+                description: p.metadata().description.clone(),
+                kind: p.metadata().kind,
+                enabled: p.enabled,
+                tool_count: p.tools().len(),
+                has_hooks: !p.hooks().is_empty(),
+            })
+            .collect()
     }
 }
 
 impl Default for PluginRegistry {
     fn default() -> Self {
-        Self::new()
+        Self::new(Vec::new())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct PluginSummary {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub kind: PluginKind,
+    pub enabled: bool,
+    pub tool_count: usize,
+    pub has_hooks: bool,
 }

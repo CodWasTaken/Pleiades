@@ -1,11 +1,11 @@
-//! Plugin system for Pleiades.
-//!
-//! Plugins extend Pleiades with new capabilities using a WASM-based
-//! runtime for safe, isolated execution.
-
-pub mod manifest;
 pub mod hooks;
+pub mod manifest;
+pub mod manager;
+pub mod plugin;
 pub mod registry;
 
+pub use hooks::HookRunner;
 pub use manifest::PluginManifest;
-pub use registry::PluginRegistry;
+pub use manager::PluginManager;
+pub use plugin::{Plugin, PluginDefinition, PluginKind, PluginMetadata, PluginTool};
+pub use registry::{PluginEntry, PluginRegistry};
