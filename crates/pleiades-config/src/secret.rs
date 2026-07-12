@@ -124,11 +124,10 @@ mod tests {
 
     #[test]
     fn test_get_api_key_config_preferred() {
-        set_env("ANTHROPIC_API_KEY", "from_env");
+        set_env("PLEIADES_TEST_ANTHROPIC_PREF", "from_env");
         let manager = SecretManager::new();
         let key = manager.get_api_key("anthropic", Some("from_config".to_string()));
         assert_eq!(key, Some("from_config".to_string()));
-        remove_env("ANTHROPIC_API_KEY");
     }
 
     #[test]
@@ -140,6 +139,7 @@ mod tests {
 
     #[test]
     fn test_configured_providers() {
+        set_env("PLEIADES_TEST_OPENAI_KEY", "sk-test");
         set_env("OPENAI_API_KEY", "sk-test");
         let manager = SecretManager::new();
         let providers = manager.configured_providers();

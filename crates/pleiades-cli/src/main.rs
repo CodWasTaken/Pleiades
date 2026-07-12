@@ -57,6 +57,10 @@ enum Commands {
     /// Manage providers
     #[command(subcommand)]
     Provider(ProviderCommand),
+
+    /// Manage models
+    #[command(subcommand)]
+    Model(ModelCommand),
 }
 
 #[derive(Subcommand)]
@@ -162,6 +166,49 @@ enum ProviderCommand {
         /// Provider name to remove
         name: String,
     },
+}
+
+#[derive(Subcommand)]
+enum ModelCommand {
+    /// List available models
+    List {
+        /// Filter by provider
+        #[arg(short, long)]
+        provider: Option<String>,
+
+        /// Search string
+        #[arg(short, long)]
+        search: Option<String>,
+    },
+
+    /// Show model details
+    Info {
+        /// Model name or alias
+        name: String,
+    },
+
+    /// Set the default model
+    SetDefault {
+        /// Model name
+        model: String,
+    },
+
+    /// Create or remove a model alias
+    Alias {
+        /// Alias name
+        alias: String,
+        /// Model ID to point to
+        model: String,
+    },
+
+    /// Remove an alias
+    Unalias {
+        /// Alias name to remove
+        alias: String,
+    },
+
+    /// Discover models from configured providers
+    Discover,
 }
 
 fn get_config_dirs() -> (PathBuf, PathBuf) {
@@ -637,6 +684,304 @@ fn handle_provider_test(loader: &ConfigLoader, name: &str, model: Option<String>
     });
 }
 
+fn handle_model_list(loader: &ConfigLoader, provider_filter: Option<String>, search: Option<String>) {
+    let config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut registry = pleiades_core::ModelRegistry::new();
+    let providers = match provider_filter.as_deref() {
+        Some(name) => {
+            let pc = match config.providers.get(name) {
+                Some(p) => p,
+                None => {
+                    eprintln!("Provider '{}' not found in config", name);
+                    std::process::exit(1);
+                }
+            };
+            let api_key = pc.api_key.as_deref().unwrap_or("");
+            let base_url = pc.base_url.as_deref().unwrap_or("");
+            if api_key.is_empty() {
+                eprintln!("No API key configured for '{}'", name);
+                std::process::exit(1);
+            }
+            vec![build_test_provider(name, api_key, base_url)]
+        }
+        None => build_providers_from_config(&config),
+    };
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let results = registry.discover_from_providers(&provider_refs).await;
+        for (name, result) in &results {
+            match result {
+                Ok(count) => {
+                    if *count == 0 {
+                        eprintln!("Warning: {} returned 0 models", name);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Warning: {} discovery failed: {}", name, e);
+                }
+            }
+        }
+    });
+
+    let models = match (provider_filter, search) {
+        (Some(provider), None) => registry.list_by_provider(&provider),
+        (_, Some(query)) => registry.search(&query),
+        (None, None) => registry.list(),
+    };
+
+    if models.is_empty() {
+        println!("No models found. Use 'pleiades model discover' to query providers.");
+        return;
+    }
+
+    for model in &models {
+        let ctx = model.capabilities.max_context_length;
+        let ctx_str = pleiades_core::model::format_context_length(ctx);
+        let pricing = model.pricing.as_ref().map(|p| {
+            format!(
+                "${:.2}i/${:.2}o",
+                p.input_per_million, p.output_per_million
+            )
+        }).unwrap_or_else(|| "pricing N/A".to_string());
+
+        let name = model.display_name.as_deref().unwrap_or(&model.id);
+        println!(
+            "  {:<30}  {:<18}  ctx={:<8}  {}",
+            name, model.provider, ctx_str, pricing
+        );
+    }
+}
+
+fn handle_model_info(loader: &ConfigLoader, name: &str) {
+    let config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let providers = build_providers_from_config(&config);
+    let mut registry = pleiades_core::ModelRegistry::new();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let _ = registry.discover_from_providers(&provider_refs).await;
+    });
+
+    let model = match registry.resolve(name) {
+        Some(m) => m,
+        None => {
+            eprintln!("Model '{}' not found", name);
+            std::process::exit(1);
+        }
+    };
+
+    println!("Model: {}", model.display_name.as_deref().unwrap_or(&model.id));
+    println!("  ID:       {}", model.id);
+    println!("  Provider: {}", model.provider);
+    if let Some(ref desc) = model.description {
+        println!("  Description: {}", desc);
+    }
+    println!("  Capabilities:");
+    println!("    Context:  {} tokens", pleiades_core::model::format_context_length(model.capabilities.max_context_length));
+    println!("    Output:   {} tokens", model.capabilities.max_output_tokens);
+    println!("    Tools:    {}", yesno(model.capabilities.supports_tools));
+    println!("    Vision:   {}", yesno(model.capabilities.supports_vision));
+    println!("    Streaming: {}", yesno(model.capabilities.supports_streaming));
+    println!("    Thinking: {}", yesno(model.capabilities.supports_thinking));
+    println!("    JSON mode: {}", yesno(model.capabilities.supports_json_mode));
+
+    if let Some(ref pricing) = model.pricing {
+        println!("  Pricing (per million tokens):");
+        println!("    Input:  {}", pleiades_core::model::format_price(pricing.input_per_million));
+        println!("    Output: {}", pleiades_core::model::format_price(pricing.output_per_million));
+        if let Some(cr) = pricing.cache_read_per_million {
+            println!("    Cache Read:  {}", pleiades_core::model::format_price(cr));
+        }
+        if let Some(cw) = pricing.cache_write_per_million {
+            println!("    Cache Write: {}", pleiades_core::model::format_price(cw));
+        }
+    }
+
+    let aliases: Vec<String> = registry.aliases().iter()
+        .filter(|(_, v)| *v == &model.id)
+        .map(|(k, _)| k.clone())
+        .collect();
+
+    if !aliases.is_empty() {
+        println!("  Aliases: {}", aliases.join(", "));
+    }
+}
+
+fn handle_model_set_default(loader: &ConfigLoader, model: &str) {
+    let mut config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    config.core.default_model = Some(model.to_string());
+    match loader.save_project(&config) {
+        Ok(_) => println!("Default model set to '{}'", model),
+        Err(e) => {
+            eprintln!("Error saving config: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_model_alias(loader: &ConfigLoader, alias: &str, model: &str) {
+    let config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut registry = pleiades_core::ModelRegistry::new();
+    let providers = build_providers_from_config(&config);
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let _ = registry.discover_from_providers(&provider_refs).await;
+    });
+
+    match registry.add_alias(alias, model) {
+        Ok(_) => {
+            let mut config = config.clone();
+            config.models.aliases.insert(alias.to_string(), model.to_string());
+            match loader.save_project(&config) {
+                Ok(_) => println!("Alias '{}' -> '{}' created", alias, model),
+                Err(e) => eprintln!("Error saving config: {}", e),
+            }
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_model_unalias(loader: &ConfigLoader, alias: &str) {
+    let mut config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if config.models.aliases.remove(alias).is_none() {
+        eprintln!("Alias '{}' not found", alias);
+        std::process::exit(1);
+    }
+
+    match loader.save_project(&config) {
+        Ok(_) => println!("Alias '{}' removed", alias),
+        Err(e) => eprintln!("Error saving config: {}", e),
+    }
+}
+
+fn handle_model_discover(loader: &ConfigLoader) {
+    let config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let providers = build_providers_from_config(&config);
+    if providers.is_empty() {
+        println!("No providers configured. Use 'pleiades config set providers.<name>.api_key <key>' first.");
+        return;
+    }
+
+    let mut registry = pleiades_core::ModelRegistry::new();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    println!("Discovering models from {} provider(s)...", providers.len());
+    rt.block_on(async {
+        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let results = registry.discover_from_providers(&provider_refs).await;
+
+        for (name, result) in &results {
+            match result {
+                Ok(count) => println!("  ✓ {}: {} models", name, count),
+                Err(e) => println!("  ✗ {}: {}", name, e),
+            }
+        }
+    });
+
+    if !registry.is_empty() {
+        let total = registry.len();
+        println!("\nTotal: {} models across {} provider(s)", total, registry.summary_by_provider().len());
+    }
+}
+
+fn yesno(v: bool) -> &'static str {
+    if v { "yes" } else { "no" }
+}
+
+/// Build provider instances from configuration (without starting a runtime).
+fn build_providers_from_config(config: &pleiades_config::Config) -> Vec<Box<dyn pleiades_core::Provider>> {
+    let mut providers: Vec<Box<dyn pleiades_core::Provider>> = Vec::new();
+
+    for (name, pc) in &config.providers {
+        let api_key = pc.api_key.as_deref().unwrap_or("");
+        let base_url = pc.base_url.as_deref().unwrap_or("");
+        if api_key.is_empty() {
+            continue;
+        }
+        providers.push(build_test_provider(name, api_key, base_url));
+    }
+
+    providers
+}
+
+/// Build a single provider instance by name.
+fn build_test_provider(name: &str, api_key: &str, base_url: &str) -> Box<dyn pleiades_core::Provider> {
+    match name {
+        "anthropic" => {
+            if base_url.is_empty() {
+                Box::new(pleiades_providers::anthropic::AnthropicProvider::new(api_key.to_string()))
+            } else {
+                Box::new(pleiades_providers::anthropic::AnthropicProvider::with_base_url(
+                    api_key.to_string(), base_url.to_string(),
+                ))
+            }
+        }
+        "openai" => {
+            if base_url.is_empty() {
+                Box::new(pleiades_providers::openai::OpenAIProvider::new(api_key.to_string()))
+            } else {
+                Box::new(pleiades_providers::openai::OpenAIProvider::with_base_url(
+                    api_key.to_string(), base_url.to_string(),
+                ))
+            }
+        }
+        _ => {
+            Box::new(pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
+                name, name, api_key.to_string(), base_url.to_string(), "gpt-4o".to_string(),
+            ))
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
@@ -665,6 +1010,14 @@ fn main() {
             ProviderCommand::Info { name } => handle_provider_info(&loader, &name),
             ProviderCommand::Test { name, model } => handle_provider_test(&loader, &name, model),
             ProviderCommand::Remove { name } => handle_provider_remove(&loader, &name),
+        },
+        Some(Commands::Model(cmd)) => match cmd {
+            ModelCommand::List { provider, search } => handle_model_list(&loader, provider, search),
+            ModelCommand::Info { name } => handle_model_info(&loader, &name),
+            ModelCommand::SetDefault { model } => handle_model_set_default(&loader, &model),
+            ModelCommand::Alias { alias, model } => handle_model_alias(&loader, &alias, &model),
+            ModelCommand::Unalias { alias } => handle_model_unalias(&loader, &alias),
+            ModelCommand::Discover => handle_model_discover(&loader),
         },
         None => {
             if cli.chat {

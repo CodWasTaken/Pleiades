@@ -72,6 +72,16 @@ impl ModelRegistry {
         }
     }
 
+    /// Remove a model from the registry.
+    pub fn remove(&mut self, id: &str) -> Option<ModelInfo> {
+        self.models.remove(id)
+    }
+
+    /// Get a model by ID (exact match, no alias resolution).
+    pub fn get(&self, id: &str) -> Option<&ModelInfo> {
+        self.models.get(id)
+    }
+
     /// Add an alias for a model.
     pub fn add_alias(&mut self, alias: impl Into<String>, model_id: impl Into<String>) -> Result<(), String> {
         let alias = alias.into();
@@ -83,6 +93,11 @@ impl ModelRegistry {
         Ok(())
     }
 
+    /// Remove an alias.
+    pub fn remove_alias(&mut self, alias: &str) -> Option<String> {
+        self.aliases.remove(alias).map(|_| alias.to_string())
+    }
+
     /// Resolve a model identifier (handles aliasing).
     pub fn resolve(&self, name: &str) -> Option<&ModelInfo> {
         self.models
@@ -92,20 +107,38 @@ impl ModelRegistry {
 
     /// List all registered models.
     pub fn list(&self) -> Vec<&ModelInfo> {
-        self.models.values().collect()
+        let mut models: Vec<&ModelInfo> = self.models.values().collect();
+        models.sort_by(|a, b| a.provider.cmp(&b.provider).then(a.id.cmp(&b.id)));
+        models
     }
 
     /// List models for a specific provider.
     pub fn list_by_provider(&self, provider: &str) -> Vec<&ModelInfo> {
-        self.models
+        let mut models: Vec<&ModelInfo> = self.models
             .values()
             .filter(|m| m.provider == provider)
-            .collect()
+            .collect();
+        models.sort_by(|a, b| a.id.cmp(&b.id));
+        models
     }
 
     /// List all aliases.
     pub fn aliases(&self) -> &HashMap<String, String> {
         &self.aliases
+    }
+
+    /// Find models by search query (matches id, display_name, provider).
+    pub fn search(&self, query: &str) -> Vec<&ModelInfo> {
+        let q = query.to_lowercase();
+        self.models
+            .values()
+            .filter(|m| {
+                m.id.to_lowercase().contains(&q)
+                    || m.display_name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                    || m.provider.to_lowercase().contains(&q)
+                    || m.description.as_deref().unwrap_or("").to_lowercase().contains(&q)
+            })
+            .collect()
     }
 
     /// Get the number of registered models.
@@ -117,10 +150,71 @@ impl ModelRegistry {
     pub fn is_empty(&self) -> bool {
         self.models.is_empty()
     }
+
+    /// Discover models from a list of providers.
+    ///
+    /// Queries each provider's `list_models()` and registers any returned models.
+    /// Returns a list of (provider_name, result) pairs for reporting.
+    pub async fn discover_from_providers<'a>(
+        &mut self,
+        providers: &[&'a dyn crate::provider::Provider],
+    ) -> Vec<(&'a str, Result<usize, String>)> {
+        let mut results = Vec::new();
+
+        for provider in providers {
+            match provider.list_models().await {
+                Ok(models) => {
+                    let count = models.len();
+                    self.register_all(models);
+                    results.push((provider.name(), Ok(count)));
+                }
+                Err(e) => {
+                    results.push((provider.name(), Err(e.to_string())));
+                }
+            }
+        }
+
+        results
+    }
+
+    /// Get a summary of models grouped by provider.
+    pub fn summary_by_provider(&self) -> Vec<(&str, usize)> {
+        let mut by_provider: HashMap<&str, usize> = HashMap::new();
+        for model in self.models.values() {
+            *by_provider.entry(model.provider.as_str()).or_insert(0) += 1;
+        }
+        let mut result: Vec<(&str, usize)> = by_provider.into_iter().collect();
+        result.sort_by_key(|b| std::cmp::Reverse(b.1));
+        result
+    }
 }
 
 impl Default for ModelRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Format a model's context length in a human-readable way.
+pub fn format_context_length(len: usize) -> String {
+    if len >= 1_000_000 {
+        format!("{:.1}M", len as f64 / 1_000_000.0)
+    } else if len >= 1_000 {
+        format!("{}K", len / 1_000)
+    } else {
+        len.to_string()
+    }
+}
+
+/// Format a price per million tokens.
+pub fn format_price(price: f64) -> String {
+    if price == 0.0 {
+        "free".to_string()
+    } else if price < 0.01 {
+        format!("${:.4}", price)
+    } else if price < 1.0 {
+        format!("${:.3}", price)
+    } else {
+        format!("${:.2}", price)
     }
 }

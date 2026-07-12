@@ -12,7 +12,7 @@ pub mod error;
 pub mod event;
 
 pub use provider::Provider;
-pub use model::ModelRegistry;
+pub use model::{ModelRegistry, ModelInfo, ModelCapabilities, Pricing, ModelAlias};
 pub use conversation::Conversation;
 pub use tool::Tool;
 pub use error::Error;
