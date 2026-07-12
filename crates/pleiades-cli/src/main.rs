@@ -6,6 +6,8 @@ use pleiades_config::loader::ConfigLoader;
 use pleiades_config::profile::ProfileManager;
 use pleiades_config::validate;
 
+mod repl;
+
 #[derive(Parser)]
 #[command(
     name = "pleiades",
@@ -22,6 +24,10 @@ struct Cli {
     /// Start an interactive chat session
     #[arg(short, long)]
     chat: bool,
+
+    /// Session ID to resume (for --chat mode)
+    #[arg(short = 'S', long)]
+    session: Option<String>,
 
     /// One-shot prompt mode
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
@@ -69,6 +75,13 @@ enum Commands {
     /// Manage and execute tools
     #[command(subcommand)]
     Tool(ToolCommand),
+
+    /// Start an interactive REPL session
+    Repl {
+        /// Session ID to load
+        #[arg(short, long)]
+        session: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1351,9 +1364,59 @@ fn main() {
             ToolCommand::Info { name } => handle_tool_info(&loader, &name),
             ToolCommand::Call { name, input } => handle_tool_call(&loader, &name, &input),
         },
+        Some(Commands::Repl { session }) => {
+            let config = match loader.load_with_interpolation() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Error loading config: {}", e);
+                    std::process::exit(1);
+                }
+            };
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                let mut repl = repl::Repl::new(config);
+                if let Some(session_id) = session {
+                    if let Err(e) = repl.with_session(&session_id) {
+                        eprintln!("Error loading session '{}': {}", session_id, e);
+                        std::process::exit(1);
+                    }
+                }
+                if let Err(e) = repl.run().await {
+                    eprintln!("REPL error: {}", e);
+                    std::process::exit(1);
+                }
+            });
+        }
         None => {
             if cli.chat {
-                println!("Chat mode will be available in Milestone 5");
+                let config = match loader.load_with_interpolation() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("Error loading config: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                let mut config = config;
+                if let Some(ref model) = cli.model {
+                    config.core.default_model = Some(model.clone());
+                }
+                if let Some(ref provider) = cli.provider {
+                    config.core.default_provider = Some(provider.clone());
+                }
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let mut repl = repl::Repl::new(config);
+                    if let Some(session_id) = &cli.session {
+                        if let Err(e) = repl.with_session(session_id) {
+                            eprintln!("Error loading session '{}': {}", session_id, e);
+                            std::process::exit(1);
+                        }
+                    }
+                    if let Err(e) = repl.run().await {
+                        eprintln!("REPL error: {}", e);
+                        std::process::exit(1);
+                    }
+                });
                 return;
             }
 
