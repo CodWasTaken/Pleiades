@@ -278,54 +278,200 @@ impl Repl {
         let user_msg = Message::user(input);
         self.conversation.add_message(user_msg);
 
-        println!("\x1b[1;36m─── response ───\x1b[0m");
+        let max_iterations = self.config.agent.max_tool_iterations;
+
+        for iteration in 0..max_iterations {
+            println!("\x1b[1;36m─── response ───\x1b[0m");
+
+            let (text_response, tool_calls, had_error) = self.stream_response(engine).await?;
+
+            if had_error {
+                return Ok(());
+            }
+
+            let text_content = text_response.clone();
+
+            if tool_calls.is_empty() {
+                if !text_content.is_empty() {
+                    let assistant_msg = Message::assistant(text_content);
+                    self.conversation.add_message(assistant_msg);
+                }
+                break;
+            }
+
+            let mut content_blocks = Vec::new();
+            if !text_content.is_empty() {
+                content_blocks.push(pleiades_core::conversation::ContentBlock::Text(text_content));
+            }
+            for tc in &tool_calls {
+                content_blocks.push(pleiades_core::conversation::ContentBlock::ToolUse {
+                    id: tc.id.clone(),
+                    name: tc.name.clone(),
+                    input: tc.input.clone(),
+                });
+            }
+
+            let assistant_msg = Message {
+                role: pleiades_core::conversation::MessageRole::Assistant,
+                content: content_blocks,
+                reasoning: None,
+                metadata: None,
+            };
+            self.conversation.add_message(assistant_msg);
+
+            println!("\n\x1b[1;33m─── executing {} tool(s) ───\x1b[0m", tool_calls.len());
+
+            let mut all_succeeded = true;
+            for tc in &tool_calls {
+                let allowed = self.check_permission(tc).await;
+                if !allowed {
+                    self.conversation.add_message(Message {
+                        role: pleiades_core::conversation::MessageRole::Tool,
+                        content: vec![pleiades_core::conversation::ContentBlock::ToolResult {
+                            id: tc.id.clone(),
+                            content: "Tool use blocked by user".to_string(),
+                            is_error: true,
+                        }],
+                        reasoning: None,
+                        metadata: None,
+                    });
+                    println!("\x1b[1;33m  ⛔ {} blocked\x1b[0m", tc.name);
+                    continue;
+                }
+
+                println!("\x1b[1;32m  🔧 {} ({})...\x1b[0m", tc.name, &tc.id[..tc.id.len().min(8)]);
+                match engine.execute_tool(&tc.name, tc.input.clone()).await {
+                    Ok(result) => {
+                        let content = if result.content.len() > 2000 {
+                            format!("{}...(truncated, {} chars)", &result.content[..2000], result.content.len())
+                        } else {
+                            result.content.clone()
+                        };
+                        self.conversation.add_message(Message {
+                            role: pleiades_core::conversation::MessageRole::Tool,
+                            content: vec![pleiades_core::conversation::ContentBlock::ToolResult {
+                                id: tc.id.clone(),
+                                content,
+                                is_error: !result.success,
+                            }],
+                            reasoning: None,
+                            metadata: None,
+                        });
+                        if result.success {
+                            println!("\x1b[1;32m  ✓ {} completed\x1b[0m", tc.name);
+                        } else {
+                            println!("\x1b[1;31m  ✗ {} failed: {}\x1b[0m", tc.name, result.error.unwrap_or_default());
+                            all_succeeded = false;
+                        }
+                    }
+                    Err(e) => {
+                        self.conversation.add_message(Message {
+                            role: pleiades_core::conversation::MessageRole::Tool,
+                            content: vec![pleiades_core::conversation::ContentBlock::ToolResult {
+                                id: tc.id.clone(),
+                                content: format!("Error: {}", e),
+                                is_error: true,
+                            }],
+                            reasoning: None,
+                            metadata: None,
+                        });
+                        println!("\x1b[1;31m  ✗ {} error: {}\x1b[0m", tc.name, e);
+                        all_succeeded = false;
+                    }
+                }
+            }
+
+            self.session_store.save(&self.conversation).ok();
+
+            if iteration == max_iterations - 1 {
+                println!("\x1b[1;33m⚠ Max tool iterations ({}) reached\x1b[0m", max_iterations);
+            }
+
+            if !all_succeeded {
+                println!("\x1b[1;33m⚠ Some tools failed, continuing...\x1b[0m");
+            }
+
+            println!();
+        }
+
+        self.session_store.save(&self.conversation).ok();
+        Ok(())
+    }
+
+    async fn stream_response(&mut self, engine: &mut Engine) -> Result<(String, Vec<ToolCallInfo>, bool), Error> {
+        let mut text_response = String::new();
+        let mut tool_calls: Vec<ToolCallInfo> = Vec::new();
 
         match engine.chat_stream(&mut self.conversation, &self.provider_name).await {
             Ok(mut rx) => {
-                let mut full_response = String::new();
-                let mut finish_reason: Option<String> = None;
-
                 while let Some(event) = rx.recv().await {
                     match event {
                         StreamEvent::Token(token) => {
                             print!("{}", token);
-                            full_response.push_str(&token);
+                            text_response.push_str(&token);
                         }
                         StreamEvent::ReasoningToken(token) => {
                             print!("\x1b[2m{}\x1b[0m", token);
                         }
-                        StreamEvent::Done { finish_reason: reason, usage: _ } => {
-                            finish_reason = Some(reason);
+                        StreamEvent::ToolCall { id, name, input } => {
+                            tool_calls.push(ToolCallInfo { id, name, input });
+                        }
+                        StreamEvent::Done { .. } => {
                             println!();
                             break;
                         }
                         StreamEvent::Error { message, code } => {
                             eprintln!("\n\x1b[1;31mError\x1b[0m: {} ({})", message, code.as_deref().unwrap_or("unknown"));
-                            return Ok(());
+                            return Ok((String::new(), Vec::new(), true));
                         }
                         _ => {}
                     }
                 }
-
-                if !full_response.is_empty() {
-                    let assistant_msg = Message::assistant(full_response);
-                    self.conversation.add_message(assistant_msg);
-                }
-
-                if let Some(reason) = finish_reason {
-                    if reason == "tool_uses" {
-                        println!("\x1b[1;33m⚠  Tool calls not yet supported in REPL mode\x1b[0m");
-                    }
-                }
-
-                self.session_store.save(&self.conversation).ok();
             }
             Err(e) => {
                 eprintln!("\x1b[1;31mError\x1b[0m: {}", e);
+                return Ok((String::new(), Vec::new(), true));
             }
         }
 
-        Ok(())
+        Ok((text_response, tool_calls, false))
+    }
+
+    async fn check_permission(&self, tc: &ToolCallInfo) -> bool {
+        let config_permissions = &self.config.permissions;
+
+        if config_permissions.always_deny.iter().any(|p| p == &tc.name) {
+            return false;
+        }
+        if config_permissions.always_allow.iter().any(|p| p == &tc.name) {
+            return true;
+        }
+        if !config_permissions.ask_always {
+            return true;
+        }
+
+        let tool_name = &tc.name;
+        let input_str = tc.input.to_string();
+
+        eprintln!("\x1b[1;33m┌─ Tool Permission ─────────────────────────────┐\x1b[0m");
+        eprintln!("\x1b[1;33m│\x1b[0m Tool: \x1b[1;37m{}\x1b[0m", tool_name);
+        if input_str.len() < 200 {
+            eprintln!("\x1b[1;33m│\x1b[0m Input: {}", input_str);
+        }
+        eprintln!("\x1b[1;33m│\x1b[0m                                           \x1b[1;33m│\x1b[0m");
+        eprintln!("\x1b[1;33m│\x1b[0m \x1b[1;36mAllow?\x1b[0m  \x1b[1;32m(y)es\x1b[0m / \x1b[1;31m(n)o\x1b[0m / \x1b[1;34m(a)lways\x1b[0m / \x1b[1;33m(n)ever\x1b[0m  \x1b[1;33m│\x1b[0m");
+        eprintln!("\x1b[1;33m└────────────────────────────────────────────────┘\x1b[0m");
+        eprint!("> ");
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).ok();
+        let input = input.trim().to_lowercase();
+
+        match input.as_str() {
+            "y" | "yes" => true,
+            "n" | "no" => false,
+            _ => true,
+        }
     }
 
     fn save_on_exit(&mut self, _engine: &mut Engine) {
@@ -335,6 +481,12 @@ impl Repl {
         }
         println!("\x1b[1;33mGoodbye!\x1b[0m");
     }
+}
+
+struct ToolCallInfo {
+    id: String,
+    name: String,
+    input: serde_json::Value,
 }
 
 #[derive(Clone)]

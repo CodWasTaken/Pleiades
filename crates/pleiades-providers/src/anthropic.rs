@@ -398,6 +398,9 @@ impl Provider for AnthropicProvider {
             let mut cache_read: Option<u64> = None;
             let mut cache_write: Option<u64> = None;
             let mut finish_reason: Option<String> = None;
+            let mut pending_tool_id: Option<String> = None;
+            let mut pending_tool_name: Option<String> = None;
+            let mut pending_tool_input: String = String::new();
 
             while let Some(event_result) = sse_rx.recv().await {
                 match event_result {
@@ -413,11 +416,9 @@ impl Provider for AnthropicProvider {
                             "content_block_start" => {
                                 if let Ok(block) = event.parse_json::<AnthropicStreamContentBlockStart>() {
                                     if block.content_block.type_ == "tool_use" {
-                                        let _ = tx.send(StreamEvent::ToolCall {
-                                            id: block.content_block.id.unwrap_or_default(),
-                                            name: block.content_block.name.unwrap_or_default(),
-                                            input: serde_json::Value::Object(serde_json::Map::new()),
-                                        }).await;
+                                        pending_tool_id = block.content_block.id;
+                                        pending_tool_name = block.content_block.name;
+                                        pending_tool_input.clear();
                                     }
                                 }
                             }
@@ -432,7 +433,7 @@ impl Provider for AnthropicProvider {
                                         }
                                         "input_json_delta" => {
                                             if let Some(partial) = &delta.delta.partial_json {
-                                                let _ = tx.send(StreamEvent::Token(partial.clone())).await;
+                                                pending_tool_input.push_str(partial);
                                             }
                                         }
                                         "thinking_delta" => {
@@ -442,6 +443,18 @@ impl Provider for AnthropicProvider {
                                         }
                                         _ => {}
                                     }
+                                }
+                            }
+                            "content_block_stop" => {
+                                if let (Some(id), Some(name)) = (pending_tool_id.take(), pending_tool_name.take()) {
+                                    let input: serde_json::Value = serde_json::from_str(&pending_tool_input)
+                                        .unwrap_or_else(|_| serde_json::Value::String(pending_tool_input.clone()));
+                                    pending_tool_input.clear();
+                                    let _ = tx.send(StreamEvent::ToolCall {
+                                        id,
+                                        name,
+                                        input,
+                                    }).await;
                                 }
                             }
                             "message_delta" => {
