@@ -108,7 +108,7 @@ impl Engine {
         let request = ChatRequest {
             model,
             messages: conversation.messages.clone(),
-            system_prompt: conversation.config.system_prompt.clone(),
+            system_prompt: self.resolve_system_prompt(conversation),
             temperature: conversation.config.temperature,
             top_p: conversation.config.top_p,
             max_tokens: conversation.config.max_tokens,
@@ -147,7 +147,7 @@ impl Engine {
         let request = ChatRequest {
             model,
             messages: conversation.messages.clone(),
-            system_prompt: conversation.config.system_prompt.clone(),
+            system_prompt: self.resolve_system_prompt(conversation),
             temperature: conversation.config.temperature,
             top_p: conversation.config.top_p,
             max_tokens: conversation.config.max_tokens,
@@ -402,6 +402,28 @@ impl Engine {
         if compression.is_some() {
             tracing::info!("Conversation compressed with LLM summary");
         }
+    }
+
+    /// Resolve the system prompt for a request.
+    ///
+    /// Uses the conversation-configured prompt when present, otherwise falls
+    /// back to the built-in default assistant prompt from the prompt library.
+    fn resolve_system_prompt(&self, conversation: &Conversation) -> Option<String> {
+        if let Some(existing) = &conversation.config.system_prompt {
+            if !existing.trim().is_empty() {
+                return Some(existing.clone());
+            }
+        }
+        let lib = pleiades_prompts::PromptLibrary::with_builtins();
+        let mut vars = std::collections::HashMap::new();
+        vars.insert("os".to_string(), std::env::consts::OS.to_string());
+        vars.insert(
+            "cwd".to_string(),
+            std::env::current_dir()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| ".".to_string()),
+        );
+        lib.render("default-assistant", &vars).ok()
     }
 
     /// Emit an event if a sender is configured.

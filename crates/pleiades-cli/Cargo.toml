@@ -24,6 +24,7 @@ pleiades-plugins = { path = "../pleiades-plugins" }
 pleiades-memory = { path = "../pleiades-memory" }
 pleiades-workflow = { path = "../pleiades-workflow" }
 pleiades-git = { path = "../pleiades-git" }
+pleiades-prompts = { path = "../pleiades-prompts" }
 
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }

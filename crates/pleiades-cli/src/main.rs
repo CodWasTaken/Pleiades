@@ -80,6 +80,10 @@ enum Commands {
     #[command(subcommand)]
     Plugin(PluginCommand),
 
+    /// Manage and render prompt templates
+    #[command(subcommand)]
+    Prompt(PromptCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -316,6 +320,37 @@ enum PluginCommand {
     Disable {
         /// Plugin ID
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PromptCommand {
+    /// List available prompt templates
+    List,
+
+    /// Show a prompt template's raw text and variables
+    Show {
+        /// Prompt name
+        name: String,
+    },
+
+    /// Render a prompt template with variables (key=value pairs)
+    Render {
+        /// Prompt name
+        name: String,
+        /// Variables as key=value
+        #[arg(short, long = "var", num_args = 0..)]
+        vars: Vec<String>,
+    },
+
+    /// Save a custom prompt template
+    Save {
+        /// Prompt name
+        name: String,
+        /// Prompt description
+        description: String,
+        /// Template body (use quotes; {{var}} for substitution)
+        template: String,
     },
 }
 
@@ -1425,6 +1460,75 @@ fn handle_plugin_disable(_loader: &ConfigLoader, id: &str) {
     }
 }
 
+fn handle_prompt_list() {
+    let lib = pleiades_prompts::PromptLibrary::with_builtins();
+    let summaries = lib.list();
+    if summaries.is_empty() {
+        println!("No prompt templates found.");
+        return;
+    }
+    println!("Prompt templates ({}):\n", summaries.len());
+    for s in &summaries {
+        println!("  \x1b[1;32m{:<22}\x1b[0m [\x1b[2m{}\x1b[0m] {}", s.name, s.source, s.description);
+        if !s.variables.is_empty() {
+            println!("      variables: {}", s.variables.join(", "));
+        }
+    }
+}
+
+fn handle_prompt_show(name: &str) {
+    let lib = pleiades_prompts::PromptLibrary::with_builtins();
+    match lib.get(name) {
+        Some(tpl) => {
+            println!("Name:        {}", tpl.name());
+            println!("Description: {}", tpl.description());
+            println!("Variables:   {}", tpl.variable_names().join(", "));
+            println!();
+            println!("{}", tpl.raw());
+        }
+        None => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Prompt '{}' not found", name);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_prompt_render(name: &str, vars: &[String]) {
+    let lib = pleiades_prompts::PromptLibrary::with_builtins();
+    let mut map = std::collections::HashMap::new();
+    for kv in vars {
+        if let Some((k, v)) = kv.split_once('=') {
+            map.insert(k.to_string(), v.to_string());
+        } else {
+            eprintln!("\x1b[1;31m✗\x1b[0m Invalid variable '{}', expected key=value", kv);
+            std::process::exit(1);
+        }
+    }
+    match lib.render(name, &map) {
+        Ok(rendered) => println!("{}", rendered),
+        Err(e) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_prompt_save(name: &str, description: &str, template: &str) {
+    let lib = pleiades_prompts::PromptLibrary::with_builtins();
+    let stored = pleiades_prompts::StoredPrompt {
+        name: name.to_string(),
+        description: description.to_string(),
+        template: template.to_string(),
+    };
+    match lib.save_custom(&stored) {
+        Ok(_) => println!("\x1b[1;32m✓\x1b[0m Saved prompt '{}'", name),
+        Err(e) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Failed to save prompt: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
@@ -1480,6 +1584,16 @@ fn main() {
             PluginCommand::Uninstall { id } => handle_plugin_uninstall(&loader, &id),
             PluginCommand::Enable { id } => handle_plugin_enable(&loader, &id),
             PluginCommand::Disable { id } => handle_plugin_disable(&loader, &id),
+        },
+        Some(Commands::Prompt(cmd)) => match cmd {
+            PromptCommand::List => handle_prompt_list(),
+            PromptCommand::Show { name } => handle_prompt_show(&name),
+            PromptCommand::Render { name, vars } => handle_prompt_render(&name, &vars),
+            PromptCommand::Save {
+                name,
+                description,
+                template,
+            } => handle_prompt_save(&name, &description, &template),
         },
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {

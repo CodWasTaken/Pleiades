@@ -12,5 +12,6 @@ members = [
     "crates/pleiades-memory",
     "crates/pleiades-workflow",
     "crates/pleiades-git",
+    "crates/pleiades-prompts",
     "crates/pleiades-sdk",
 ]

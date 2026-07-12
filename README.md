@@ -3,7 +3,7 @@
 > A next-generation, provider-agnostic terminal AI assistant. Extensible, fast, and beautifully designed for modern development workflows.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-planning-yellow" alt="Status: Planning"/>
+  <img src="https://img.shields.io/badge/status-active-green" alt="Status: Active"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"/>
   <img src="https://img.shields.io/badge/language-Rust-orange" alt="Language: Rust"/>
   <img src="https://img.shields.io/badge/edition-2024-purple" alt="Edition: 2024"/>
@@ -53,14 +53,18 @@ pleiades init
 pleiades                    Start interactive session
 pleiades <prompt>           One-shot prompt
 pleiades chat               Start chat session
-pleiades config             Configure settings
-pleiades provider           Manage AI providers
-pleiades model              Manage models
-pleiades tool               Manage tools
-pleiades plugin             Manage plugins
+pleiades repl               Start REPL session
+pleiades config             Configure settings (get, set, edit, validate, show, path, init, reset)
+pleiades profile            Manage profiles (list, save, load, delete, active)
+pleiades provider           Manage AI providers (list, info, test, remove)
+pleiades model              Manage models (list, info, set-default, alias, unalias, discover)
+pleiades session            Manage chat sessions (list, show, delete, export, path)
+pleiades tool               Manage tools (list, info, call)
+pleiades plugin             Manage plugins (list, install, uninstall, enable, disable)
+pleiades prompt             Manage prompts (list, show, render, save)
 pleiades memory             Search and manage memory
 pleiades workflow           Manage workflows
-pleiadex git                Git integration
+pleiades git                Git integration (commit, review)
 pleiades doctor             System diagnostics
 pleiades init               Initialize project
 pleiades update             Check for updates
@@ -71,33 +75,36 @@ pleiades version            Show version
 
 | Provider | Status |
 |----------|--------|
-| OpenAI | ✅ Planned |
-| Anthropic | ✅ Planned |
-| Google (Gemini) | ✅ Planned |
-| OpenRouter | ✅ Planned |
-| Groq | ✅ Planned |
-| Ollama (local) | ✅ Planned |
-| LM Studio (local) | ✅ Planned |
-| Mistral | ✅ Planned |
-| Cohere | ✅ Planned |
-| DeepSeek | ✅ Planned |
-| Together AI | ✅ Planned |
-| xAI (Grok) | ✅ Planned |
-| Perplexity | ✅ Planned |
-| Azure OpenAI | ✅ Planned |
-| Any OpenAI-compatible | ✅ Planned |
+| OpenAI | ✅ Implemented |
+| Anthropic | ✅ Implemented |
+| OpenRouter | ✅ Implemented |
+| Groq | ✅ Implemented |
+| DeepSeek | ✅ Implemented |
+| Any OpenAI-compatible | ✅ Implemented |
 
 ## Project Status
 
-Pleiades is currently in **Milestone 0: Planning**. The architecture, requirements, and roadmap are being finalized. Code development begins in Milestone 1.
+**12 of 18 milestones complete** — Pleiades is in active development with a working CLI, REPL, agent loop, plugin system, and prompt library.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
-- [ ] **M1: Bootstrap** — Build system, CI, minimal executable
-- [ ] **M2: Configuration** — Multi-level config with profiles
-- [ ] **M3: Providers** — Provider system with 3+ providers
-- [ ] **M4: Models** — Model registry and management
-- [ ] **M5: Chat Engine** — Conversation management and streaming
-- [ ] **M6+** — See full [Roadmap](ROADMAP.md)
+- [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable
+- [x] **M2: Configuration** — Multi-level config (TOML/JSON/YAML), profiles, env interpolation, secrets
+- [x] **M3: Providers** — Provider system with Anthropic, OpenAI, OpenAI-compatible (OpenRouter, Groq, DeepSeek)
+- [x] **M4: Models** — Model registry, discovery, aliasing, pricing, context windows
+- [x] **M5: Chat Engine** — Conversation management, streaming, session persistence, export
+- [x] **M6: Tool System** — 9 built-in tools (Read, Write, Edit, Bash, Glob, Grep, Diff, Search, Fetch)
+- [x] **M7: Interactive REPL** — rustyline editing, history, streaming tokens, slash commands, session auto-save
+- [x] **M8: Agent Loop** — Multi-turn tool calling, Anthropic streaming fix, permission prompts, iteration limits
+- [x] **M9: Memory & Persistence** — FileStore, Session/Project/User tiers, LLM summarization, auto-compression
+- [x] **M10: Terminal UI** — Markdown→ANSI rendering, syntax highlighting, LineEditor with tab completion, Spinner
+- [x] **M11: Plugin System** — PluginManager, PluginRegistry, HookRunner (PreToolUse/PostToolUse/PostToolUseFailure), CLI
+- [x] **M12: Prompt Library** — PromptTemplate engine, 8 built-in prompts, PromptLibrary with persistence, CLI
+- [ ] **M13: Workflow Engine** — Step sequencing, parallel steps, conditional branching
+- [ ] **M14: Git Integration** — Commit messages, PR summaries, code review
+- [ ] **M15: Testing & CI** — 80%+ coverage, GitHub Actions CI
+- [ ] **M16: Documentation** — MDBook site, rustdoc, user guide
+- [ ] **M17: Optimization** — Cold start, memory, latency, LTO
+- [ ] **M18: Release** — v1.0.0, binaries, package managers
 
 ## Architecture
 

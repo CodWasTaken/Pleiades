@@ -118,41 +118,32 @@
 - [ ] Semantic search — **pending**
 - **Deliverable**: Multi-tier memory system with persistence
 
-### Milestone 10: Terminal UI
-- [ ] Ratatui integration
-- [ ] Main chat interface (panels: chat, input, status)
-- [ ] Streaming text renderer
-- [ ] Markdown rendering
-- [ ] Syntax highlighting
-- [ ] Code block formatting
-- [ ] Status bar with model/provider/token info
-- [ ] Keyboard shortcuts (Ctrl+C, Tab, arrows)
-- [ ] Responsive layout
-- [ ] Scrollable history
-- **Skeleton exists**: `pleiades-tui/` with TuiApp, Renderer, Theme
+### Milestone 10: Terminal UI (✅ Complete)
+- [x] `pleiades-tui` crate with `TuiApp`, `TerminalRenderer`, `LineEditor`
+- [x] Markdown→ANSI rendering (pulldown-cmark + syntect syntax highlighting)
+- [x] Streaming token renderer with `MarkdownStreamState`
+- [x] `Spinner` with braille frames for progress indication
+- [x] `LineEditor` with slash-command tab completion
+- [x] Engine integration, permission prompts, session auto-save
 - **Deliverable**: Beautiful terminal UI
 
-### Milestone 11: Plugin System
-- [ ] Plugin trait definition
-- [ ] WASM runtime integration
-- [ ] Plugin manifest parsing
-- [ ] Hook system
-- [ ] Event subscription
-- [ ] Plugin isolation and sandboxing
-- [ ] Permission declaration
-- [ ] Plugin lifecycle (install, update, remove)
-- [ ] Plugin CLI commands
-- [ ] Example plugins
-- **Skeleton exists**: `pleiades-plugins/` with hooks, manifest, registry
+### Milestone 11: Plugin System (✅ Complete)
+- [x] `pleiades-plugins` crate: manifest, hooks, plugin, registry, manager
+- [x] Plugin trait + Builtin/Bundled/External kinds
+- [x] `plugin.json` manifest parsing and validation
+- [x] `HookRunner` for PreToolUse / PostToolUse / PostToolUseFailure
+- [x] `PluginManager` with install/uninstall/enable/disable
+- [x] `PluginRegistry` with aggregated hooks/tools and enabled state
+- [x] CLI: `pleiades plugin {list,install,uninstall,enable,disable}`
 - **Deliverable**: Complete plugin SDK with examples
 
-### Milestone 12: Prompt Library
-- [ ] Prompt template engine
-- [ ] Built-in prompt templates
-- [ ] Variable substitution
-- [ ] Macros
-- [ ] Snippets
-- [ ] Custom prompt creation
+### Milestone 12: Prompt Library (✅ Complete)
+- [x] `pleiades-prompts` crate: template, library, builtin, error
+- [x] `PromptTemplate` engine with `{{var}}` and `{{var|default}}` substitution
+- [x] 8 built-in prompts (assistant, summarizer, code-reviewer, commit-message, pr-summary, explain-diff, refactor, test-generator)
+- [x] `PromptLibrary` with custom prompt persistence to disk
+- [x] Wired into Engine: default assistant system prompt used when none configured
+- [x] CLI: `pleiades prompt {list,show,render,save}`
 - **Deliverable**: Prompt library with templates
 
 ### Milestone 13: Workflow Engine
@@ -219,9 +210,9 @@
 | M7: Interactive REPL | ✅ Done | Medium | M5, M6 |
 | M8: Agent Loop | ✅ Done | High | M6, M7 |
 | M9: Memory & Persistence | ✅ Done | High | M5, M8 |
-| M10: Terminal UI | 5 days | High | M5, M7 |
-| M11: Plugin System | 5 days | High | M6, M10 |
-| M12: Prompt Library | 2 days | Low | M5 |
+| M10: Terminal UI | ✅ Done | High | M5, M7 |
+| M11: Plugin System | ✅ Done | High | M6, M10 |
+| M12: Prompt Library | ✅ Done | Low | M5 |
 | M13: Workflow Engine | 3 days | Medium | M6 |
 | M14: Git Integration | 3 days | Medium | M6 |
 | M15: Testing & CI | 5 days | Medium | M1-M14 |
@@ -229,9 +220,9 @@
 | M17: Optimization | 3 days | Medium | M15 |
 | M18: Release | 2 days | Low | M15, M16, M17 |
 
-**Completed**: 9 milestones ✅ (approx 28 days of effort)
-**Remaining**: 9 milestones (approx 31 days of effort)
+**Completed**: 12 milestones ✅ (approx 31 days of effort)
+**Remaining**: 6 milestones (approx 19 days of effort)
 
 ## Current Focus
 
-**We are here → Milestone 10: Terminal UI** — Building a full Ratatui-based terminal interface with chat panels, markdown rendering, syntax highlighting, and keyboard navigation.
+**We are here → Milestone 13: Workflow Engine** — Step sequencing, parallel steps, conditional branching, reusable workflows.
