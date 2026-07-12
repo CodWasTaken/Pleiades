@@ -1,0 +1,21 @@
+[package]
+name = "pleiades-tools"
+version = "0.1.0"
+edition = "2024"
+description = "Pleiades built-in tools"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/yourusername/pleiades"
+
+[dependencies]
+pleiades-core = { path = "../pleiades-core" }
+pleiades-config = { path = "../pleiades-config" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+tracing = "0.1"
+thiserror = "2"
+glob = "0.3"
+regex = "1"

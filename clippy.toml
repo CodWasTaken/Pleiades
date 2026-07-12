@@ -1,0 +1,15 @@
+# Clippy configuration for Pleiades
+
+cognitive-complexity-threshold = 25
+too-many-arguments-threshold = 10
+too-large-for-stack = 200
+type-complexity-threshold = 250
+enum-variant-size-threshold = 200
+large-error-threshold = 128
+
+msrv = "1.85.0"
+
+# Disallowed methods (things we never want to use)
+disallowed-methods = [
+    { path = "std::env::temp_dir", reason = "Use pleiades-config paths instead" },
+]

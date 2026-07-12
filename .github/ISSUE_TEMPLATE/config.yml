@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Pleiades Documentation
+    url: https://github.com/yourusername/pleiades/docs
+    about: Check the documentation before opening an issue
+  - name: Security Issues
+    url: https://github.com/yourusername/pleiades/security/policy
+    about: Report security vulnerabilities here

@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pleiades-cli",
+    "crates/pleiades-core",
+    "crates/pleiades-config",
+    "crates/pleiades-engine",
+    "crates/pleiades-tui",
+    "crates/pleiades-providers",
+    "crates/pleiades-tools",
+    "crates/pleiades-plugins",
+    "crates/pleiades-memory",
+    "crates/pleiades-workflow",
+    "crates/pleiades-git",
+    "crates/pleiades-sdk",
+]

@@ -1,0 +1,17 @@
+[package]
+name = "pleiades-sdk"
+version = "0.1.0"
+edition = "2024"
+description = "Pleiades plugin SDK for plugin authors"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/yourusername/pleiades"
+
+[dependencies]
+pleiades-core = { path = "../pleiades-core" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+thiserror = "2"
+tracing = "0.1"

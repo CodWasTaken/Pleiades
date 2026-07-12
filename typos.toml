@@ -1,0 +1,13 @@
+[default]
+extend-ignore-re = [
+    "pleiades",
+]
+
+[files]
+extend-exclude = [
+    "SourceCodeCC/",
+    "target/",
+    ".git/",
+    "*.toml",
+    "*.lock",
+]

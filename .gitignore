@@ -1,0 +1,40 @@
+# Rust
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.env
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.dll
+
+# Logs
+*.log
+tmp/
+
+# Python virtual environments (for development scripts)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generated files
+docs/book/
+
+# Reference implementations
+SourceCodeCC/

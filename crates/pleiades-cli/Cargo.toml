@@ -1,0 +1,32 @@
+[[bin]]
+name = "pleiades"
+path = "src/main.rs"
+
+[package]
+name = "pleiades-cli"
+version = "0.1.0"
+edition = "2024"
+description = "Pleiades CLI - Next-generation terminal AI assistant"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/yourusername/pleiades"
+keywords = ["ai", "cli", "terminal", "assistant", "llm"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+pleiades-core = { path = "../pleiades-core" }
+pleiades-config = { path = "../pleiades-config" }
+pleiades-engine = { path = "../pleiades-engine" }
+pleiades-tui = { path = "../pleiades-tui" }
+pleiades-tools = { path = "../pleiades-tools" }
+pleiades-providers = { path = "../pleiades-providers" }
+pleiades-plugins = { path = "../pleiades-plugins" }
+pleiades-memory = { path = "../pleiades-memory" }
+pleiades-workflow = { path = "../pleiades-workflow" }
+pleiades-git = { path = "../pleiades-git" }
+
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
