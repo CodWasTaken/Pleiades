@@ -53,6 +53,10 @@ enum Commands {
     /// Manage profiles
     #[command(subcommand)]
     Profile(ProfileCommand),
+
+    /// Manage providers
+    #[command(subcommand)]
+    Provider(ProviderCommand),
 }
 
 #[derive(Subcommand)]
@@ -130,6 +134,34 @@ enum ProfileCommand {
 
     /// Show active profile
     Active,
+}
+
+#[derive(Subcommand)]
+enum ProviderCommand {
+    /// List all available providers
+    List,
+
+    /// Test a provider connection
+    Test {
+        /// Provider name to test
+        name: String,
+
+        /// Model to use for the test (defaults to provider's default)
+        #[arg(short, long)]
+        model: Option<String>,
+    },
+
+    /// Show provider details
+    Info {
+        /// Provider name
+        name: String,
+    },
+
+    /// Remove a provider configuration
+    Remove {
+        /// Provider name to remove
+        name: String,
+    },
 }
 
 fn get_config_dirs() -> (PathBuf, PathBuf) {
@@ -417,6 +449,194 @@ fn handle_profile_active(loader: &ConfigLoader) {
     }
 }
 
+fn handle_provider_list(loader: &ConfigLoader) {
+    let config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if config.providers.is_empty() {
+        println!("No providers configured.");
+        println!("Use 'pleiades config set providers.<name>.api_key <key>' to add one.");
+        return;
+    }
+
+    for (name, pc) in &config.providers {
+        let has_key = pc.api_key.is_some() && !pc.api_key.as_deref().unwrap_or("").is_empty();
+        let key_display = if has_key {
+            if let Some(ref key) = pc.api_key {
+                pleiades_config::env_interpolate::mask_secrets(key)
+            } else {
+                "not set".to_string()
+            }
+        } else {
+            "not set".to_string()
+        };
+
+        let base_url = pc.base_url.as_deref().unwrap_or("(default)");
+        println!("  {}:", name);
+        println!("    API Key: {}", key_display);
+        println!("    Base URL: {}", base_url);
+        println!();
+    }
+}
+
+fn handle_provider_info(loader: &ConfigLoader, name: &str) {
+    let config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let pc = match config.providers.get(name) {
+        Some(p) => p,
+        None => {
+            eprintln!("Provider '{}' not found in config", name);
+            std::process::exit(1);
+        }
+    };
+
+    let secret_manager = pleiades_config::SecretManager::new();
+    let env_var = secret_manager.expected_env_var(name).unwrap_or("(none)");
+
+    println!("Provider: {}", name);
+    println!("  API Key: {}", pc.api_key.as_ref().map(|k| pleiades_config::env_interpolate::mask_secrets(k)).unwrap_or_else(|| "not set".to_string()));
+    println!("  Base URL: {}", pc.base_url.as_deref().unwrap_or("(default)"));
+    println!("  Expected Env Var: {}", env_var);
+    println!("  Max Retries: {}", pc.max_retries);
+    println!("  Timeout: {}s", pc.timeout_secs);
+    if !pc.headers.is_empty() {
+        println!("  Custom Headers: {:?}", pc.headers);
+    }
+}
+
+fn handle_provider_remove(loader: &ConfigLoader, name: &str) {
+    let mut config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if config.providers.remove(name).is_none() {
+        eprintln!("Provider '{}' not found in config", name);
+        std::process::exit(1);
+    }
+
+    match loader.save_project(&config) {
+        Ok(_) => println!("Provider '{}' removed", name),
+        Err(e) => {
+            eprintln!("Error saving config: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_provider_test(loader: &ConfigLoader, name: &str, model: Option<String>) {
+    let config = match loader.load_with_interpolation() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let pc = match config.providers.get(name) {
+        Some(p) => p,
+        None => {
+            eprintln!("Provider '{}' not found in config", name);
+            std::process::exit(1);
+        }
+    };
+
+    let api_key = match pc.api_key.as_deref() {
+        Some(k) if !k.is_empty() => k.to_string(),
+        _ => {
+            eprintln!("No API key configured for '{}'", name);
+            std::process::exit(1);
+        }
+    };
+    let base_url = pc.base_url.clone().unwrap_or_default();
+
+    let provider: Box<dyn pleiades_core::Provider> = match name {
+        "anthropic" => {
+            if base_url.is_empty() {
+                Box::new(pleiades_providers::anthropic::AnthropicProvider::new(api_key))
+            } else {
+                Box::new(pleiades_providers::anthropic::AnthropicProvider::with_base_url(api_key, base_url))
+            }
+        }
+        "openai" => {
+            if base_url.is_empty() {
+                Box::new(pleiades_providers::openai::OpenAIProvider::new(api_key))
+            } else {
+                Box::new(pleiades_providers::openai::OpenAIProvider::with_base_url(api_key, base_url))
+            }
+        }
+        _ => {
+            let display = name;
+            let model_name = model.clone().unwrap_or_else(|| "gpt-4o".to_string());
+            Box::new(pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
+                name, display, api_key, base_url, model_name,
+            ))
+        }
+    };
+
+    let model_name = model.clone().unwrap_or_else(|| provider.default_model().to_string());
+    println!("Testing provider '{}' with model '{}'...", name, model_name);
+
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to create runtime: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    rt.block_on(async {
+        match provider.chat_stream(pleiades_core::provider::ChatRequest {
+            model: model_name,
+            messages: vec![pleiades_core::conversation::Message::user("Respond with exactly: Hello from Pleiades!")],
+            system_prompt: None,
+            temperature: Some(0.0),
+            top_p: None,
+            max_tokens: Some(50),
+            stop: None,
+            tools: None,
+        }).await {
+            Ok(mut rx) => {
+                println!("  Connection successful! Response:");
+                print!("  ");
+                while let Some(event) = rx.recv().await {
+                    match event {
+                        pleiades_core::provider::StreamEvent::Token(t) => print!("{}", t),
+                        pleiades_core::provider::StreamEvent::Done { .. } => {
+                            println!();
+                            println!("  ✓ Streaming works");
+                            break;
+                        }
+                        pleiades_core::provider::StreamEvent::Error { message, .. } => {
+                            eprintln!("\n  ✗ Stream error: {}", message);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("  ✗ Connection failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+    });
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
@@ -439,6 +659,12 @@ fn main() {
             ProfileCommand::Load { name } => handle_profile_load(&loader, &name),
             ProfileCommand::Delete { name } => handle_profile_delete(&loader, &name),
             ProfileCommand::Active => handle_profile_active(&loader),
+        },
+        Some(Commands::Provider(cmd)) => match cmd {
+            ProviderCommand::List => handle_provider_list(&loader),
+            ProviderCommand::Info { name } => handle_provider_info(&loader, &name),
+            ProviderCommand::Test { name, model } => handle_provider_test(&loader, &name, model),
+            ProviderCommand::Remove { name } => handle_provider_remove(&loader, &name),
         },
         None => {
             if cli.chat {
