@@ -65,6 +65,10 @@ enum Commands {
     /// Manage chat sessions
     #[command(subcommand)]
     Session(SessionCommand),
+
+    /// Manage and execute tools
+    #[command(subcommand)]
+    Tool(ToolCommand),
 }
 
 #[derive(Subcommand)]
@@ -246,6 +250,26 @@ enum SessionCommand {
 
     /// Show session store location
     Path,
+}
+
+#[derive(Subcommand)]
+enum ToolCommand {
+    /// List all available tools
+    List,
+
+    /// Show tool details
+    Info {
+        /// Tool name
+        name: String,
+    },
+
+    /// Execute a tool directly
+    Call {
+        /// Tool name
+        name: String,
+        /// JSON input for the tool
+        input: String,
+    },
 }
 
 fn get_config_dirs() -> (PathBuf, PathBuf) {
@@ -1157,6 +1181,114 @@ fn handle_session_export(loader: &ConfigLoader, id: &str, format: &str, output: 
     }
 }
 
+fn handle_tool_list(loader: &ConfigLoader) {
+    if let Err(e) = loader.load() {
+        eprintln!("Warning: {}", e);
+    }
+
+    let mut tool_registry = pleiades_tools::ToolRegistry::new();
+    tool_registry.register_defaults();
+    let tools = tool_registry.list();
+
+    if tools.is_empty() {
+        println!("No tools available.");
+        return;
+    }
+
+    println!("Available tools ({}):", tools.len());
+    println!();
+    for tool in &tools {
+        let ro = if tool.is_readonly() { "readonly" } else { "modifies" };
+        println!("  {:<12}  {}  [{}]", tool.name(), tool.description(), ro);
+    }
+}
+
+fn handle_tool_info(loader: &ConfigLoader, name: &str) {
+    if let Err(e) = loader.load() {
+        eprintln!("Warning: {}", e);
+    }
+
+    let mut tool_registry = pleiades_tools::ToolRegistry::new();
+    tool_registry.register_defaults();
+
+    let tool = match tool_registry.get(name) {
+        Some(t) => t,
+        None => {
+            eprintln!("Tool '{}' not found", name);
+            std::process::exit(1);
+        }
+    };
+
+    println!("Tool: {}", tool.name());
+    println!("  Description: {}", tool.description());
+    println!("  Readonly:    {}", yesno(tool.is_readonly()));
+    println!("  Concurrency: {}", yesno(tool.is_concurrency_safe()));
+    println!("  Permission:  {:?}", tool.permission_level());
+    println!("  Input Schema:");
+    let schema = tool.input_schema();
+    if let Ok(formatted) = serde_json::to_string_pretty(&schema) {
+        for line in formatted.lines() {
+            println!("    {}", line);
+        }
+    } else {
+        println!("    {}", schema);
+    }
+}
+
+fn handle_tool_call(loader: &ConfigLoader, name: &str, input_str: &str) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let input: serde_json::Value = match serde_json::from_str(input_str) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Invalid JSON input: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut tool_registry = pleiades_tools::ToolRegistry::new();
+    tool_registry.register_defaults();
+
+    let tool = match tool_registry.get(name) {
+        Some(t) => t,
+        None => {
+            eprintln!("Tool '{}' not found", name);
+            std::process::exit(1);
+        }
+    };
+
+    let ctx = pleiades_core::tool::ToolContext {
+        cwd: std::env::current_dir().unwrap_or_default(),
+        working_directory: std::env::current_dir().unwrap_or_default(),
+        permission_mode: pleiades_core::tool::PermissionMode::Allow,
+        config: std::sync::Arc::new(serde_json::to_value(&config).unwrap_or_default()),
+    };
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        match tool.execute(input, &ctx).await {
+            Ok(result) => {
+                if result.success {
+                    println!("{}", result.content);
+                } else {
+                    eprintln!("Tool failed: {}", result.error.unwrap_or_else(|| "unknown error".to_string()));
+                    std::process::exit(1);
+                }
+            }
+            Err(e) => {
+                eprintln!("Tool execution error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    });
+}
+
 fn handle_session_path(loader: &ConfigLoader) {
     let config = match loader.load() {
         Ok(c) => c,
@@ -1213,6 +1345,11 @@ fn main() {
             SessionCommand::Delete { id } => handle_session_delete(&loader, &id),
             SessionCommand::Export { id, format, output } => handle_session_export(&loader, &id, &format, output),
             SessionCommand::Path => handle_session_path(&loader),
+        },
+        Some(Commands::Tool(cmd)) => match cmd {
+            ToolCommand::List => handle_tool_list(&loader),
+            ToolCommand::Info { name } => handle_tool_info(&loader, &name),
+            ToolCommand::Call { name, input } => handle_tool_call(&loader, &name, &input),
         },
         None => {
             if cli.chat {

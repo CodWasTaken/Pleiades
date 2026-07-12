@@ -164,16 +164,33 @@ impl Engine {
         });
 
         let start = std::time::Instant::now();
-        let result = tool.execute(input, &ctx).await;
+
+        let timeout_dur = std::time::Duration::from_secs(
+            self.config.session.context_size.max(120) as u64
+        );
+
+        let result = tokio::time::timeout(timeout_dur, tool.execute(input.clone(), &ctx)).await;
         let duration = start.elapsed().as_millis() as u64;
+
+        let result = match result {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                return Err(Error::tool(format!(
+                    "Tool '{}' timed out after {}s",
+                    name,
+                    timeout_dur.as_secs(),
+                )));
+            }
+        };
 
         self.emit(Event::ToolCompleted {
             tool: name.to_string(),
-            success: result.is_ok(),
+            success: result.success,
             duration_ms: duration,
         });
 
-        result
+        Ok(result)
     }
 
     /// Estimate token count for a conversation using a simple heuristic.
