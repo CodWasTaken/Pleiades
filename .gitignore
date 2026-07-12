@@ -36,5 +36,10 @@ venv/
 # Generated files
 docs/book/
 
+# Local dev tool configuration
+.opencode/
+.specify/
+opencode.json
+
 # Reference implementations
 SourceCodeCC/
