@@ -16,7 +16,7 @@
 | M7 | Interactive Chat (REPL) | ✅ **Complete** |
 | M8 | Agent Loop | ✅ **Complete** |
 | M9 | Memory & Persistence | ✅ **Complete** |
-| M10 | Terminal UI (TUI) | ⏳ **In Progress** |
+| M10 | Terminal UI (TUI) | ✅ **Complete** |
 | M11 | Plugin System | ❌ Pending |
 | M12 | Prompt Library | ❌ Pending |
 | M13 | Workflow Engine | ❌ Pending |
@@ -26,9 +26,9 @@
 | M17 | Optimization | ❌ Pending |
 | M18 | Release | ❌ Pending |
 
-**Current Focus**: Milestone 10 — Terminal UI (Ratatui-based TUI)
+**Current Focus**: Milestone 11 — Plugin System (WASM plugin runtime with hooks)
 
-**Completed Commits** (9 milestones implemented):
+**Completed Commits** (10 milestones implemented):
 - M1: 5fcf776 — Initial bootstrap (workspace, crate structure)
 - M2: b28648a — Config system with env interpolation, profiles, secrets
 - M3: 59e48b9 — Provider system (Anthropic, OpenAI, OpenAI-compatible)
@@ -38,6 +38,7 @@
 - M7: 3c2a014 — Interactive REPL with history, streaming, slash commands
 - M8: db262d3 — Agent loop with multi-turn tool calling, permission prompts
 - M9: 46e16eb — Memory system with FileStore, LLM summarization
+- M10: (pending) — Terminal UI: markdown→ANSI rendering, syntax highlighting, LineEditor with tab completion, Spinner, stream-state rendering
 
 **GitHub**: https://github.com/CodWasTaken/Pleiades
 

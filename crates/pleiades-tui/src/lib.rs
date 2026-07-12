@@ -4,8 +4,10 @@
 //! with markdown rendering, syntax highlighting, and responsive layout.
 
 pub mod app;
+pub mod input;
 pub mod render;
 pub mod theme;
 
 pub use app::TuiApp;
+pub use render::TerminalRenderer;
 pub use theme::Theme;
