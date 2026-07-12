@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::types::Config;
-use crate::validate;
+use crate::validate::{self, format_errors};
 
 /// Loads configuration from multiple sources with proper layering.
 pub struct ConfigLoader {
@@ -25,29 +25,86 @@ impl ConfigLoader {
         }
     }
 
+    /// Create a loader with custom directories.
+    pub fn with_dirs(global_dir: PathBuf, project_dir: PathBuf) -> Self {
+        Self {
+            global_dir,
+            project_dir,
+        }
+    }
+
+    /// Get the global config directory.
+    pub fn global_dir(&self) -> &Path {
+        &self.global_dir
+    }
+
+    /// Get the project config directory.
+    pub fn project_dir(&self) -> &Path {
+        &self.project_dir
+    }
+
     /// Load configuration from all sources, merging them in order.
+    /// Order: defaults → global → project → env vars
     pub fn load(&self) -> Result<Config, String> {
         let mut config = Config::default();
 
-        // Layer 1: Global config
         if let Ok(global) = self.load_global() {
-            config = self.merge(config, global);
+            config = Self::merge(config, global);
         }
 
-        // Layer 2: Project config
         if let Ok(project) = self.load_project() {
-            config = self.merge(config, project);
+            config = Self::merge(config, project);
         }
 
-        // Layer 3: Environment variables
         self.apply_env(&mut config);
 
-        // Validate the merged config
         if let Err(errors) = validate::validate(&config) {
-            return Err(format!("Configuration validation failed: {}", errors));
+            return Err(format!("Configuration validation failed:\n{}", format_errors(&errors)));
         }
 
         Ok(config)
+    }
+
+    /// Load configuration and perform env var interpolation.
+    pub fn load_with_interpolation(&self) -> Result<Config, String> {
+        let mut config = self.load()?;
+
+        // Interpolate API keys in provider configs
+        for provider in config.providers.values_mut() {
+            if let Some(key) = &provider.api_key {
+                let interpolated = crate::env_interpolate::interpolate(key);
+                if interpolated != *key {
+                    provider.api_key = Some(interpolated);
+                }
+            }
+        }
+
+        Ok(config)
+    }
+
+    /// Save configuration to the project config file.
+    pub fn save_project(&self, config: &Config) -> Result<(), String> {
+        self.save_to_dir(&self.project_dir, config)
+    }
+
+    /// Save configuration to the global config file.
+    pub fn save_global(&self, config: &Config) -> Result<(), String> {
+        self.save_to_dir(&self.global_dir, config)
+    }
+
+    /// Save configuration to a specific directory.
+    fn save_to_dir(&self, dir: &Path, config: &Config) -> Result<(), String> {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+
+        let path = dir.join("config.toml");
+        let content = toml::to_string_pretty(config)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+        std::fs::write(&path, &content)
+            .map_err(|e| format!("Failed to write config: {}", e))?;
+
+        Ok(())
     }
 
     /// Load global configuration (~/.config/pleiades/).
@@ -71,7 +128,8 @@ impl ConfigLoader {
 
         for (path, format) in &formats {
             if path.exists() {
-                return self.load_file(path, format);
+                let config = self.load_file(path, format)?;
+                return Ok(config);
             }
         }
 
@@ -94,9 +152,8 @@ impl ConfigLoader {
         }
     }
 
-    /// Merge two configurations, with `override_config` taking precedence.
-    fn merge(&self, base: Config, override_config: Config) -> Config {
-        // Simple merge strategy: non-None/empty values in override replace base
+    /// Merge two configurations deeply, with `override_config` taking precedence.
+    pub fn merge(base: Config, override_config: Config) -> Config {
         let mut merged = base;
 
         if let Some(provider) = override_config.core.default_provider {
@@ -108,27 +165,46 @@ impl ConfigLoader {
         if let Some(theme) = override_config.core.theme {
             merged.core.theme = Some(theme);
         }
-        merged.core.verbose |= override_config.core.verbose;
-        merged.core.debug |= override_config.core.debug;
+        if override_config.core.verbose {
+            merged.core.verbose = true;
+        }
+        if override_config.core.debug {
+            merged.core.debug = true;
+        }
+        merged.core.max_tokens = override_config.core.max_tokens.or(merged.core.max_tokens);
+        merged.core.temperature = override_config.core.temperature.or(merged.core.temperature);
+
         merged.providers.extend(override_config.providers);
         merged.models.aliases.extend(override_config.models.aliases);
+        merged.models.default = override_config.models.default.or(merged.models.default);
+
         merged.plugins.enabled.extend(override_config.plugins.enabled);
         merged.plugins.paths.extend(override_config.plugins.paths);
+
+        if !override_config.permissions.always_allow.is_empty() {
+            merged.permissions.always_allow = override_config.permissions.always_allow;
+        }
+        if !override_config.permissions.always_deny.is_empty() {
+            merged.permissions.always_deny = override_config.permissions.always_deny;
+        }
 
         merged
     }
 
     /// Apply environment variable overrides.
     fn apply_env(&self, config: &mut Config) {
-        if let Ok(val) = std::env::var("PLEIADES_DEFAULT_PROVIDER") {
-            config.core.default_provider = Some(val);
+        macro_rules! env_set {
+            ($var:expr, $target:expr) => {
+                if let Ok(val) = std::env::var($var) {
+                    $target = Some(val);
+                }
+            };
         }
-        if let Ok(val) = std::env::var("PLEIADES_DEFAULT_MODEL") {
-            config.core.default_model = Some(val);
-        }
-        if let Ok(val) = std::env::var("PLEIADES_THEME") {
-            config.core.theme = Some(val);
-        }
+
+        env_set!("PLEIADES_DEFAULT_PROVIDER", config.core.default_provider);
+        env_set!("PLEIADES_DEFAULT_MODEL", config.core.default_model);
+        env_set!("PLEIADES_THEME", config.core.theme);
+
         if let Ok(val) = std::env::var("PLEIADES_VERBOSE") {
             config.core.verbose = val == "1" || val.to_lowercase() == "true";
         }
@@ -156,8 +232,74 @@ impl Default for ConfigLoader {
 
 /// Get the platform-appropriate config directory.
 fn dirs_config_dir() -> Option<PathBuf> {
-    if let Some(config_dir) = dirs::config_dir() {
-        return Some(config_dir.join("pleiades"));
+    dirs::config_dir().map(|d| d.join("pleiades"))
+}
+
+/// Detect the config format from a file path.
+pub fn format_for_path(path: &Path) -> Option<&'static str> {
+    match path.extension()?.to_str()? {
+        "toml" => Some("toml"),
+        "json" => Some("json"),
+        "yaml" | "yml" => Some("yaml"),
+        _ => None,
     }
-    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_loader_global_dir() {
+        let loader = ConfigLoader::new();
+        assert!(loader.global_dir().to_string_lossy().contains("pleiades"));
+    }
+
+    #[test]
+    fn test_format_detection() {
+        assert_eq!(format_for_path(Path::new("config.toml")), Some("toml"));
+        assert_eq!(format_for_path(Path::new("config.json")), Some("json"));
+        assert_eq!(format_for_path(Path::new("config.yaml")), Some("yaml"));
+        assert_eq!(format_for_path(Path::new("config.yml")), Some("yaml"));
+        assert_eq!(format_for_path(Path::new("config.txt")), None);
+    }
+
+    #[test]
+    fn test_merge_simple() {
+        let base = Config::default();
+        let mut override_cfg = Config::default();
+        override_cfg.core.default_provider = Some("openai".to_string());
+
+        let merged = ConfigLoader::merge(base, override_cfg);
+        assert_eq!(merged.core.default_provider, Some("openai".to_string()));
+    }
+
+    #[test]
+    fn test_merge_preserves_defaults() {
+        let base = Config::default();
+        let override_cfg = Config::default();
+
+        let merged = ConfigLoader::merge(base, override_cfg);
+        assert_eq!(merged.core.default_provider, None);
+    }
+
+    #[test]
+    fn test_merge_providers() {
+        let mut base = Config::default();
+        base.providers.insert("anthropic".to_string(), crate::types::ProviderConfig {
+            api_key: Some("key1".to_string()),
+            ..Default::default()
+        });
+
+        let mut override_cfg = Config::default();
+        override_cfg.providers.insert("openai".to_string(), crate::types::ProviderConfig {
+            api_key: Some("key2".to_string()),
+            ..Default::default()
+        });
+
+        let merged = ConfigLoader::merge(base, override_cfg);
+        assert_eq!(merged.providers.len(), 2);
+        assert_eq!(merged.providers.get("anthropic").unwrap().api_key, Some("key1".to_string()));
+        assert_eq!(merged.providers.get("openai").unwrap().api_key, Some("key2".to_string()));
+    }
 }

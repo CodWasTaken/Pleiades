@@ -144,10 +144,10 @@ impl Engine {
         let ctx = ToolContext {
             cwd: std::env::current_dir().map_err(|e| Error::Io(e.to_string()))?,
             working_directory: std::env::current_dir().map_err(|e| Error::Io(e.to_string()))?,
-            permission_mode: match self.config.permissions.mode.as_str() {
-                "allow" => pleiades_core::tool::PermissionMode::Allow,
-                "deny" => pleiades_core::tool::PermissionMode::Deny,
-                _ => pleiades_core::tool::PermissionMode::Ask,
+            permission_mode: if self.config.permissions.ask_always {
+                pleiades_core::tool::PermissionMode::Ask
+            } else {
+                pleiades_core::tool::PermissionMode::Allow
             },
             config: Arc::new(serde_json::to_value(&*self.config).unwrap_or_default()),
         };

@@ -1,16 +1,13 @@
-//! Multi-level configuration system for Pleiades.
-//!
-//! Supports five levels of configuration with merging:
-//! 1. Defaults
-//! 2. Global config (`~/.config/pleiades/`)
-//! 3. Project config (`./.pleiades/`)
-//! 4. Environment variables (`PLEIADES_*`)
-//! 5. CLI flags
-
-pub mod loader;
 pub mod types;
+pub mod loader;
 pub mod validate;
+pub mod env_interpolate;
+pub mod profile;
+pub mod secret;
 
+pub use types::*;
 pub use loader::ConfigLoader;
-pub use types::{Config, Profile, ProviderConfig};
-pub use validate::ValidationError;
+pub use validate::validate;
+pub use env_interpolate::interpolate;
+pub use profile::ProfileManager;
+pub use secret::SecretManager;

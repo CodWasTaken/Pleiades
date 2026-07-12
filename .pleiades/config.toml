@@ -1,0 +1,46 @@
+[core]
+verbose = false
+debug = true
+max_tokens = 4096
+temperature = 0.699999988079071
+auto_update = true
+log_level = "info"
+
+[providers]
+
+[models.aliases]
+
+[plugins]
+enabled = []
+paths = [
+    "~/.pleiades/plugins",
+    "~/.pleiades/plugins",
+]
+sandbox = true
+
+[plugins.settings]
+
+[permissions]
+always_allow = []
+always_deny = []
+ask_always = true
+grant_duration_minutes = 60
+
+[session]
+context_size = 100
+auto_save_interval_secs = 60
+max_concurrent = 10
+compress_history = false
+
+[display]
+style = "rich"
+syntax_highlighting = true
+show_token_usage = false
+show_timing = false
+output_width = 0
+show_progress = true
+
+[agent]
+default_tools = []
+max_tool_iterations = 25
+auto_edit = false
