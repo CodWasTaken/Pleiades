@@ -47,3 +47,5 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.
 
 The special `providers.openai-subscription` entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with `pleiades auth status`. Run `pleiades setup` instead of editing this entry manually.
+
+Interactive agent sandbox modes are selected with `--permission-mode plan|agent|unrestricted` or `/mode plan|agent|unrestricted`. `agent` is the default and maps to Codex's workspace-write sandbox. `unrestricted` removes workspace isolation and should only be used in an already isolated environment.

@@ -5,6 +5,20 @@ All notable changes to Pleiades will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-13
+
+### Added
+
+- Added autonomous ChatGPT subscription tasks through the official Codex CLI with workspace-scoped file editing and command execution.
+- Added live provider-managed agent activity events for commands, file changes, searches, and tool calls.
+- Added a real `pleiades chat` command plus `/mode`, `/workspace`, and `/status` interactive controls.
+
+### Changed
+
+- Replaced the legacy fixed-width default REPL with the richer markdown terminal application.
+- Redesigned the interactive experience with a compact Pleiades constellation theme and clearer agent activity output.
+- Default subscription sessions now use a `workspace-write` sandbox rooted at the launch directory; `/mode plan` switches to read-only operation.
+
 ## [1.1.1] - 2026-07-13
 
 ### Added

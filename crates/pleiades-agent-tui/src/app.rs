@@ -10,6 +10,9 @@ use pleiades_agent_engine::session::SessionStore;
 use crate::input::{LineEditor, ReadOutcome};
 use crate::render::{Spinner, TerminalRenderer};
 
+const STAR: &str = "✦";
+const SPARK: &str = "✧";
+
 /// Terminal UI application.
 pub struct TuiApp {
     config: Config,
@@ -18,6 +21,7 @@ pub struct TuiApp {
     session_store: SessionStore,
     provider_name: String,
     model_name: String,
+    sandbox_mode: String,
 }
 
 impl TuiApp {
@@ -43,7 +47,14 @@ impl TuiApp {
             session_store,
             provider_name,
             model_name,
+            sandbox_mode: "workspace-write".to_string(),
         })
+    }
+
+    /// Override the autonomous agent sandbox for this session.
+    pub fn with_permission_mode(mut self, mode: &str) -> Self {
+        self.sandbox_mode = normalize_permission_mode(mode).to_string();
+        self
     }
 
     pub fn with_session(&mut self, session_id: &str) -> Result<(), Error> {
@@ -76,7 +87,7 @@ impl TuiApp {
         let mut engine = self.build_engine()?;
 
         let mut rl = LineEditor::new(
-            "\x1b[1;32m>>\x1b[0m ".to_string(),
+            "\x1b[1;35m❯\x1b[0m ".to_string(),
             vec![
                 "/help".into(),
                 "/clear".into(),
@@ -85,6 +96,9 @@ impl TuiApp {
                 "/model".into(),
                 "/provider".into(),
                 "/info".into(),
+                "/status".into(),
+                "/workspace".into(),
+                "/mode".into(),
                 "/tokens".into(),
                 "/export".into(),
                 "/exit".into(),
@@ -140,7 +154,8 @@ impl TuiApp {
             let base_url = pc.base_url.as_deref().unwrap_or("");
             if name == "openai-subscription" {
                 engine.register_provider(Box::new(
-                    pleiades_agent_providers::codex::CodexCliProvider::new(),
+                    pleiades_agent_providers::codex::CodexCliProvider::new()
+                        .with_sandbox_mode(&self.sandbox_mode),
                 ));
                 continue;
             }
@@ -213,38 +228,26 @@ impl TuiApp {
     fn print_welcome(&self) {
         let stdout = io::stdout();
         let mut out = stdout.lock();
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let workspace = cwd
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("/");
+        let _ = writeln!(out, "\n  \x1b[38;5;141m      {SPARK}   {STAR}\x1b[0m");
         let _ = writeln!(
             out,
-            "\x1b[1;36m╭──────────────────────────────────────────╮\x1b[0m"
+            "  \x1b[1;38;5;183mP L E I A D E S\x1b[0m  \x1b[2mterminal agent\x1b[0m"
         );
         let _ = writeln!(
             out,
-            "\x1b[1;36m│\x1b[0m  \x1b[1;33mPleiades\x1b[0m - Terminal AI Assistant      \x1b[1;36m│\x1b[0m"
-        );
-        let _ = writeln!(
-            out,
-            "\x1b[1;36m│\x1b[0m  Model: {:<31} \x1b[1;36m│\x1b[0m",
+            "  \x1b[38;5;111m{STAR}\x1b[0m \x1b[2mworkspace\x1b[0m {workspace}   \x1b[38;5;111m{STAR}\x1b[0m \x1b[2mmodel\x1b[0m {}",
             self.model_name
         );
         let _ = writeln!(
             out,
-            "\x1b[1;36m│\x1b[0m  Provider: {:<28} \x1b[1;36m│\x1b[0m",
-            self.provider_name
+            "  \x1b[38;5;111m{STAR}\x1b[0m \x1b[2mmode\x1b[0m {}   \x1b[38;5;111m{STAR}\x1b[0m \x1b[2m/help for commands\x1b[0m\n",
+            permission_mode_label(&self.sandbox_mode)
         );
-        let _ = writeln!(
-            out,
-            "\x1b[1;36m│\x1b[0m  Messages: {:<26} \x1b[1;36m│\x1b[0m",
-            self.conversation.len()
-        );
-        let _ = writeln!(
-            out,
-            "\x1b[1;36m│\x1b[0m  Type \x1b[1;32m/help\x1b[0m for commands              \x1b[1;36m│\x1b[0m"
-        );
-        let _ = writeln!(
-            out,
-            "\x1b[1;36m╰──────────────────────────────────────────╯\x1b[0m"
-        );
-        let _ = writeln!(out);
     }
 
     async fn handle_command(
@@ -259,17 +262,24 @@ impl TuiApp {
 
         match cmd {
             "/help" => {
-                println!("\x1b[1;33mCommands:\x1b[0m");
-                println!("  \x1b[1;32m/help\x1b[0m             Show this help message");
-                println!("  \x1b[1;32m/clear\x1b[0m            Clear the conversation");
-                println!("  \x1b[1;32m/save [name]\x1b[0m      Save the current session");
-                println!("  \x1b[1;32m/load <id>\x1b[0m        Load a session by ID");
-                println!("  \x1b[1;32m/model <name>\x1b[0m     Switch model");
-                println!("  \x1b[1;32m/provider <name>\x1b[0m  Switch provider");
-                println!("  \x1b[1;32m/info\x1b[0m             Show session info");
-                println!("  \x1b[1;32m/tokens\x1b[0m           Show estimated token count");
-                println!("  \x1b[1;32m/export [fmt]\x1b[0m     Export session (markdown/json)");
-                println!("  \x1b[1;32m/exit\x1b[0m             Exit");
+                println!("\n  \x1b[1;38;5;183m{STAR} navigation\x1b[0m");
+                println!("  \x1b[38;5;111m/help\x1b[0m                 commands");
+                println!(
+                    "  \x1b[38;5;111m/status\x1b[0m               agent, model, workspace, mode"
+                );
+                println!(
+                    "  \x1b[38;5;111m/mode <plan|agent|unrestricted>\x1b[0m  change agent access"
+                );
+                println!(
+                    "  \x1b[38;5;111m/workspace\x1b[0m            show writable workspace root"
+                );
+                println!("  \x1b[38;5;111m/model <name>\x1b[0m         switch model");
+                println!("  \x1b[38;5;111m/provider <name>\x1b[0m      switch provider");
+                println!("  \x1b[38;5;111m/clear\x1b[0m                clear conversation");
+                println!("  \x1b[38;5;111m/save [name]\x1b[0m          save session");
+                println!("  \x1b[38;5;111m/load <id>\x1b[0m            load session");
+                println!("  \x1b[38;5;111m/export [markdown|json]\x1b[0m export session");
+                println!("  \x1b[38;5;111m/exit\x1b[0m                 leave Pleiades\n");
             }
             "/clear" => {
                 self.conversation.clear();
@@ -351,9 +361,9 @@ impl TuiApp {
                     };
                 }
             }
-            "/info" => {
+            "/info" | "/status" => {
                 let tokens = self.conversation.estimated_tokens();
-                println!("\x1b[1;33mSession Info:\x1b[0m");
+                println!("\n  \x1b[1;38;5;183m{STAR} agent status\x1b[0m");
                 println!("  ID:       {}", self.conversation.id);
                 if let Some(ref title) = self.conversation.metadata.title {
                     println!("  Title:    {title}");
@@ -362,6 +372,46 @@ impl TuiApp {
                 println!("  Tokens:   ~{tokens}");
                 println!("  Model:    {}", self.model_name);
                 println!("  Provider: {}", self.provider_name);
+                println!("  Mode:     {}", permission_mode_label(&self.sandbox_mode));
+                println!(
+                    "  Workspace: {}\n",
+                    std::env::current_dir().unwrap_or_default().display()
+                );
+            }
+            "/workspace" => {
+                println!("{}", std::env::current_dir().unwrap_or_default().display());
+            }
+            "/mode" => {
+                if arg.is_empty() {
+                    println!("Mode: {}", permission_mode_label(&self.sandbox_mode));
+                    println!("Use `/mode plan`, `/mode agent`, or `/mode unrestricted`.");
+                } else {
+                    if !matches!(
+                        arg,
+                        "plan"
+                            | "read-only"
+                            | "readonly"
+                            | "agent"
+                            | "workspace-write"
+                            | "unrestricted"
+                            | "danger-full-access"
+                    ) {
+                        eprintln!("Unknown mode '{arg}'. Use plan, agent, or unrestricted.");
+                        return true;
+                    }
+                    self.sandbox_mode = normalize_permission_mode(arg).to_string();
+                    *engine = match self.build_engine() {
+                        Ok(engine) => engine,
+                        Err(error) => {
+                            eprintln!("Could not switch mode: {error}");
+                            return true;
+                        }
+                    };
+                    println!(
+                        "\x1b[38;5;141m{STAR}\x1b[0m Mode: {}",
+                        permission_mode_label(&self.sandbox_mode)
+                    );
+                }
             }
             "/tokens" => {
                 let tokens = self.conversation.estimated_tokens();
@@ -396,7 +446,7 @@ impl TuiApp {
         let max_iterations = self.config.agent.max_tool_iterations;
 
         for iteration in 0..max_iterations {
-            println!("\x1b[1;36m─── response ───\x1b[0m");
+            println!("\n\x1b[1;38;5;141m{STAR} Pleiades\x1b[0m");
 
             let (text_response, tool_calls, had_error) = self.stream_response(engine).await?;
 
@@ -547,42 +597,69 @@ impl TuiApp {
             .chat_stream(&mut self.conversation, &self.provider_name)
             .await
         {
-            Ok(mut rx) => {
-                while let Some(event) = rx.recv().await {
-                    match event {
-                        StreamEvent::Token(token) => {
-                            text_response.push_str(&token);
-                            if let Some(rendered) = stream_state.push(&self.renderer, &token) {
-                                let _ = write!(stdout, "{rendered}");
-                                let _ = stdout.flush();
-                            }
-                        }
-                        StreamEvent::ReasoningToken(token) => {
-                            let _ = write!(stdout, "\x1b[2m{token}\x1b[0m");
+            Ok(mut rx) => loop {
+                let event = tokio::select! {
+                    event = rx.recv() => event,
+                    _ = tokio::signal::ctrl_c() => {
+                        drop(rx);
+                        let _ = writeln!(stdout, "\n  \x1b[38;5;111m◇ interrupted\x1b[0m");
+                        return Ok((String::new(), Vec::new(), true));
+                    }
+                };
+                let Some(event) = event else {
+                    break;
+                };
+                match event {
+                    StreamEvent::Token(token) => {
+                        text_response.push_str(&token);
+                        if let Some(rendered) = stream_state.push(&self.renderer, &token) {
+                            let _ = write!(stdout, "{rendered}");
                             let _ = stdout.flush();
                         }
-                        StreamEvent::ToolCall { id, name, input } => {
-                            tool_calls.push(ToolCallInfo { id, name, input });
-                        }
-                        StreamEvent::Done { .. } => {
-                            if let Some(remaining) = stream_state.flush(&self.renderer) {
-                                let _ = write!(stdout, "{remaining}");
-                            }
-                            let _ = writeln!(stdout);
-                            break;
-                        }
-                        StreamEvent::Error { message, code } => {
-                            let _ = spinner.fail(&message, &theme, &mut stdout);
-                            eprintln!(
-                                "\x1b[1;31mError\x1b[0m: {message} ({})",
-                                code.as_deref().unwrap_or("unknown")
-                            );
-                            return Ok((String::new(), Vec::new(), true));
-                        }
-                        _ => {}
                     }
+                    StreamEvent::ReasoningToken(token) => {
+                        let _ = write!(stdout, "\x1b[2m{token}\x1b[0m");
+                        let _ = stdout.flush();
+                    }
+                    StreamEvent::ToolCall { id, name, input } => {
+                        tool_calls.push(ToolCallInfo { id, name, input });
+                    }
+                    StreamEvent::AgentActivity {
+                        kind,
+                        title,
+                        detail,
+                        status,
+                        ..
+                    } => {
+                        if let Some(remaining) = stream_state.flush(&self.renderer) {
+                            let _ = write!(stdout, "{remaining}");
+                        }
+                        render_agent_activity(
+                            &mut stdout,
+                            &kind,
+                            &title,
+                            detail.as_deref(),
+                            &status,
+                        );
+                    }
+                    StreamEvent::Done { .. } => {
+                        if let Some(remaining) = stream_state.flush(&self.renderer) {
+                            let _ = write!(stdout, "{remaining}");
+                        }
+                        let _ = writeln!(stdout);
+                        break;
+                    }
+                    StreamEvent::Error { message, code } => {
+                        let _ = spinner.fail(&message, &theme, &mut stdout);
+                        eprintln!(
+                            "\x1b[1;31mError\x1b[0m: {message} ({})",
+                            code.as_deref().unwrap_or("unknown")
+                        );
+                        return Ok((String::new(), Vec::new(), true));
+                    }
+                    _ => {}
                 }
-            }
+            },
             Err(e) => {
                 eprintln!("\x1b[1;31mError\x1b[0m: {e}");
                 return Ok((String::new(), Vec::new(), true));
@@ -641,12 +718,95 @@ impl TuiApp {
                 self.conversation.id
             );
         }
-        println!("\x1b[1;33mGoodbye!\x1b[0m");
+        println!("\x1b[38;5;141m{SPARK} until the next orbit\x1b[0m");
     }
+}
+
+fn normalize_permission_mode(value: &str) -> &'static str {
+    match value {
+        "plan" | "read-only" | "readonly" => "read-only",
+        "unrestricted" | "danger-full-access" => "danger-full-access",
+        _ => "workspace-write",
+    }
+}
+
+fn permission_mode_label(value: &str) -> &'static str {
+    match value {
+        "read-only" => "plan · read only",
+        "danger-full-access" => "unrestricted",
+        _ => "agent · workspace write",
+    }
+}
+
+fn render_agent_activity(
+    out: &mut impl Write,
+    kind: &str,
+    title: &str,
+    detail: Option<&str>,
+    status: &str,
+) {
+    let (symbol, color) = match status {
+        "running" => ("◌", "\x1b[38;5;111m"),
+        "failed" => ("×", "\x1b[31m"),
+        _ => ("✓", "\x1b[32m"),
+    };
+    let label = match kind {
+        "file" => "edit",
+        "command" => "run",
+        "web_search" => "search",
+        "mcp_tool_call" => "tool",
+        value => value,
+    };
+    let compact_title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    let compact_title: String = compact_title.chars().take(180).collect();
+    let _ = writeln!(
+        out,
+        "  {color}{symbol}\x1b[0m \x1b[2m{label}\x1b[0m  {compact_title}"
+    );
+    if status != "running" {
+        if let Some(detail) = detail {
+            for line in detail.lines().take(6) {
+                let line: String = line.chars().take(160).collect();
+                let _ = writeln!(out, "    \x1b[2m{line}\x1b[0m");
+            }
+        }
+    }
+    let _ = out.flush();
 }
 
 struct ToolCallInfo {
     id: String,
     name: String,
     input: serde_json::Value,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_agent_access_modes() {
+        assert_eq!(normalize_permission_mode("plan"), "read-only");
+        assert_eq!(normalize_permission_mode("agent"), "workspace-write");
+        assert_eq!(
+            normalize_permission_mode("unrestricted"),
+            "danger-full-access"
+        );
+    }
+
+    #[test]
+    fn renders_compact_agent_activity() {
+        let mut output = Vec::new();
+        render_agent_activity(
+            &mut output,
+            "command",
+            "cargo   test",
+            Some("all tests passed"),
+            "completed",
+        );
+        let output = String::from_utf8(output).expect("UTF-8 activity output");
+        assert!(output.contains("run"));
+        assert!(output.contains("cargo test"));
+        assert!(output.contains("all tests passed"));
+    }
 }

@@ -23,7 +23,8 @@ Named after the Seven Sisters star cluster, Pleiades represents a constellation 
 - **Two OpenAI Login Modes** — Choose Platform API billing or ChatGPT subscription access through the official Codex CLI
 - **Plugin Architecture** — Install local plugin manifests with pre/post shell hooks
 - **Multi-Engine** — Chat, agent, workflow — choose the right interaction model for each task
-- **Beautiful Terminal** — Markdown rendering, syntax highlighting, status bar, progress indicators
+- **Autonomous Coding Agent** — Inspect projects, create and edit files, run commands, and verify results
+- **Star-Themed Terminal** — Constellation-inspired interface, markdown rendering, syntax highlighting, and live task activity
 - **Memory System** — Multi-tier memory from conversation context to long-term project knowledge
 - **Permission System** — Granular control over what the AI can do. Read-only, workspace-write, or full access
 - **Customizable** — Select terminal themes and configure models, permissions, prompts, and workflows
@@ -46,6 +47,9 @@ pleiades doctor
 
 # Start a chat
 pleiades
+
+# Or use the explicit agent command
+pleiades chat
 
 # One-shot prompt
 pleiades "explain this codebase"
@@ -73,6 +77,7 @@ cargo install pleiades-agent
 pleiades --chat             Start interactive session
 pleiades <prompt>           One-shot prompt
 pleiades repl               Start REPL session
+pleiades chat               Start the autonomous terminal agent
 pleiades setup              Guided provider and authentication setup
 pleiades auth               Sign in, check status, or sign out through Codex
 pleiades doctor             Diagnose configuration and authentication
@@ -103,7 +108,7 @@ pleiades --version          Show version
 
 ## Project Status
 
-**18 milestones complete** — Pleiades v1.1.1 is available from crates.io and as cross-platform GitHub release binaries, with a checksummed installer, Homebrew metadata, and AUR metadata.
+**18 milestones complete** — Pleiades v1.2.0 adds autonomous workspace tasks and a star-themed terminal agent experience.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
 - [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable

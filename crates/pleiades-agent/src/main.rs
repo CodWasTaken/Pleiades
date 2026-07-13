@@ -21,7 +21,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Start an interactive chat session
+    /// Start the interactive autonomous terminal agent (legacy flag; prefer `pleiades chat`)
     #[arg(short, long)]
     chat: bool,
 
@@ -41,8 +41,13 @@ struct Cli {
     #[arg(short = 'P', long, global = true)]
     provider: Option<String>,
 
-    /// Permission mode
-    #[arg(long, global = true)]
+    /// Agent mode: plan, agent, or unrestricted
+    #[arg(
+        long,
+        global = true,
+        hide_possible_values = true,
+        value_parser = ["plan", "agent", "unrestricted", "read-only", "workspace-write", "danger-full-access"]
+    )]
     permission_mode: Option<String>,
 
     /// Verbose output
@@ -52,6 +57,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Start the interactive autonomous terminal agent
+    Chat {
+        /// Session ID to load
+        #[arg(short, long)]
+        session: Option<String>,
+    },
+
     /// Configure Pleiades with a guided authentication flow
     Setup {
         /// Authentication method (omit for an interactive choice)
@@ -2341,12 +2353,64 @@ fn handle_doctor(loader: &ConfigLoader) {
     println!("For a live request, run `pleiades provider test {provider_name}`.");
 }
 
+fn run_interactive_agent(
+    mut config: pleiades_agent_config::Config,
+    session: Option<&str>,
+    provider: Option<&str>,
+    model: Option<&str>,
+    permission_mode: Option<&str>,
+) {
+    if let Some(provider) = provider {
+        config.core.default_provider = Some(provider.to_string());
+    }
+    if let Some(model) = model {
+        config.core.default_model = Some(model.to_string());
+    }
+
+    let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
+    runtime.block_on(async move {
+        let mut app = match pleiades_agent_tui::TuiApp::new(config) {
+            Ok(app) => app.with_permission_mode(permission_mode.unwrap_or("agent")),
+            Err(error) => {
+                eprintln!("Could not start Pleiades: {error}");
+                std::process::exit(1);
+            }
+        };
+        if let Some(session_id) = session {
+            if let Err(error) = app.with_session(session_id) {
+                eprintln!("Error loading session '{session_id}': {error}");
+                std::process::exit(1);
+            }
+        }
+        if let Err(error) = app.run().await {
+            eprintln!("Agent error: {error}");
+            std::process::exit(1);
+        }
+    });
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
     let loader = ConfigLoader::with_dirs(config_dir, project_dir);
 
     match cli.command {
+        Some(Commands::Chat { ref session }) => {
+            let config = match loader.load_with_interpolation() {
+                Ok(config) => config,
+                Err(error) => {
+                    eprintln!("Error loading config: {error}");
+                    std::process::exit(1);
+                }
+            };
+            run_interactive_agent(
+                config,
+                session.as_deref(),
+                cli.provider.as_deref(),
+                cli.model.as_deref(),
+                cli.permission_mode.as_deref(),
+            );
+        }
         Some(Commands::Setup { auth, device }) => handle_setup(&loader, auth, device),
         Some(Commands::Auth(command)) => match command {
             AuthCommand::Login { device } => handle_auth_login(&loader, device),
@@ -2436,20 +2500,13 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let mut repl = repl::Repl::new(config);
-                if let Some(session_id) = session {
-                    if let Err(e) = repl.with_session(&session_id) {
-                        eprintln!("Error loading session '{}': {}", session_id, e);
-                        std::process::exit(1);
-                    }
-                }
-                if let Err(e) = repl.run().await {
-                    eprintln!("REPL error: {}", e);
-                    std::process::exit(1);
-                }
-            });
+            run_interactive_agent(
+                config,
+                session.as_deref(),
+                cli.provider.as_deref(),
+                cli.model.as_deref(),
+                cli.permission_mode.as_deref(),
+            );
         }
         None => {
             if cli.chat {
@@ -2460,27 +2517,13 @@ fn main() {
                         std::process::exit(1);
                     }
                 };
-                let mut config = config;
-                if let Some(ref model) = cli.model {
-                    config.core.default_model = Some(model.clone());
-                }
-                if let Some(ref provider) = cli.provider {
-                    config.core.default_provider = Some(provider.clone());
-                }
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut repl = repl::Repl::new(config);
-                    if let Some(session_id) = &cli.session {
-                        if let Err(e) = repl.with_session(session_id) {
-                            eprintln!("Error loading session '{}': {}", session_id, e);
-                            std::process::exit(1);
-                        }
-                    }
-                    if let Err(e) = repl.run().await {
-                        eprintln!("REPL error: {}", e);
-                        std::process::exit(1);
-                    }
-                });
+                run_interactive_agent(
+                    config,
+                    cli.session.as_deref(),
+                    cli.provider.as_deref(),
+                    cli.model.as_deref(),
+                    cli.permission_mode.as_deref(),
+                );
                 return;
             }
 
@@ -2501,7 +2544,9 @@ fn main() {
                 }
 
                 let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
-                if let Err(error) = runtime.block_on(repl::Repl::new(config).run_once(&prompt)) {
+                let mut repl =
+                    repl::Repl::new(config).with_permission_mode(cli.permission_mode.as_deref());
+                if let Err(error) = runtime.block_on(repl.run_once(&prompt)) {
                     eprintln!("Error: {error}");
                     std::process::exit(1);
                 }
@@ -2527,11 +2572,13 @@ fn main() {
                 return;
             }
 
-            let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
-            if let Err(error) = runtime.block_on(repl::Repl::new(config).run()) {
-                eprintln!("REPL error: {error}");
-                std::process::exit(1);
-            }
+            run_interactive_agent(
+                config,
+                cli.session.as_deref(),
+                cli.provider.as_deref(),
+                cli.model.as_deref(),
+                cli.permission_mode.as_deref(),
+            );
         }
     }
 }

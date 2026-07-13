@@ -20,8 +20,10 @@ pub struct Repl {
     session_store: SessionStore,
     provider_name: String,
     model_name: String,
+    sandbox_mode: String,
 }
 
+#[allow(dead_code)]
 impl Repl {
     pub fn new(config: Config) -> Repl {
         let provider_name = config
@@ -44,7 +46,18 @@ impl Repl {
             session_store,
             provider_name,
             model_name,
+            sandbox_mode: "workspace-write".to_string(),
         }
+    }
+
+    pub fn with_permission_mode(mut self, mode: Option<&str>) -> Self {
+        self.sandbox_mode = match mode {
+            Some("plan" | "read-only" | "readonly") => "read-only",
+            Some("unrestricted" | "danger-full-access") => "danger-full-access",
+            _ => "workspace-write",
+        }
+        .to_string();
+        self
     }
 
     pub fn with_session(&mut self, session_id: &str) -> Result<(), Error> {
@@ -115,7 +128,8 @@ impl Repl {
             let base_url = pc.base_url.as_deref().unwrap_or("");
             if name == "openai-subscription" {
                 engine.register_provider(Box::new(
-                    pleiades_agent_providers::codex::CodexCliProvider::new(),
+                    pleiades_agent_providers::codex::CodexCliProvider::new()
+                        .with_sandbox_mode(&self.sandbox_mode),
                 ));
                 continue;
             }
@@ -353,7 +367,7 @@ impl Repl {
         let max_iterations = self.config.agent.max_tool_iterations;
 
         for iteration in 0..max_iterations {
-            println!("\x1b[1;36m─── response ───\x1b[0m");
+            println!("\n\x1b[1;38;5;141m✦ Pleiades\x1b[0m");
 
             let (text_response, tool_calls, had_error) = self.stream_response(engine).await?;
 
@@ -520,6 +534,23 @@ impl Repl {
                         StreamEvent::ToolCall { id, name, input } => {
                             tool_calls.push(ToolCallInfo { id, name, input });
                         }
+                        StreamEvent::AgentActivity {
+                            kind,
+                            title,
+                            detail,
+                            status,
+                            ..
+                        } => {
+                            let symbol = if status == "running" { "◌" } else { "✓" };
+                            println!("  {symbol} {kind}  {title}");
+                            if status != "running" {
+                                if let Some(detail) = detail {
+                                    for line in detail.lines().take(6) {
+                                        println!("    {line}");
+                                    }
+                                }
+                            }
+                        }
                         StreamEvent::Done { .. } => {
                             println!();
                             break;
@@ -606,6 +637,7 @@ struct ToolCallInfo {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct ReplHelper;
 
 impl Completer for ReplHelper {

@@ -12,13 +12,15 @@ use pleiades_agent_core::model::{ModelCapabilities, ModelInfo};
 use pleiades_agent_core::provider::{
     ChatRequest, ChatResponse, Provider, ProviderCapabilities, StreamEvent, Usage,
 };
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 const DEFAULT_MODEL: &str = "codex-default";
 
 /// Provider that uses the user's authenticated Codex CLI session.
+#[derive(Clone)]
 pub struct CodexCliProvider {
     command: String,
+    sandbox_mode: String,
 }
 
 impl CodexCliProvider {
@@ -33,10 +35,18 @@ impl CodexCliProvider {
     pub fn with_command(command: impl Into<String>) -> Self {
         Self {
             command: command.into(),
+            sandbox_mode: "workspace-write".to_string(),
         }
     }
 
-    async fn execute(&self, request: &ChatRequest) -> Result<(String, Option<Usage>), Error> {
+    /// Set the Codex sandbox used for provider-managed agent actions.
+    pub fn with_sandbox_mode(mut self, sandbox_mode: impl Into<String>) -> Self {
+        let requested = sandbox_mode.into();
+        self.sandbox_mode = normalize_sandbox_mode(&requested).to_string();
+        self
+    }
+
+    fn build_command(&self) -> Result<tokio::process::Command, Error> {
         let cwd = std::env::current_dir().map_err(Error::from)?;
         let mut command = tokio::process::Command::new(&self.command);
         command
@@ -44,7 +54,7 @@ impl CodexCliProvider {
             .arg("--json")
             .arg("--ephemeral")
             .arg("--sandbox")
-            .arg("read-only")
+            .arg(&self.sandbox_mode)
             .arg("--skip-git-repo-check")
             .arg("--ignore-rules")
             .arg("--ignore-user-config")
@@ -55,6 +65,11 @@ impl CodexCliProvider {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        Ok(command)
+    }
+
+    async fn execute(&self, request: &ChatRequest) -> Result<(String, Option<Usage>), Error> {
+        let mut command = self.build_command()?;
 
         if !request.model.is_empty() && request.model != DEFAULT_MODEL {
             command.arg("--model").arg(&request.model);
@@ -67,7 +82,7 @@ impl CodexCliProvider {
             ))
         })?;
 
-        let prompt = build_prompt(request);
+        let prompt = build_agent_prompt(request);
         child
             .stdin
             .take()
@@ -92,6 +107,96 @@ impl CodexCliProvider {
 
         parse_codex_output(&String::from_utf8_lossy(&output.stdout))
     }
+
+    async fn stream_agent(
+        &self,
+        request: ChatRequest,
+        tx: tokio::sync::mpsc::Sender<StreamEvent>,
+    ) -> Result<(), Error> {
+        let mut command = self.build_command()?;
+        if !request.model.is_empty() && request.model != DEFAULT_MODEL {
+            command.arg("--model").arg(&request.model);
+        }
+        command.arg("-");
+
+        let mut child = command.spawn().map_err(|error| {
+            Error::config(format!(
+                "OpenAI subscription mode requires the official Codex CLI. Install it, then run `codex login`: {error}"
+            ))
+        })?;
+
+        let prompt = build_agent_prompt(&request);
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| Error::internal("Could not open Codex stdin"))?;
+        stdin
+            .write_all(prompt.as_bytes())
+            .await
+            .map_err(Error::from)?;
+        drop(stdin);
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| Error::internal("Could not open Codex stdout"))?;
+        let mut stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| Error::internal("Could not open Codex stderr"))?;
+        let stderr_task = tokio::spawn(async move {
+            let mut value = String::new();
+            let _ = stderr.read_to_string(&mut value).await;
+            value
+        });
+
+        let mut lines = BufReader::new(stdout).lines();
+        let mut sent_done = false;
+        loop {
+            let line = tokio::select! {
+                _ = tx.closed() => {
+                    let _ = child.kill().await;
+                    return Ok(());
+                }
+                line = lines.next_line() => line.map_err(Error::from)?,
+            };
+            let Some(line) = line else {
+                break;
+            };
+            let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            for stream_event in codex_stream_events(&event) {
+                if matches!(stream_event, StreamEvent::Done { .. }) {
+                    sent_done = true;
+                }
+                if tx.send(stream_event).await.is_err() {
+                    let _ = child.kill().await;
+                    return Ok(());
+                }
+            }
+        }
+
+        let status = child.wait().await.map_err(Error::from)?;
+        let stderr = stderr_task.await.unwrap_or_default();
+        if !status.success() {
+            let message = if stderr.trim().is_empty() {
+                "Codex agent exited without an error message".to_string()
+            } else {
+                stderr.trim().to_string()
+            };
+            return Err(Error::provider(message));
+        }
+        if !sent_done {
+            tx.send(StreamEvent::Done {
+                finish_reason: "stop".to_string(),
+                usage: None,
+            })
+            .await
+            .ok();
+        }
+        Ok(())
+    }
 }
 
 impl Default for CodexCliProvider {
@@ -112,8 +217,8 @@ impl Provider for CodexCliProvider {
 
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            streaming: false,
-            tools: false,
+            streaming: true,
+            tools: true,
             vision: false,
             embeddings: false,
             thinking: true,
@@ -137,9 +242,9 @@ impl Provider for CodexCliProvider {
             capabilities: ModelCapabilities {
                 max_context_length: 0,
                 max_output_tokens: 0,
-                supports_tools: false,
+                supports_tools: true,
                 supports_vision: false,
-                supports_streaming: false,
+                supports_streaming: true,
                 supports_thinking: true,
                 supports_json_mode: false,
             },
@@ -160,38 +265,34 @@ impl Provider for CodexCliProvider {
         &self,
         request: ChatRequest,
     ) -> Result<tokio::sync::mpsc::Receiver<StreamEvent>, Error> {
-        let (tx, rx) = tokio::sync::mpsc::channel(8);
-        let result = self.execute(&request).await;
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let provider = self.clone();
         tokio::spawn(async move {
-            match result {
-                Ok((text, usage)) => {
-                    if !text.is_empty() {
-                        let _ = tx.send(StreamEvent::Token(text)).await;
-                    }
-                    let _ = tx
-                        .send(StreamEvent::Done {
-                            finish_reason: "stop".to_string(),
-                            usage,
-                        })
-                        .await;
-                }
-                Err(error) => {
-                    let _ = tx
-                        .send(StreamEvent::Error {
-                            message: error.to_string(),
-                            code: Some("codex_cli_error".to_string()),
-                        })
-                        .await;
-                }
+            let error_tx = tx.clone();
+            if let Err(error) = provider.stream_agent(request, tx).await {
+                let _ = error_tx
+                    .send(StreamEvent::Error {
+                        message: error.to_string(),
+                        code: Some("codex_cli_error".to_string()),
+                    })
+                    .await;
             }
         });
         Ok(rx)
     }
 }
 
-fn build_prompt(request: &ChatRequest) -> String {
+fn normalize_sandbox_mode(value: &str) -> &'static str {
+    match value {
+        "read-only" | "plan" => "read-only",
+        "danger-full-access" | "unrestricted" => "danger-full-access",
+        _ => "workspace-write",
+    }
+}
+
+fn build_agent_prompt(request: &ChatRequest) -> String {
     let mut prompt = String::from(
-        "Act only as the language-model backend for Pleiades. Do not inspect files, run commands, browse, or call tools. Respond directly to the latest user message using the conversation below.\n\n",
+        "You are Pleiades, an autonomous terminal coding agent. Work inside the current workspace and carry the user's latest task through to a verified result. Inspect relevant files, create or edit files, and run appropriate commands or tests when useful. Do not merely explain what you would do. Do not claim that filesystem or command tools are disabled. Make reasonable decisions without asking follow-up questions unless a missing choice would materially change the result. Respect the active sandbox and never attempt to escape it. Summarize completed work clearly at the end.\n\n",
     );
     if let Some(system) = request
         .system_prompt
@@ -214,8 +315,144 @@ fn build_prompt(request: &ChatRequest) -> String {
         prompt.push_str(&message.text_content());
         prompt.push_str("\n\n");
     }
-    prompt.push_str("Return only the assistant response.");
+    prompt.push_str("Continue autonomously from the latest USER message and finish the task.");
     prompt
+}
+
+fn codex_stream_events(event: &serde_json::Value) -> Vec<StreamEvent> {
+    let event_type = event.get("type").and_then(|value| value.as_str());
+    let item = &event["item"];
+    let item_type = item.get("type").and_then(|value| value.as_str());
+    let id = item
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or("codex")
+        .to_string();
+
+    match (event_type, item_type) {
+        (Some("item.completed"), Some("agent_message")) => item
+            .get("text")
+            .and_then(|value| value.as_str())
+            .map(|text| vec![StreamEvent::Token(format!("{text}\n\n"))])
+            .unwrap_or_default(),
+        (Some("item.started"), Some("command_execution")) => vec![StreamEvent::AgentActivity {
+            id,
+            kind: "command".to_string(),
+            title: item
+                .get("command")
+                .and_then(|value| value.as_str())
+                .unwrap_or("command")
+                .to_string(),
+            detail: None,
+            status: "running".to_string(),
+        }],
+        (Some("item.completed"), Some("command_execution")) => {
+            vec![StreamEvent::AgentActivity {
+                id,
+                kind: "command".to_string(),
+                title: item
+                    .get("command")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("command")
+                    .to_string(),
+                detail: item
+                    .get("aggregated_output")
+                    .and_then(|value| value.as_str())
+                    .filter(|value| !value.trim().is_empty())
+                    .map(truncate_activity_detail),
+                status: if item.get("exit_code").and_then(|value| value.as_i64()) == Some(0) {
+                    "completed".to_string()
+                } else {
+                    "failed".to_string()
+                },
+            }]
+        }
+        (Some("item.completed"), Some("file_change")) => {
+            let changes = item
+                .get("changes")
+                .and_then(|value| value.as_array())
+                .map(|changes| {
+                    changes
+                        .iter()
+                        .map(|change| {
+                            let kind = change
+                                .get("kind")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or("update");
+                            let path = change
+                                .get("path")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or("file");
+                            format!("{kind} {path}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_else(|| "workspace files".to_string());
+            vec![StreamEvent::AgentActivity {
+                id,
+                kind: "file".to_string(),
+                title: changes,
+                detail: None,
+                status: "completed".to_string(),
+            }]
+        }
+        (Some("item.completed"), Some(kind @ ("web_search" | "mcp_tool_call"))) => {
+            vec![StreamEvent::AgentActivity {
+                id,
+                kind: kind.to_string(),
+                title: item
+                    .get("query")
+                    .or_else(|| item.get("tool"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or(kind)
+                    .to_string(),
+                detail: None,
+                status: "completed".to_string(),
+            }]
+        }
+        (Some("turn.completed"), _) => vec![StreamEvent::Done {
+            finish_reason: "stop".to_string(),
+            usage: parse_usage(&event["usage"]),
+        }],
+        (Some("turn.failed" | "error"), _) => vec![StreamEvent::Error {
+            message: event
+                .pointer("/error/message")
+                .or_else(|| event.get("message"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("Codex agent failed")
+                .to_string(),
+            code: Some("codex_agent_error".to_string()),
+        }],
+        _ => Vec::new(),
+    }
+}
+
+fn parse_usage(value: &serde_json::Value) -> Option<Usage> {
+    value.is_object().then(|| Usage {
+        input_tokens: value
+            .get("input_tokens")
+            .and_then(|token| token.as_u64())
+            .unwrap_or(0),
+        output_tokens: value
+            .get("output_tokens")
+            .and_then(|token| token.as_u64())
+            .unwrap_or(0),
+        cache_read_tokens: value
+            .get("cached_input_tokens")
+            .and_then(|token| token.as_u64()),
+        cache_write_tokens: None,
+    })
+}
+
+fn truncate_activity_detail(value: &str) -> String {
+    const LIMIT: usize = 800;
+    let value = value.trim();
+    if value.chars().count() <= LIMIT {
+        value.to_string()
+    } else {
+        format!("{}…", value.chars().take(LIMIT).collect::<String>())
+    }
 }
 
 fn parse_codex_output(output: &str) -> Result<(String, Option<Usage>), Error> {
@@ -238,20 +475,7 @@ fn parse_codex_output(output: &str) -> Result<(String, Option<Usage>), Error> {
             Some("turn.completed") => {
                 let value = &event["usage"];
                 if value.is_object() {
-                    usage = Some(Usage {
-                        input_tokens: value
-                            .get("input_tokens")
-                            .and_then(|token| token.as_u64())
-                            .unwrap_or(0),
-                        output_tokens: value
-                            .get("output_tokens")
-                            .and_then(|token| token.as_u64())
-                            .unwrap_or(0),
-                        cache_read_tokens: value
-                            .get("cached_input_tokens")
-                            .and_then(|token| token.as_u64()),
-                        cache_write_tokens: None,
-                    });
+                    usage = parse_usage(value);
                 }
             }
             Some("turn.failed") | Some("error") => {
@@ -303,9 +527,28 @@ mod tests {
             stop: None,
             tools: None,
         };
-        let prompt = build_prompt(&request);
+        let prompt = build_agent_prompt(&request);
         assert!(prompt.contains("SYSTEM:\nbe useful"));
         assert!(prompt.contains("USER:\nhello"));
         assert!(prompt.contains("ASSISTANT:\nhi"));
+        assert!(prompt.contains("autonomous terminal coding agent"));
+    }
+
+    #[test]
+    fn maps_codex_command_and_file_events() {
+        let command = serde_json::json!({
+            "type": "item.completed",
+            "item": {"id":"1", "type":"command_execution", "command":"cargo test", "aggregated_output":"ok", "exit_code":0}
+        });
+        let file = serde_json::json!({
+            "type": "item.completed",
+            "item": {"id":"2", "type":"file_change", "changes":[{"path":"src/main.rs", "kind":"update"}]}
+        });
+        assert!(
+            matches!(codex_stream_events(&command)[0], StreamEvent::AgentActivity { ref status, .. } if status == "completed")
+        );
+        assert!(
+            matches!(codex_stream_events(&file)[0], StreamEvent::AgentActivity { ref kind, .. } if kind == "file")
+        );
     }
 }

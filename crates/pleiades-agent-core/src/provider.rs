@@ -19,6 +19,14 @@ pub enum StreamEvent {
         id: String,
         content: String,
     },
+    /// Progress emitted by a provider-managed autonomous agent.
+    AgentActivity {
+        id: String,
+        kind: String,
+        title: String,
+        detail: Option<String>,
+        status: String,
+    },
     Done {
         finish_reason: String,
         usage: Option<Usage>,

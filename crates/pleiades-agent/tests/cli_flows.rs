@@ -48,7 +48,7 @@ Commands:
 Options:
   -m, --model <MODEL>                      Model to use
   -P, --provider <PROVIDER>                Provider to use
-      --permission-mode <PERMISSION_MODE>  Permission mode
+      --permission-mode <PERMISSION_MODE>  Agent mode: plan, agent, or unrestricted
   -v, --verbose                            Verbose output
   -h, --help                               Print help
 "###);
@@ -173,6 +173,19 @@ fn repl_can_exit_cleanly() {
         .write_stdin("/exit\n")
         .assert()
         .success();
+}
+
+#[test]
+fn chat_command_can_exit_cleanly() {
+    let home = tempfile::tempdir().unwrap();
+    command(home.path())
+        .env("OPENAI_API_KEY", "test-key")
+        .write_stdin("/exit\n")
+        .args(["chat", "--provider", "openai"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("P L E I A D E S"))
+        .stdout(predicate::str::contains("workspace"));
 }
 
 #[test]
