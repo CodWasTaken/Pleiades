@@ -123,6 +123,7 @@ pub enum AgentCommand {
     SetProvider(String),
     SetModel(String),
     ClearConversation,
+    LoadSession(String),
     SaveSession,
     Shutdown,
 }
@@ -185,6 +186,7 @@ pub struct AgentRuntime {
     model_name: String,
     mode: AgentMode,
     session_store: SessionStore,
+    engine_override: Option<Engine>,
 }
 
 impl AgentRuntime {
@@ -203,7 +205,14 @@ impl AgentRuntime {
             model_name: model_name.into(),
             mode,
             session_store,
+            engine_override: None,
         }
+    }
+
+    #[cfg(test)]
+    fn with_engine(mut self, engine: Engine) -> Self {
+        self.engine_override = Some(engine);
+        self
     }
 
     /// Spawn the runtime actor and return bounded frontend channels.
@@ -229,6 +238,7 @@ impl AgentRuntime {
             model_name,
             mut mode,
             session_store,
+            engine_override,
         } = self;
         config.core.default_provider = Some(provider_name.clone());
         config.core.default_model = Some(model_name.clone());
@@ -238,6 +248,7 @@ impl AgentRuntime {
             conversation,
             mode,
             session_store,
+            engine_override,
         ));
         let (outcome_tx, mut outcome_rx) = mpsc::channel::<TaskOutcome>(2);
         let mut active: Option<ActiveTask> = None;
@@ -287,6 +298,9 @@ impl AgentRuntime {
                             }
                         }
                         AgentCommand::SetMode(next) => {
+                            if let Some(task) = &active {
+                                task.cancellation.cancel();
+                            }
                             mode = next;
                             if let Some(ctx) = context.as_mut() {
                                 ctx.set_mode(next);
@@ -312,6 +326,20 @@ impl AgentRuntime {
                             if let Some(ctx) = context.as_mut() {
                                 ctx.conversation.clear();
                                 send_event(&events, AgentEvent::ConversationCleared).await;
+                            }
+                        }
+                        AgentCommand::LoadSession(id) if active.is_none() => {
+                            if let Some(ctx) = context.as_mut() {
+                                match ctx.session_store.load(&id) {
+                                    Ok(conversation) => {
+                                        ctx.conversation = conversation;
+                                        send_event(&events, AgentEvent::SessionReady {
+                                            id: ctx.conversation.id.clone(),
+                                            history: ctx.conversation.messages.clone(),
+                                        }).await;
+                                    }
+                                    Err(error) => send_event(&events, AgentEvent::Error(error.to_string())).await,
+                                }
                             }
                         }
                         AgentCommand::SaveSession => {
@@ -380,8 +408,10 @@ impl RuntimeContext {
         conversation: Conversation,
         mode: AgentMode,
         session_store: SessionStore,
+        engine_override: Option<Engine>,
     ) -> Self {
-        let engine = Engine::configured(config.clone(), mode.sandbox());
+        let engine =
+            engine_override.unwrap_or_else(|| Engine::configured(config.clone(), mode.sandbox()));
         Self {
             engine,
             config,
@@ -1041,6 +1071,19 @@ fn now_ms() -> u128 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use async_trait::async_trait;
+    use pleiades_agent_core::error::Error;
+    use pleiades_agent_core::model::ModelInfo;
+    use pleiades_agent_core::provider::{
+        ChatRequest, ChatResponse, Provider, ProviderCapabilities,
+    };
+    use pleiades_agent_core::tool::{Tool, ToolContext, ToolResult};
+
+    use crate::memory::MemoryManager;
+
     use super::*;
 
     #[test]
@@ -1064,5 +1107,348 @@ mod tests {
         assert!(truncated);
         assert!(output.starts_with("✦"));
         assert!(output.contains("truncated"));
+    }
+
+    #[derive(Clone, Copy)]
+    enum MockBehavior {
+        ToolThenFinish,
+        Slow,
+    }
+
+    struct MockProvider {
+        calls: Arc<AtomicUsize>,
+        behavior: MockBehavior,
+    }
+
+    #[async_trait]
+    impl Provider for MockProvider {
+        fn name(&self) -> &str {
+            "mock"
+        }
+
+        fn display_name(&self) -> &str {
+            "Mock"
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                streaming: true,
+                tools: true,
+                vision: false,
+                embeddings: false,
+                thinking: true,
+                json_mode: false,
+                function_calling: true,
+            }
+        }
+
+        fn default_model(&self) -> &str {
+            "mock-1"
+        }
+
+        async fn list_models(&self) -> Result<Vec<ModelInfo>, Error> {
+            Ok(Vec::new())
+        }
+
+        async fn chat(&self, _request: ChatRequest) -> Result<ChatResponse, Error> {
+            Err(Error::unsupported("mock only streams"))
+        }
+
+        async fn chat_stream(
+            &self,
+            _request: ChatRequest,
+        ) -> Result<mpsc::Receiver<StreamEvent>, Error> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            let (sender, receiver) = mpsc::channel(8);
+            match self.behavior {
+                MockBehavior::ToolThenFinish if call == 0 => {
+                    sender
+                        .send(StreamEvent::ToolCall {
+                            id: "write-1".to_string(),
+                            name: "mock-write".to_string(),
+                            input: serde_json::json!({"path": "src/lib.rs"}),
+                        })
+                        .await
+                        .unwrap();
+                    sender
+                        .send(StreamEvent::Done {
+                            finish_reason: "tool_use".to_string(),
+                            usage: None,
+                        })
+                        .await
+                        .unwrap();
+                }
+                MockBehavior::ToolThenFinish => {
+                    sender
+                        .send(StreamEvent::Token("Completed with evidence.".into()))
+                        .await
+                        .unwrap();
+                    sender
+                        .send(StreamEvent::Done {
+                            finish_reason: "stop".to_string(),
+                            usage: None,
+                        })
+                        .await
+                        .unwrap();
+                }
+                MockBehavior::Slow => {
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(30)).await;
+                        let _ = sender.send(StreamEvent::Token("too late".into())).await;
+                    });
+                }
+            }
+            Ok(receiver)
+        }
+    }
+
+    struct MockWriteTool(Arc<AtomicUsize>);
+
+    #[async_trait]
+    impl Tool for MockWriteTool {
+        fn name(&self) -> &str {
+            "mock-write"
+        }
+        fn description(&self) -> &str {
+            "Modify a mock workspace file"
+        }
+        fn input_schema(&self) -> serde_json::Value {
+            serde_json::json!({"type": "object"})
+        }
+        fn is_readonly(&self) -> bool {
+            false
+        }
+        fn is_concurrency_safe(&self) -> bool {
+            false
+        }
+        fn permission_level(&self) -> PermissionLevel {
+            PermissionLevel::WorkspaceWrite
+        }
+
+        async fn execute(
+            &self,
+            _input: serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> Result<ToolResult, Error> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(ToolResult {
+                success: true,
+                content: "mock write completed".to_string(),
+                error: None,
+                metadata: None,
+            })
+        }
+    }
+
+    fn runtime_with_mock(
+        mode: AgentMode,
+        behavior: MockBehavior,
+        executions: Arc<AtomicUsize>,
+    ) -> (tempfile::TempDir, AgentRuntime) {
+        let temp = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.core.default_provider = Some("mock".into());
+        config.core.default_model = Some("mock-1".into());
+        config.session.history_dir = Some(temp.path().join("sessions").display().to_string());
+        config.permissions.ask_always = true;
+        let mut engine = Engine::with_memory(config.clone(), MemoryManager::new());
+        engine.register_provider(Box::new(MockProvider {
+            calls: Arc::new(AtomicUsize::new(0)),
+            behavior,
+        }));
+        engine.register_tool(Box::new(MockWriteTool(executions)));
+        let runtime = AgentRuntime::new(
+            config,
+            Conversation::new("test-session"),
+            "mock",
+            "mock-1",
+            mode,
+        )
+        .with_engine(engine);
+        (temp, runtime)
+    }
+
+    async fn next_event(events: &mut mpsc::Receiver<AgentEvent>) -> AgentEvent {
+        tokio::time::timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("runtime event timeout")
+            .expect("runtime event channel closed")
+    }
+
+    #[tokio::test]
+    async fn waits_for_permission_before_executing_a_write() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock(
+            AgentMode::Agent,
+            MockBehavior::ToolThenFinish,
+            executions.clone(),
+        );
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("make a change".into()))
+            .await
+            .unwrap();
+
+        let request = loop {
+            if let AgentEvent::PermissionRequested(request) = next_event(&mut handle.events).await {
+                break request;
+            }
+        };
+        assert_eq!(executions.load(Ordering::SeqCst), 0);
+        handle
+            .commands
+            .send(AgentCommand::Permission {
+                request_id: request.id,
+                decision: PermissionDecision::AllowOnce,
+            })
+            .await
+            .unwrap();
+
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::TaskCompleted { .. }
+            ) {
+                break;
+            }
+        }
+        assert_eq!(executions.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn plan_mode_denies_writes_without_opening_a_prompt() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock(
+            AgentMode::Plan,
+            MockBehavior::ToolThenFinish,
+            executions.clone(),
+        );
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("inspect only".into()))
+            .await
+            .unwrap();
+        let mut prompted = false;
+        loop {
+            match next_event(&mut handle.events).await {
+                AgentEvent::PermissionRequested(_) => prompted = true,
+                AgentEvent::TaskCompleted { .. } => break,
+                _ => {}
+            }
+        }
+        assert!(!prompted);
+        assert_eq!(executions.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn cancellation_interrupts_a_streaming_provider() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock(AgentMode::Agent, MockBehavior::Slow, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("wait forever".into()))
+            .await
+            .unwrap();
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::TaskStarted { .. }
+            ) {
+                break;
+            }
+        }
+        handle.commands.send(AgentCommand::Cancel).await.unwrap();
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::TaskCancelled
+            ) {
+                break;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn changing_mode_cancels_work_running_under_the_old_boundary() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock(AgentMode::Agent, MockBehavior::Slow, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("active task".into()))
+            .await
+            .unwrap();
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::TaskStarted { .. }
+            ) {
+                break;
+            }
+        }
+        handle
+            .commands
+            .send(AgentCommand::SetMode(AgentMode::Plan))
+            .await
+            .unwrap();
+        let mut changed = false;
+        let mut cancelled = false;
+        while !(changed && cancelled) {
+            match next_event(&mut handle.events).await {
+                AgentEvent::ModeChanged(AgentMode::Plan) => changed = true,
+                AgentEvent::TaskCancelled => cancelled = true,
+                _ => {}
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn follow_up_messages_are_queued_and_run_automatically() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("first".into()))
+            .await
+            .unwrap();
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::TaskStarted { .. }
+            ) {
+                break;
+            }
+        }
+        handle
+            .commands
+            .send(AgentCommand::Submit("follow up".into()))
+            .await
+            .unwrap();
+
+        let mut completed = 0;
+        let mut saw_queued = false;
+        while completed < 2 {
+            match next_event(&mut handle.events).await {
+                AgentEvent::QueueChanged(1) => saw_queued = true,
+                AgentEvent::PermissionRequested(request) => {
+                    handle
+                        .commands
+                        .send(AgentCommand::Permission {
+                            request_id: request.id,
+                            decision: PermissionDecision::AllowOnce,
+                        })
+                        .await
+                        .unwrap();
+                }
+                AgentEvent::TaskCompleted { .. } => completed += 1,
+                _ => {}
+            }
+        }
+        assert!(saw_queued);
     }
 }

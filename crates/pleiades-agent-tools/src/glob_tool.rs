@@ -47,25 +47,18 @@ impl Tool for GlobTool {
     async fn execute(
         &self,
         input: serde_json::Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Result<ToolResult, Error> {
         let pattern = input
             .get("pattern")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'pattern' parameter"))?;
 
-        let base_path = input
-            .get("path")
-            .and_then(|v| v.as_str())
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        crate::workspace::ensure_pattern_is_relative(pattern)?;
+        let base_value = input.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+        let base_path = crate::workspace::resolve_path(base_value, ctx, false)?;
 
-        let full_pattern =
-            if pattern.starts_with('/') || pattern.starts_with("./") || pattern.starts_with("~/") {
-                pattern.to_string()
-            } else {
-                base_path.join(pattern).to_string_lossy().to_string()
-            };
+        let full_pattern = base_path.join(pattern).to_string_lossy().to_string();
 
         let mut results = Vec::new();
 
@@ -73,7 +66,7 @@ impl Tool for GlobTool {
             Ok(entries) => {
                 for entry in entries {
                     match entry {
-                        Ok(path) => {
+                        Ok(path) if crate::workspace::is_inside_workspace(&path, ctx) => {
                             let is_dir = path.is_dir();
                             results.push(format!(
                                 "{}{}",
@@ -81,6 +74,7 @@ impl Tool for GlobTool {
                                 if is_dir { "/" } else { "" }
                             ));
                         }
+                        Ok(_) => continue,
                         Err(e) => {
                             return Err(Error::io(format!("Glob error: {}", e)));
                         }

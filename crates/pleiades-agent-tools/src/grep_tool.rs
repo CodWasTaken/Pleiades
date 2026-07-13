@@ -56,18 +56,15 @@ impl Tool for GrepTool {
     async fn execute(
         &self,
         input: serde_json::Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Result<ToolResult, Error> {
         let pattern = input
             .get("pattern")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'pattern' parameter"))?;
 
-        let base_path = input
-            .get("path")
-            .and_then(|v| v.as_str())
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let base_value = input.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+        let base_path = crate::workspace::resolve_path(base_value, ctx, false)?;
 
         let include = input.get("include").and_then(|v| v.as_str());
         let max_results = input
@@ -95,6 +92,10 @@ impl Tool for GrepTool {
 
             for entry in entries.flatten() {
                 let path = entry.path();
+
+                if !crate::workspace::is_inside_workspace(&path, ctx) {
+                    continue;
+                }
 
                 if path.is_dir() {
                     visit_dir.push(path);

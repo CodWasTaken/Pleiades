@@ -33,6 +33,8 @@ pub struct ToolContext {
     pub cwd: std::path::PathBuf,
     pub working_directory: std::path::PathBuf,
     pub permission_mode: PermissionMode,
+    /// Process/filesystem boundary: read-only, workspace-write, or danger-full-access.
+    pub sandbox_mode: String,
     pub config: std::sync::Arc<serde_json::Value>,
 }
 

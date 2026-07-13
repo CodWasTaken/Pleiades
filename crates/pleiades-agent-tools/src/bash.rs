@@ -33,6 +33,81 @@ impl BashTool {
 
         Ok(())
     }
+
+    fn build_command(
+        command: &str,
+        workdir: &std::path::Path,
+        ctx: &ToolContext,
+    ) -> Result<tokio::process::Command, Error> {
+        if ctx.sandbox_mode == "danger-full-access" {
+            let mut process = tokio::process::Command::new("sh");
+            process.arg("-c").arg(command).current_dir(workdir);
+            process.kill_on_drop(true);
+            return Ok(process);
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let executable = ["/usr/bin/bwrap", "/bin/bwrap"]
+                .into_iter()
+                .find(|path| std::path::Path::new(path).is_file())
+                .ok_or_else(|| {
+                    Error::unsupported(
+                        "Agent-mode shell commands require bubblewrap on Linux; install `bwrap` or explicitly switch to unrestricted mode",
+                    )
+                })?;
+            let workspace = ctx
+                .working_directory
+                .canonicalize()
+                .map_err(|error| Error::io(format!("Could not resolve workspace root: {error}")))?;
+            let mut process = tokio::process::Command::new(executable);
+            process
+                .args([
+                    "--die-with-parent",
+                    "--new-session",
+                    "--ro-bind",
+                    "/",
+                    "/",
+                    "--dev",
+                    "/dev",
+                    "--proc",
+                    "/proc",
+                    "--tmpfs",
+                    "/tmp",
+                    "--bind",
+                ])
+                .arg(&workspace)
+                .arg(&workspace)
+                .arg("--chdir")
+                .arg(workdir)
+                .args(["sh", "-c", command]);
+            process.kill_on_drop(true);
+            Ok(process)
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let workspace = ctx
+                .working_directory
+                .canonicalize()
+                .map_err(|error| Error::io(format!("Could not resolve workspace root: {error}")))?;
+            let escaped = workspace.to_string_lossy().replace('"', "\\\"");
+            let profile = format!(
+                "(version 1) (allow default) (deny file-write*) (allow file-write* (subpath \"{escaped}\")) (allow file-write* (subpath \"/tmp\"))"
+            );
+            let mut process = tokio::process::Command::new("/usr/bin/sandbox-exec");
+            process
+                .args(["-p", &profile, "sh", "-c", command])
+                .current_dir(workdir);
+            process.kill_on_drop(true);
+            return Ok(process);
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        Err(Error::unsupported(
+            "Agent-mode shell isolation is not available on this platform; explicitly switch to unrestricted mode to run shell commands",
+        ))
+    }
 }
 
 #[async_trait]
@@ -82,7 +157,7 @@ impl Tool for BashTool {
     async fn execute(
         &self,
         input: serde_json::Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Result<ToolResult, Error> {
         let command = input
             .get("command")
@@ -92,13 +167,22 @@ impl Tool for BashTool {
         Self::validate_command(command)?;
 
         let timeout_secs = input.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30);
+        let workdir = input.get("workdir").and_then(|value| value.as_str());
+        let workdir = if ctx.sandbox_mode == "danger-full-access" {
+            workdir
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| ctx.working_directory.clone())
+                .canonicalize()
+                .map_err(|error| Error::io(format!("Could not resolve command workdir: {error}")))?
+        } else {
+            crate::workspace::resolve_path(workdir.unwrap_or("."), ctx, false)?
+        };
+
+        let mut process = Self::build_command(command, &workdir, ctx)?;
 
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs),
-            tokio::process::Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .output(),
+            process.output(),
         )
         .await
         .map_err(|_| Error::timeout(format!("Command timed out after {} seconds", timeout_secs)))?

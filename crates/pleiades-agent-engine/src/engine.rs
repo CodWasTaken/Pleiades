@@ -21,6 +21,7 @@ pub struct Engine {
     tools: Vec<Box<dyn Tool>>,
     model_registry: ModelRegistry,
     config: Arc<Config>,
+    sandbox_mode: String,
     event_sender: Option<tokio::sync::mpsc::Sender<Event>>,
     memory: MemoryManager,
 }
@@ -37,6 +38,7 @@ impl Engine {
             tools: Vec::new(),
             model_registry: ModelRegistry::new(),
             config: Arc::new(config),
+            sandbox_mode: "workspace-write".to_string(),
             event_sender: None,
             memory: MemoryManager::persisted(mem_dir),
         }
@@ -48,6 +50,7 @@ impl Engine {
     /// frontends only exchange commands and events with the runtime.
     pub fn configured(config: Config, sandbox_mode: &str) -> Self {
         let mut engine = Self::new(config.clone());
+        engine.sandbox_mode = sandbox_mode.to_string();
         let providers = pleiades_agent_providers::ProviderRegistry::from_config(&config);
         for provider in providers.into_providers() {
             engine.register_provider(provider);
@@ -74,6 +77,7 @@ impl Engine {
             tools: Vec::new(),
             model_registry: ModelRegistry::new(),
             config: Arc::new(config),
+            sandbox_mode: "workspace-write".to_string(),
             event_sender: None,
             memory,
         }
@@ -245,6 +249,7 @@ impl Engine {
             } else {
                 pleiades_agent_core::tool::PermissionMode::Allow
             },
+            sandbox_mode: self.sandbox_mode.clone(),
             config: Arc::new(serde_json::to_value(&*self.config).unwrap_or_default()),
         };
 

@@ -71,7 +71,7 @@ impl Default for CoreConfig {
         Self {
             default_provider: None,
             default_model: None,
-            theme: None,
+            theme: Some("seven-sisters".to_string()),
             verbose: false,
             debug: false,
             max_tokens: Some(4096),

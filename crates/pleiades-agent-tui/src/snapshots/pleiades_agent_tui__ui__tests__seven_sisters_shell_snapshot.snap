@@ -1,0 +1,26 @@
+---
+source: crates/pleiades-agent-tui/src/ui.rs
+expression: snapshot
+---
+╭ Seven Sisters ───────────────────────────────────────────────────────────────╮
+│ ✦ PLEIADES openai-subscription / codex-default   pleiades   agent   ready    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭ Conversation ────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│  ✦ Describe a coding task to begin                                           │
+│  Pleiades will inspect, plan, edit, validate, and review its work.           │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭ Activity ────────────────────────────────────────────────────────────────────╮
+│ · No activity yet                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭ Ask Pleiades  ·  Enter send  Alt+Enter newline ──────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+ agent ⋆  no-git  — tokens  00:00  idle   Ctrl+P palette  F1 help  Ctrl+C cancel

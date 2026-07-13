@@ -15,8 +15,10 @@ use tui_textarea::{Input, TextArea};
 
 use crate::theme::Theme;
 
-const MAX_MESSAGES: usize = 2_000;
+const MAX_MESSAGES: usize = 500;
 const MAX_ACTIVITIES: usize = 500;
+const MAX_MESSAGE_BYTES: usize = 512 * 1024;
+const MAX_TRANSCRIPT_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
@@ -27,12 +29,36 @@ pub enum Focus {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Overlay {
-    Help,
-    CommandPalette { selected: usize },
+    Help {
+        query: String,
+    },
+    CommandPalette {
+        selected: usize,
+        query: String,
+    },
     Permission(PermissionRequest),
     Diff,
-    ToolOutput { activity_id: String },
+    ToolOutput {
+        activity_id: String,
+    },
+    ToolDetails {
+        activity_id: String,
+    },
+    Picker {
+        kind: PickerKind,
+        selected: usize,
+        query: String,
+    },
+    Configuration,
     Diagnostics,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickerKind {
+    Provider,
+    Model,
+    File,
+    Session,
 }
 
 #[derive(Debug, Clone)]
@@ -45,7 +71,7 @@ pub struct TranscriptMessage {
 
 impl From<Message> for TranscriptMessage {
     fn from(message: Message) -> Self {
-        let content = message.text_content();
+        let content = truncate_display(message.text_content(), MAX_MESSAGE_BYTES);
         Self {
             role: message.role,
             content,
@@ -88,6 +114,12 @@ pub struct AppState {
     pub follow_tail: bool,
     pub selected_activity: usize,
     pub composer: TextArea<'static>,
+    pub provider_options: Vec<String>,
+    pub model_options: Vec<String>,
+    pub file_options: Vec<String>,
+    pub session_options: Vec<String>,
+    input_history: Vec<String>,
+    history_cursor: Option<usize>,
     active_assistant: Option<usize>,
 }
 
@@ -131,10 +163,29 @@ impl AppState {
             follow_tail: true,
             selected_activity: 0,
             composer: TextArea::default(),
+            provider_options: Vec::new(),
+            model_options: Vec::new(),
+            file_options: Vec::new(),
+            session_options: Vec::new(),
+            input_history: Vec::new(),
+            history_cursor: None,
             active_assistant: None,
         };
         state.reset_composer();
         state
+    }
+
+    pub fn set_picker_options(
+        &mut self,
+        providers: Vec<String>,
+        models: Vec<String>,
+        files: Vec<String>,
+        sessions: Vec<String>,
+    ) {
+        self.provider_options = providers;
+        self.model_options = models;
+        self.file_options = files;
+        self.session_options = sessions;
     }
 
     pub fn elapsed(&self) -> Duration {
@@ -170,7 +221,38 @@ impl AppState {
                 }
             }
             (KeyCode::Char('p'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.overlay = Some(Overlay::CommandPalette { selected: 0 });
+                self.overlay = Some(Overlay::CommandPalette {
+                    selected: 0,
+                    query: String::new(),
+                });
+                Vec::new()
+            }
+            (KeyCode::Char('r'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.open_picker(PickerKind::Provider);
+                Vec::new()
+            }
+            (KeyCode::Char('m'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.open_picker(PickerKind::Model);
+                Vec::new()
+            }
+            (KeyCode::Char('f'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.open_picker(PickerKind::File);
+                Vec::new()
+            }
+            (KeyCode::Char('l'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.open_picker(PickerKind::Session);
+                Vec::new()
+            }
+            (KeyCode::Char(','), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.overlay = Some(Overlay::Configuration);
+                Vec::new()
+            }
+            (KeyCode::Char('t'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                if let Some(activity) = self.activities.get(self.selected_activity) {
+                    self.overlay = Some(Overlay::ToolDetails {
+                        activity_id: activity.id.clone(),
+                    });
+                }
                 Vec::new()
             }
             (KeyCode::Char('d'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
@@ -186,15 +268,55 @@ impl AppState {
                 Vec::new()
             }
             (KeyCode::F(1), _) => {
-                self.overlay = Some(Overlay::Help);
+                self.overlay = Some(Overlay::Help {
+                    query: String::new(),
+                });
+                Vec::new()
+            }
+            (KeyCode::Tab, _) if self.focus == Focus::Composer => {
+                let input = self.composer.lines().join("\n");
+                if input.starts_with('/') && !input.contains(char::is_whitespace) {
+                    if let Some(command) = slash_commands()
+                        .iter()
+                        .find(|command| command.starts_with(&input))
+                    {
+                        self.set_composer_text(format!("{command} "));
+                    }
+                } else {
+                    self.focus = Focus::Conversation;
+                }
                 Vec::new()
             }
             (KeyCode::Tab, _) => {
                 self.focus = match self.focus {
-                    Focus::Composer => Focus::Conversation,
                     Focus::Conversation => Focus::Activity,
-                    Focus::Activity => Focus::Composer,
+                    Focus::Activity | Focus::Composer => Focus::Composer,
                 };
+                Vec::new()
+            }
+            (KeyCode::Up, modifiers)
+                if modifiers.contains(KeyModifiers::CONTROL) && !self.input_history.is_empty() =>
+            {
+                let next = self
+                    .history_cursor
+                    .map_or(self.input_history.len() - 1, |cursor| {
+                        cursor.saturating_sub(1)
+                    });
+                self.history_cursor = Some(next);
+                self.set_composer_text(self.input_history[next].clone());
+                Vec::new()
+            }
+            (KeyCode::Down, modifiers)
+                if modifiers.contains(KeyModifiers::CONTROL) && self.history_cursor.is_some() =>
+            {
+                let cursor = self.history_cursor.unwrap_or_default();
+                if cursor + 1 < self.input_history.len() {
+                    self.history_cursor = Some(cursor + 1);
+                    self.set_composer_text(self.input_history[cursor + 1].clone());
+                } else {
+                    self.history_cursor = None;
+                    self.reset_composer();
+                }
                 Vec::new()
             }
             (KeyCode::PageUp, _) => {
@@ -269,18 +391,59 @@ impl AppState {
                     })];
                 }
             }
-            Overlay::CommandPalette { mut selected } => {
-                let count = palette_commands().len();
+            Overlay::Help { mut query } => {
+                update_query(&mut query, key);
+                self.overlay = Some(Overlay::Help { query });
+            }
+            Overlay::CommandPalette {
+                mut selected,
+                mut query,
+            } => {
+                let matches = palette_matches(&query);
+                let count = matches.len();
                 match key.code {
                     KeyCode::Up => selected = selected.saturating_sub(1),
                     KeyCode::Down => selected = (selected + 1).min(count.saturating_sub(1)),
                     KeyCode::Enter => {
                         self.overlay = None;
-                        return self.run_palette(selected);
+                        if let Some((command, _)) = matches.get(selected) {
+                            return self.run_palette(*command);
+                        }
                     }
-                    _ => {}
+                    _ => {
+                        update_query(&mut query, key);
+                        selected = 0;
+                    }
                 }
-                self.overlay = Some(Overlay::CommandPalette { selected });
+                self.overlay = Some(Overlay::CommandPalette { selected, query });
+            }
+            Overlay::Picker {
+                kind,
+                mut selected,
+                mut query,
+            } => {
+                let options = self.filtered_picker_options(kind, &query);
+                match key.code {
+                    KeyCode::Up => selected = selected.saturating_sub(1),
+                    KeyCode::Down => {
+                        selected = (selected + 1).min(options.len().saturating_sub(1));
+                    }
+                    KeyCode::Enter => {
+                        self.overlay = None;
+                        if let Some(value) = options.get(selected) {
+                            return self.choose_picker_value(kind, value);
+                        }
+                    }
+                    _ => {
+                        update_query(&mut query, key);
+                        selected = 0;
+                    }
+                }
+                self.overlay = Some(Overlay::Picker {
+                    kind,
+                    selected,
+                    query,
+                });
             }
             _ => {}
         }
@@ -293,6 +456,17 @@ impl AppState {
         if input.is_empty() {
             return Vec::new();
         }
+        if self
+            .input_history
+            .last()
+            .is_none_or(|previous| previous != input)
+        {
+            self.input_history.push(input.to_string());
+            if self.input_history.len() > 500 {
+                self.input_history.remove(0);
+            }
+        }
+        self.history_cursor = None;
         let effects = self.execute_input(input);
         self.reset_composer();
         effects
@@ -306,7 +480,11 @@ impl AppState {
         let command = parts.next().unwrap_or_default();
         let value = parts.next().unwrap_or_default().trim();
         match command {
-            "/help" => self.overlay = Some(Overlay::Help),
+            "/help" => {
+                self.overlay = Some(Overlay::Help {
+                    query: String::new(),
+                });
+            }
             "/diff" => self.overlay = Some(Overlay::Diff),
             "/output" => {
                 if let Some(activity) = self.activities.get(self.selected_activity) {
@@ -316,6 +494,9 @@ impl AppState {
                 }
             }
             "/doctor" => self.overlay = Some(Overlay::Diagnostics),
+            "/config" => self.overlay = Some(Overlay::Configuration),
+            "/files" => self.open_picker(PickerKind::File),
+            "/sessions" => self.open_picker(PickerKind::Session),
             "/clear" => return vec![Effect::Command(AgentCommand::ClearConversation)],
             "/save" => return vec![Effect::Command(AgentCommand::SaveSession)],
             "/mode" if !value.is_empty() => {
@@ -342,7 +523,9 @@ impl AppState {
     fn run_palette(&mut self, selected: usize) -> Vec<Effect> {
         match selected {
             0 => {
-                self.overlay = Some(Overlay::Help);
+                self.overlay = Some(Overlay::Help {
+                    query: String::new(),
+                });
                 Vec::new()
             }
             1 => {
@@ -350,16 +533,75 @@ impl AppState {
                 Vec::new()
             }
             2 => {
+                self.open_picker(PickerKind::File);
+                Vec::new()
+            }
+            3 => {
+                self.open_picker(PickerKind::Provider);
+                Vec::new()
+            }
+            4 => {
+                self.open_picker(PickerKind::Model);
+                Vec::new()
+            }
+            5 => {
+                self.open_picker(PickerKind::Session);
+                Vec::new()
+            }
+            6 => {
+                self.overlay = Some(Overlay::Configuration);
+                Vec::new()
+            }
+            7 => {
                 self.overlay = Some(Overlay::Diagnostics);
                 Vec::new()
             }
-            3 => vec![Effect::Command(AgentCommand::SetMode(AgentMode::Plan))],
-            4 => vec![Effect::Command(AgentCommand::SetMode(AgentMode::Agent))],
-            5 => vec![Effect::Command(AgentCommand::SetMode(
+            8 => vec![Effect::Command(AgentCommand::SetMode(AgentMode::Plan))],
+            9 => vec![Effect::Command(AgentCommand::SetMode(AgentMode::Agent))],
+            10 => vec![Effect::Command(AgentCommand::SetMode(
                 AgentMode::Unrestricted,
             ))],
-            6 => vec![Effect::Command(AgentCommand::SaveSession)],
+            11 => vec![Effect::Command(AgentCommand::SaveSession)],
             _ => vec![Effect::Command(AgentCommand::Shutdown), Effect::Quit],
+        }
+    }
+
+    fn open_picker(&mut self, kind: PickerKind) {
+        self.overlay = Some(Overlay::Picker {
+            kind,
+            selected: 0,
+            query: String::new(),
+        });
+    }
+
+    pub fn filtered_picker_options(&self, kind: PickerKind, query: &str) -> Vec<String> {
+        let options = match kind {
+            PickerKind::Provider => &self.provider_options,
+            PickerKind::Model => &self.model_options,
+            PickerKind::File => &self.file_options,
+            PickerKind::Session => &self.session_options,
+        };
+        let query = query.to_ascii_lowercase();
+        options
+            .iter()
+            .filter(|value| value.to_ascii_lowercase().contains(&query))
+            .cloned()
+            .collect()
+    }
+
+    fn choose_picker_value(&mut self, kind: PickerKind, value: &str) -> Vec<Effect> {
+        match kind {
+            PickerKind::Provider => vec![Effect::Command(AgentCommand::SetProvider(
+                value.to_string(),
+            ))],
+            PickerKind::Model => vec![Effect::Command(AgentCommand::SetModel(value.to_string()))],
+            PickerKind::File => {
+                self.composer.insert_str(format!("@{value} "));
+                Vec::new()
+            }
+            PickerKind::Session => vec![Effect::Command(AgentCommand::LoadSession(
+                value.to_string(),
+            ))],
         }
     }
 
@@ -373,7 +615,7 @@ impl AppState {
             AgentEvent::UserMessage(content) => {
                 self.messages.push(TranscriptMessage {
                     role: MessageRole::User,
-                    content,
+                    content: truncate_display(content, MAX_MESSAGE_BYTES),
                     reasoning: None,
                     streaming: false,
                 });
@@ -393,12 +635,16 @@ impl AppState {
                 if let Some(index) = self.active_assistant.take() {
                     if let Some(message) = self.messages.get_mut(index) {
                         message.content = content;
+                        message.content = truncate_display(
+                            std::mem::take(&mut message.content),
+                            MAX_MESSAGE_BYTES,
+                        );
                         message.streaming = false;
                     }
                 } else if !content.is_empty() {
                     self.messages.push(TranscriptMessage {
                         role: MessageRole::Assistant,
-                        content,
+                        content: truncate_display(content, MAX_MESSAGE_BYTES),
                         reasoning: None,
                         streaming: false,
                     });
@@ -480,7 +726,12 @@ impl AppState {
                     .get_or_insert_with(String::new)
                     .push_str(delta);
             } else {
-                message.content.push_str(delta);
+                if message.content.len() < MAX_MESSAGE_BYTES {
+                    let remaining = MAX_MESSAGE_BYTES - message.content.len();
+                    message
+                        .content
+                        .push_str(&truncate_display(delta.to_string(), remaining));
+                }
             }
         }
         self.follow_tail = true;
@@ -524,10 +775,22 @@ impl AppState {
             let count = self.messages.len() - MAX_MESSAGES;
             self.messages.drain(0..count);
         }
+        let mut total = self
+            .messages
+            .iter()
+            .map(|message| message.content.len())
+            .sum::<usize>();
+        while total > MAX_TRANSCRIPT_BYTES && self.messages.len() > 1 {
+            total = total.saturating_sub(self.messages.remove(0).content.len());
+        }
     }
 
     fn reset_composer(&mut self) {
-        let mut composer = TextArea::default();
+        self.set_composer_text(String::new());
+    }
+
+    fn set_composer_text(&mut self, value: String) {
+        let mut composer = TextArea::new(value.lines().map(str::to_string).collect());
         composer.set_cursor_line_style(Style::default());
         composer.set_cursor_style(
             Style::default()
@@ -538,10 +801,46 @@ impl AppState {
     }
 }
 
+fn slash_commands() -> &'static [&'static str] {
+    &[
+        "/help",
+        "/diff",
+        "/output",
+        "/doctor",
+        "/config",
+        "/files",
+        "/sessions",
+        "/clear",
+        "/save",
+        "/mode",
+        "/provider",
+        "/model",
+        "/quit",
+    ]
+}
+
+fn truncate_display(value: String, limit: usize) -> String {
+    if value.len() <= limit {
+        return value;
+    }
+    let boundary = value
+        .char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= limit.saturating_sub(32))
+        .last()
+        .unwrap_or(0);
+    format!("{}\n… content truncated …", &value[..boundary])
+}
+
 pub fn palette_commands() -> &'static [&'static str] {
     &[
         "Searchable help",
         "Review current diff",
+        "Find a workspace file",
+        "Select provider",
+        "Select model",
+        "Open saved session",
+        "Configuration",
         "Diagnostics",
         "Switch to Plan mode",
         "Switch to Agent mode",
@@ -549,6 +848,28 @@ pub fn palette_commands() -> &'static [&'static str] {
         "Save session",
         "Quit Pleiades",
     ]
+}
+
+pub fn palette_matches(query: &str) -> Vec<(usize, &'static str)> {
+    let query = query.to_ascii_lowercase();
+    palette_commands()
+        .iter()
+        .enumerate()
+        .filter(|(_, value)| value.to_ascii_lowercase().contains(&query))
+        .map(|(index, value)| (index, *value))
+        .collect()
+}
+
+fn update_query(query: &mut String, key: KeyEvent) {
+    match key.code {
+        KeyCode::Char(character) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            query.push(character);
+        }
+        KeyCode::Backspace => {
+            query.pop();
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -589,5 +910,18 @@ mod tests {
         state.apply_agent(AgentEvent::TaskCancelled);
         assert!(!state.running);
         assert_eq!(state.status, "Task cancelled");
+    }
+
+    #[test]
+    fn bounds_huge_streamed_messages_without_splitting_utf8() {
+        let mut state = state();
+        state.apply_agent(AgentEvent::TextDelta("✦".repeat(300_000)));
+        assert!(state.messages[0].content.len() <= super::MAX_MESSAGE_BYTES);
+        assert!(
+            state.messages[0]
+                .content
+                .is_char_boundary(state.messages[0].content.len())
+        );
+        assert!(state.messages[0].content.ends_with("… content truncated …"));
     }
 }

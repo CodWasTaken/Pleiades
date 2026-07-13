@@ -11,6 +11,7 @@ pub mod glob_tool;
 pub mod grep_tool;
 pub mod read;
 pub mod search;
+mod workspace;
 pub mod write;
 
 use pleiades_agent_core::tool::Tool;

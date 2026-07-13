@@ -50,7 +50,7 @@ impl Tool for DiffTool {
         PermissionLevel::ReadOnly
     }
 
-    async fn execute(&self, input: Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
+    async fn execute(&self, input: Value, ctx: &ToolContext) -> Result<ToolResult, Error> {
         let path1 = input
             .get("path1")
             .and_then(|v| v.as_str())
@@ -59,18 +59,23 @@ impl Tool for DiffTool {
         let context = input.get("context").and_then(|v| v.as_i64()).unwrap_or(3);
 
         let context_arg = format!("-U{}", context);
+        let resolved1 = crate::workspace::resolve_path(path1, ctx, false)?;
+        let resolved1 = resolved1.to_string_lossy().to_string();
 
         let output = if let Some(path2) = input.get("path2").and_then(|v| v.as_str()) {
+            let resolved2 = crate::workspace::resolve_path(path2, ctx, false)?;
+            let resolved2 = resolved2.to_string_lossy().to_string();
             // File-to-file diff using git diff --no-index
             tokio::process::Command::new("git")
-                .args(["diff", "--no-index", &context_arg, path1, path2])
+                .args(["diff", "--no-index", &context_arg, &resolved1, &resolved2])
                 .output()
                 .await
                 .map_err(|e| Error::io(format!("Failed to run git diff: {}", e)))?
         } else {
             // Git diff (path1 vs git HEAD)
             tokio::process::Command::new("git")
-                .args(["diff", &context_arg, path1])
+                .current_dir(&ctx.working_directory)
+                .args(["diff", &context_arg, "--", &resolved1])
                 .output()
                 .await
                 .map_err(|e| Error::io(format!("Failed to run git diff: {}", e)))?

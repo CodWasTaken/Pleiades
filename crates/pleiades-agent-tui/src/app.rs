@@ -1,5 +1,6 @@
 //! Live, full-screen Ratatui application loop.
 
+use std::collections::BTreeSet;
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -97,6 +98,41 @@ impl TuiApp {
             self.model_name.clone(),
             self.mode,
         );
+        let mut providers = self
+            .config
+            .providers
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        providers.insert(self.provider_name.clone());
+        let mut models = self
+            .config
+            .models
+            .aliases
+            .values()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        models.insert(self.model_name.clone());
+        if let Some(model) = &self.config.models.default {
+            models.insert(model.clone());
+        }
+        let sessions = pleiades_agent_engine::SessionStore::from_config(&self.config)
+            .list()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|session| session.id)
+            .collect();
+        let (file_sender, mut file_receiver) = tokio::sync::mpsc::channel(1);
+        let file_workspace = app.workspace.clone();
+        tokio::task::spawn_blocking(move || {
+            let _ = file_sender.blocking_send(workspace_files(&file_workspace, 2_000));
+        });
+        app.set_picker_options(
+            providers.into_iter().collect(),
+            models.into_iter().collect(),
+            Vec::new(),
+            sessions,
+        );
         let mut terminal = TerminalGuard::enter()?;
         terminal.terminal_mut().clear()?;
         let mut terminal_events = EventStream::new();
@@ -120,6 +156,7 @@ impl TuiApp {
                     }
                 }
                 Some(event) = agent.events.recv() => app.apply_agent(event),
+                Some(files) = file_receiver.recv() => app.file_options = files,
                 _ = render_tick.tick() => {}
             }
             terminal
@@ -152,6 +189,44 @@ impl TuiApp {
             "interactive agent input requires a terminal; use `pleiades chat` for piped prompts",
         ))
     }
+}
+
+fn workspace_files(root: &std::path::Path, limit: usize) -> Vec<String> {
+    let mut directories = vec![root.to_path_buf()];
+    let mut files = Vec::new();
+    while let Some(directory) = directories.pop() {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if files.len() >= limit {
+                break;
+            }
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                if !matches!(name.as_ref(), ".git" | "target" | "node_modules" | ".next") {
+                    directories.push(path);
+                }
+            } else if file_type.is_file() {
+                files.push(
+                    path.strip_prefix(root)
+                        .unwrap_or(&path)
+                        .to_string_lossy()
+                        .to_string(),
+                );
+            }
+        }
+    }
+    files.sort();
+    files
 }
 
 async fn apply_effects(

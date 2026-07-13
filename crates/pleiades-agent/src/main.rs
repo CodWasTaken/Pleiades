@@ -1606,6 +1606,7 @@ fn handle_tool_call(loader: &ConfigLoader, name: &str, input_str: &str) {
         cwd: std::env::current_dir().unwrap_or_default(),
         working_directory: std::env::current_dir().unwrap_or_default(),
         permission_mode: pleiades_agent_core::tool::PermissionMode::Allow,
+        sandbox_mode: "workspace-write".to_string(),
         config: std::sync::Arc::new(serde_json::to_value(&config).unwrap_or_default()),
     };
 

@@ -12,7 +12,7 @@ use ratatui::widgets::{
 };
 
 use crate::markdown::render_markdown;
-use crate::state::{AppState, Focus, Overlay, palette_commands};
+use crate::state::{AppState, Focus, Overlay, PickerKind, palette_matches};
 use crate::theme::Theme;
 
 pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
@@ -96,7 +96,20 @@ fn render_conversation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             )),
         ]);
     } else {
-        for message in &app.messages {
+        let message_offset = app.conversation_scroll as usize / 20;
+        let visible_end = app.messages.len().saturating_sub(message_offset);
+        let visible_start = visible_end.saturating_sub(24);
+        if visible_start > 0 {
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "  {} {} earlier messages · continue scrolling",
+                    theme.symbols.context, visible_start
+                ),
+                theme.muted(),
+            )));
+            lines.push(Line::default());
+        }
+        for message in &app.messages[visible_start..visible_end] {
             let (label, symbol, style) = match message.role {
                 MessageRole::User => (
                     "YOU",
@@ -147,7 +160,7 @@ fn render_conversation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let top = lines
         .len()
         .saturating_sub(inner_height)
-        .saturating_sub(app.conversation_scroll as usize) as u16;
+        .saturating_sub(app.conversation_scroll as usize % 20) as u16;
     let block = panel_block(" Conversation ", theme, app.focus == Focus::Conversation);
     frame.render_widget(
         Paragraph::new(Text::from(lines))
@@ -281,30 +294,78 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
             ];
             render_modal(frame, area, " Safe autonomy ", text, theme);
         }
-        Overlay::Help => {
-            let text = vec![
-                Line::from(Span::styled("Keyboard", theme.title())),
-                field("Enter", "send message or queue a follow-up", theme),
-                field("Alt+Enter", "insert a new line", theme),
-                field("Tab", "cycle conversation, activity, composer", theme),
-                field("PgUp/PgDn", "scroll conversation", theme),
-                field("Ctrl+P", "open command palette", theme),
-                field("Ctrl+D", "review workspace diff", theme),
-                field("Ctrl+O", "open selected tool output", theme),
-                field("Ctrl+C", "cancel running work", theme),
-                field("Ctrl+Q", "save and quit", theme),
-                Line::default(),
-                Line::from(Span::styled("Commands", theme.title())),
-                Line::from("/mode plan|agent|unrestricted  /provider NAME  /model NAME"),
-                Line::from("/diff  /output  /doctor  /clear  /save  /quit"),
-            ];
-            render_modal(frame, area, " Searchable help  ·  Esc close ", text, theme);
+        Overlay::Help { query } => {
+            let query_lower = query.to_ascii_lowercase();
+            let mut text = vec![field("Search", &query, theme), Line::default()];
+            text.extend(
+                help_entries()
+                    .into_iter()
+                    .filter(|(key, description)| {
+                        format!("{key} {description}")
+                            .to_ascii_lowercase()
+                            .contains(&query_lower)
+                    })
+                    .map(|(key, description)| field(key, description, theme)),
+            );
+            render_modal(
+                frame,
+                area,
+                " Searchable help  ·  type to filter  Esc close ",
+                text,
+                theme,
+            );
         }
-        Overlay::CommandPalette { selected } => {
-            let text = palette_commands()
-                .iter()
-                .enumerate()
-                .map(|(index, command)| {
+        Overlay::CommandPalette { selected, query } => {
+            let matches = palette_matches(&query);
+            let mut text = vec![field("Search", &query, theme), Line::default()];
+            text.extend(
+                matches
+                    .iter()
+                    .enumerate()
+                    .map(|(visible_index, (_, command))| {
+                        let style = if visible_index == selected {
+                            Style::default()
+                                .fg(theme.background)
+                                .bg(theme.primary)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(theme.foreground)
+                        };
+                        Line::from(Span::styled(
+                            format!(
+                                " {} {command}",
+                                if visible_index == selected {
+                                    "›"
+                                } else {
+                                    " "
+                                }
+                            ),
+                            style,
+                        ))
+                    }),
+            );
+            render_modal(
+                frame,
+                area,
+                " Command palette  ·  ↑↓ select  Enter run ",
+                text,
+                theme,
+            );
+        }
+        Overlay::Picker {
+            kind,
+            selected,
+            query,
+        } => {
+            let options = app.filtered_picker_options(kind, &query);
+            let mut text = vec![field("Search", &query, theme), Line::default()];
+            if options.is_empty() {
+                text.push(Line::from(Span::styled(
+                    "No matching entries.",
+                    theme.muted(),
+                )));
+            } else {
+                text.extend(options.iter().enumerate().map(|(index, value)| {
                     let style = if index == selected {
                         Style::default()
                             .fg(theme.background)
@@ -314,15 +375,18 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
                         Style::default().fg(theme.foreground)
                     };
                     Line::from(Span::styled(
-                        format!(" {} {command}", if index == selected { "›" } else { " " }),
+                        format!(" {} {value}", if index == selected { "›" } else { " " }),
                         style,
                     ))
-                })
-                .collect();
+                }));
+            }
             render_modal(
                 frame,
                 area,
-                " Command palette  ·  ↑↓ select  Enter run ",
+                &format!(
+                    " {} picker  ·  type to filter  Enter select ",
+                    picker_label(kind)
+                ),
                 text,
                 theme,
             );
@@ -374,6 +438,61 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
                 text,
                 theme,
             );
+        }
+        Overlay::ToolDetails { activity_id } => {
+            let mut text = Vec::new();
+            if let Some(activity) = app.activities.iter().find(|item| item.id == activity_id) {
+                text.extend([
+                    field("Activity", &activity.title, theme),
+                    field("Kind", &activity.kind.to_string(), theme),
+                    field("Status", &activity.status.to_string(), theme),
+                    field(
+                        "Duration",
+                        &activity
+                            .duration_ms
+                            .map(|value| format!("{value} ms"))
+                            .unwrap_or_else(|| "running".to_string()),
+                        theme,
+                    ),
+                    Line::default(),
+                ]);
+                if let Some(detail) = &activity.detail {
+                    text.extend(detail.lines().map(|line| Line::from(line.to_string())));
+                }
+                if let Some(output) = app.outputs.get(&activity_id) {
+                    text.push(Line::default());
+                    text.push(Line::from(Span::styled("Captured output", theme.title())));
+                    text.extend(output.lines().map(|line| Line::from(line.to_string())));
+                }
+            } else {
+                text.push(Line::from(Span::styled(
+                    "Activity is no longer available.",
+                    theme.muted(),
+                )));
+            }
+            render_modal(frame, area, " Tool details  ·  Esc close ", text, theme);
+        }
+        Overlay::Configuration => {
+            let text = vec![
+                field("Theme", app.theme.name, theme),
+                field("Provider", &app.provider, theme),
+                field("Model", &app.model, theme),
+                field("Mode", app.mode.label(), theme),
+                field("Workspace", &app.workspace.display().to_string(), theme),
+                Line::default(),
+                Line::from(Span::styled("Keyboard configuration", theme.title())),
+                field("Ctrl+R", "select provider", theme),
+                field("Ctrl+M", "select model", theme),
+                field("Ctrl+F", "find workspace file", theme),
+                field("Ctrl+L", "open saved session", theme),
+                field("/mode", "plan | agent | unrestricted", theme),
+                Line::default(),
+                Line::from(Span::styled(
+                    "Persistent values can be changed with `pleiades config set`.",
+                    theme.muted(),
+                )),
+            ];
+            render_modal(frame, area, " Configuration  ·  Esc close ", text, theme);
         }
         Overlay::Diagnostics => {
             let text = vec![
@@ -458,6 +577,43 @@ fn field(label: &str, value: &str, theme: Theme) -> Line<'static> {
         Span::styled(format!("{label:>11}  "), theme.muted()),
         Span::styled(value.to_string(), Style::default().fg(theme.foreground)),
     ])
+}
+
+fn picker_label(kind: PickerKind) -> &'static str {
+    match kind {
+        PickerKind::Provider => "Provider",
+        PickerKind::Model => "Model",
+        PickerKind::File => "File",
+        PickerKind::Session => "Session",
+    }
+}
+
+fn help_entries() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("Enter", "send a message or queue a follow-up"),
+        ("Alt+Enter", "insert a new line in the composer"),
+        ("Tab", "cycle conversation, activity, and composer focus"),
+        ("PgUp/PgDn", "scroll the conversation while output streams"),
+        ("Ctrl+P", "open the searchable command palette"),
+        ("Ctrl+R", "select a configured provider"),
+        ("Ctrl+M", "select a configured model"),
+        ("Ctrl+F", "find and reference a workspace file"),
+        ("Ctrl+L", "open a saved session"),
+        ("Ctrl+D", "review the current workspace diff"),
+        ("Ctrl+O", "open selected activity output"),
+        ("Ctrl+T", "inspect selected tool details"),
+        ("Ctrl+,", "open configuration"),
+        ("Ctrl+C", "cancel running work"),
+        ("Ctrl+Q", "save and quit Pleiades"),
+        ("/mode", "switch plan, agent, or unrestricted mode"),
+        ("/provider", "switch provider by name"),
+        ("/model", "switch model by name"),
+        ("/diff", "review the current diff"),
+        ("/doctor", "open live diagnostics"),
+        ("/clear", "clear the current conversation"),
+        ("/save", "save the current session"),
+        ("/quit", "exit the terminal workspace"),
+    ]
 }
 
 fn panel_block<'a>(title: &'a str, theme: Theme, focused: bool) -> Block<'a> {
@@ -551,5 +707,47 @@ mod tests {
         assert!(content.contains("Conversation"));
         assert!(content.contains("Activity"));
         assert!(content.contains("Ask Pleiades"));
+    }
+
+    #[test]
+    fn seven_sisters_shell_snapshot() {
+        let backend = TestBackend::new(80, 22);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut app = AppState::new(
+            Theme::default(),
+            PathBuf::from("/work/pleiades"),
+            "openai-subscription".into(),
+            "codex-default".into(),
+            AgentMode::Agent,
+        );
+        terminal.draw(|frame| render(frame, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut snapshot = String::new();
+        for y in 0..buffer.area.height {
+            let row = (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>();
+            snapshot.push_str(row.trim_end());
+            snapshot.push('\n');
+        }
+        insta::assert_snapshot!(snapshot);
+    }
+
+    #[test]
+    fn renders_across_small_and_large_terminal_sizes() {
+        for (width, height) in [(32, 10), (80, 24), (180, 50)] {
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).unwrap();
+            let mut app = AppState::new(
+                Theme::default(),
+                PathBuf::from("/work/pleiades"),
+                "mock".into(),
+                "mock-1".into(),
+                AgentMode::Agent,
+            );
+            terminal.draw(|frame| render(frame, &mut app)).unwrap();
+            assert_eq!(terminal.backend().buffer().area.width, width);
+            assert_eq!(terminal.backend().buffer().area.height, height);
+        }
     }
 }

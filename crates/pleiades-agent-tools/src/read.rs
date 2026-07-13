@@ -53,7 +53,7 @@ impl Tool for ReadTool {
     async fn execute(
         &self,
         input: serde_json::Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Result<ToolResult, Error> {
         let path = input
             .get("path")
@@ -66,7 +66,8 @@ impl Tool for ReadTool {
             .and_then(|v| v.as_u64())
             .map(|v| v as usize);
 
-        let content = std::fs::read_to_string(path)
+        let resolved = crate::workspace::resolve_path(path, ctx, false)?;
+        let content = std::fs::read_to_string(&resolved)
             .map_err(|e| Error::io(format!("Failed to read '{}': {}", path, e)))?;
 
         let result = if offset > 0 || limit.is_some() {
@@ -85,7 +86,7 @@ impl Tool for ReadTool {
         };
 
         let metadata = serde_json::json!({
-            "path": path,
+            "path": resolved,
             "size_bytes": result.len(),
             "lines": result.lines().count(),
         });

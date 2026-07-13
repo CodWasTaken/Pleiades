@@ -51,7 +51,7 @@ impl Tool for EditTool {
     async fn execute(
         &self,
         input: serde_json::Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Result<ToolResult, Error> {
         let path = input
             .get("path")
@@ -68,7 +68,8 @@ impl Tool for EditTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'new_string' parameter"))?;
 
-        let content = std::fs::read_to_string(path)
+        let resolved = crate::workspace::resolve_path(path, ctx, false)?;
+        let content = std::fs::read_to_string(&resolved)
             .map_err(|e| Error::io(format!("Failed to read '{}': {}", path, e)))?;
 
         if !content.contains(old_string) {
@@ -79,11 +80,11 @@ impl Tool for EditTool {
         }
 
         let new_content = content.replace(old_string, new_string);
-        std::fs::write(path, &new_content)
+        std::fs::write(&resolved, &new_content)
             .map_err(|e| Error::io(format!("Failed to write '{}': {}", path, e)))?;
 
         let metadata = serde_json::json!({
-            "path": path,
+            "path": resolved,
             "replacements": content.len().abs_diff(new_content.len()) / old_string.len().max(1),
         });
 

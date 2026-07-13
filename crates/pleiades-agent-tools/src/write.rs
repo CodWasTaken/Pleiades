@@ -47,7 +47,7 @@ impl Tool for WriteTool {
     async fn execute(
         &self,
         input: serde_json::Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Result<ToolResult, Error> {
         let path = input
             .get("path")
@@ -59,8 +59,9 @@ impl Tool for WriteTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'content' parameter"))?;
 
+        let resolved = crate::workspace::resolve_path(path, ctx, true)?;
         // Ensure parent directory exists
-        if let Some(parent) = std::path::Path::new(path).parent() {
+        if let Some(parent) = resolved.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 Error::io(format!(
                     "Failed to create directory '{}': {}",
@@ -70,11 +71,11 @@ impl Tool for WriteTool {
             })?;
         }
 
-        std::fs::write(path, content)
+        std::fs::write(&resolved, content)
             .map_err(|e| Error::io(format!("Failed to write '{}': {}", path, e)))?;
 
         let metadata = serde_json::json!({
-            "path": path,
+            "path": resolved,
             "size_bytes": content.len(),
         });
 
