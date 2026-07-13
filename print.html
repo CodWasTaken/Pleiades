@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-563f2ddb.js";
+            window.path_to_searchindex_js = "searchindex-8a00cbab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e350ee51.js"></script>
+        <script src="toc-18fbc06d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,7 +179,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="pleiades"><a class="header" href="#pleiades">Pleiades</a></h1>
-<p>Pleiades is a provider-agnostic terminal AI assistant written in Rust. It combines interactive chat, an agent loop, tools, memory, plugins, reusable prompts, workflows, and Git assistance without tying a project to one model vendor.</p>
+<p>Pleiades is a professional, provider-agnostic autonomous coding agent written in Rust. Its live Ratatui workspace stays responsive while the agent investigates, plans, edits, executes guarded commands, validates changes, and reports evidence.</p>
 <p>The guide covers installation from source, configuration, daily commands, extension points, and the architecture contributors need to navigate the workspace.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h1>
@@ -202,11 +202,75 @@ cargo build --release --bin pleiades
 <p>The binary is written to <code>target/release/pleiades</code>. Run the guided setup and choose either ChatGPT subscription sign-in or usage-based OpenAI API access:</p>
 <pre><code class="language-console">pleiades setup
 pleiades doctor
-pleiades chat
+pleiades
 </code></pre>
 <p>For ChatGPT subscription access, install the official Codex CLI; Pleiades delegates <code>codex login</code> and never reads its token cache. For API access, setup stores <code>${OPENAI_API_KEY}</code> and asks you to export a newly created Platform API key. ChatGPT and API billing are separate.</p>
-<p>Use <code>pleiades --help</code> for the complete command tree. Running <code>pleiades</code> or <code>pleiades chat</code> starts the autonomous terminal agent once configured, <code>pleiades "your task"</code> runs an autonomous task once, and <code>pleiades chat --session ID</code> resumes a saved session.</p>
-<p>The directory where Pleiades starts is the workspace root. ChatGPT subscription sessions default to <code>agent</code> mode: the official Codex CLI may inspect, create, and edit files and run commands inside that workspace, while its <code>workspace-write</code> sandbox prevents writes elsewhere. Use <code>/mode plan</code> for read-only analysis or start with <code>--permission-mode plan</code>.</p>
+<p>Use <code>pleiades --help</code> for the complete command tree. Running <code>pleiades</code> or <code>pleiades chat</code> starts the live full-screen coding workspace once configured, <code>pleiades "your task"</code> runs an autonomous task once, and <code>pleiades chat --session ID</code> resumes a saved session.</p>
+<p>The directory where Pleiades starts is the workspace root. Sessions default to <code>agent</code> mode. Use <code>/mode plan</code> for read-only analysis or start with <code>--permission-mode plan</code>. Press <code>F1</code> inside the workspace for searchable keyboard help.</p>
+<p>On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (<code>bwrap</code>) for write isolation. On macOS they use <code>sandbox-exec</code>. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation; <code>unrestricted</code> remains an explicit opt-in.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="live-terminal-workspace"><a class="header" href="#live-terminal-workspace">Live terminal workspace</a></h1>
+<p>Running <code>pleiades</code> opens a full-screen Ratatui workspace. It is a persistent application, not a prompt/read/print loop: terminal input, model streams, agent events, background work, and a 20 FPS render tick are selected concurrently. Long model requests, commands, and permission decisions therefore do not stop input or redraws.</p>
+<h2 id="persistent-regions"><a class="header" href="#persistent-regions">Persistent regions</a></h2>
+<ul>
+<li><strong>Header</strong> — identity, provider/model, workspace, access mode, and task state.</li>
+<li><strong>Conversation</strong> — Markdown user and agent messages with bounded, scrollable history.</li>
+<li><strong>Activity</strong> — structured inspecting, searching, reading, planning, editing, executing, testing, reviewing, approval, completion, failure, and cancellation states.</li>
+<li><strong>Composer</strong> — multiline input, selection, undo/redo, paste, history, slash completion, and follow-up queuing.</li>
+<li><strong>Status</strong> — mode, Git branch/dirty state, usage, elapsed time, active operation, and keyboard hints.</li>
+</ul>
+<p>Completed operations collapse into one-line activity records. Failures and approval requests remain prominent. Select an activity and use <code>Ctrl+T</code> for its details or <code>Ctrl+O</code> for captured output.</p>
+<h2 id="keyboard-reference"><a class="header" href="#keyboard-reference">Keyboard reference</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Enter</code></td><td>Send the composer; while work runs, queue it as a follow-up</td></tr>
+<tr><td><code>Alt+Enter</code></td><td>Insert a composer newline</td></tr>
+<tr><td><code>Ctrl+Up</code> / <code>Ctrl+Down</code></td><td>Navigate submitted input history</td></tr>
+<tr><td><code>Tab</code></td><td>Complete a slash command or cycle focus</td></tr>
+<tr><td><code>PageUp</code> / <code>PageDown</code>, mouse wheel</td><td>Scroll without stopping live output</td></tr>
+<tr><td><code>Ctrl+C</code></td><td>Cancel current work</td></tr>
+<tr><td><code>Ctrl+P</code></td><td>Search the command palette</td></tr>
+<tr><td><code>Ctrl+R</code> / <code>Ctrl+M</code></td><td>Select provider / model</td></tr>
+<tr><td><code>Ctrl+F</code></td><td>Find and reference a workspace file</td></tr>
+<tr><td><code>Ctrl+L</code></td><td>Open a saved session</td></tr>
+<tr><td><code>Ctrl+D</code></td><td>Review the current Git diff</td></tr>
+<tr><td><code>Ctrl+O</code> / <code>Ctrl+T</code></td><td>Open activity output / details</td></tr>
+<tr><td><code>Ctrl+,</code></td><td>Open configuration information</td></tr>
+<tr><td><code>F1</code></td><td>Search help</td></tr>
+<tr><td><code>Ctrl+Q</code></td><td>Save and exit</td></tr>
+</tbody>
+</table>
+</div>
+<p>The slash commands <code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/diff</code>, <code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code> provide the same operations.</p>
+<h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
+<p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
+<p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="autonomous-coding-behavior"><a class="header" href="#autonomous-coding-behavior">Autonomous coding behavior</a></h1>
+<p>Pleiades is designed to finish software-engineering tasks, not merely answer questions. For substantial work its system protocol directs the model to:</p>
+<ol>
+<li>understand the request;</li>
+<li>inspect repository instructions, conventions, implementation, and tests;</li>
+<li>form a focused execution plan;</li>
+<li>make the smallest coherent changes;</li>
+<li>run relevant formatting, linting, tests, and builds;</li>
+<li>diagnose practical failures;</li>
+<li>review the resulting workspace diff;</li>
+<li>report the cause or goal, files changed, decisions, observed checks, and remaining risk.</li>
+</ol>
+<p>The agent is explicitly prohibited from claiming a check passed unless it ran and observed that result. Tool and provider activity is normalized into typed events, so the terminal can show what actually happened separately from the final prose response.</p>
+<h2 id="provider-execution-paths"><a class="header" href="#provider-execution-paths">Provider execution paths</a></h2>
+<p>API and OpenAI-compatible providers return normalized text, reasoning summaries, tool calls, usage, finish reasons, and errors. The Pleiades runtime executes their built-in tools, applies permission policy, captures output, records tool results in the conversation, and continues the agent loop.</p>
+<p>The <code>openai-subscription</code> adapter delegates autonomous execution and ChatGPT authentication to the official Codex CLI. Credentials remain in Codex’s store. Pleiades maps provider JSON events into the same activity model and selects Codex’s <code>read-only</code>, <code>workspace-write</code>, or <code>danger-full-access</code> sandbox from the active mode. Codex owns individual command execution in this delegated path, so Pleiades cannot display its own per-tool approval modal for those internal calls; the selected sandbox remains the enforced boundary.</p>
+<h2 id="cancellation-and-follow-ups"><a class="header" href="#cancellation-and-follow-ups">Cancellation and follow-ups</a></h2>
+<p>Every task has a cancellation token. <code>Ctrl+C</code> interrupts a provider stream, tool wait, or permission wait and records a cancellation event. Switching access mode also cancels work running under the old boundary before applying the new one.</p>
+<p>Messages sent while a task runs enter a FIFO queue. The runtime starts each queued follow-up automatically using the updated conversation and emits queue-count changes for the status bar.</p>
+<h2 id="evidence-and-persistence"><a class="header" href="#evidence-and-persistence">Evidence and persistence</a></h2>
+<p>Sessions save after tool iterations, completion, cancellation, explicit <code>/save</code>, and shutdown. At completion, the runtime captures the current Git diff and branch state for in-interface review. Model and tool output is bounded on UTF-8 boundaries, while the conversation viewport renders a moving window so unusually large sessions do not monopolize redraw work.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cargo-packages"><a class="header" href="#cargo-packages">Cargo packages</a></h1>
 <p>The crates.io names <code>pleiades</code> and <code>pleiades-core</code> are owned by unrelated projects. Pleiades therefore publishes under one collision-free namespace while keeping its user-facing command unchanged.</p>
@@ -249,7 +313,7 @@ pleiades chat
 <tbody>
 <tr><td><code>core.default_provider</code></td><td>string?</td><td>unset</td></tr>
 <tr><td><code>core.default_model</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>core.theme</code></td><td>string?</td><td>unset</td></tr>
+<tr><td><code>core.theme</code></td><td>string?</td><td><code>seven-sisters</code></td></tr>
 <tr><td><code>core.verbose</code>, <code>core.debug</code></td><td>boolean</td><td><code>false</code></td></tr>
 <tr><td><code>core.max_tokens</code></td><td>integer?</td><td><code>4096</code></td></tr>
 <tr><td><code>core.temperature</code></td><td>float?</td><td><code>0.7</code></td></tr>
@@ -292,6 +356,7 @@ pleiades chat
 <p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
 <p>The special <code>providers.openai-subscription</code> entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with <code>pleiades auth status</code>. Run <code>pleiades setup</code> instead of editing this entry manually.</p>
 <p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|unrestricted</code> or <code>/mode plan|agent|unrestricted</code>. <code>agent</code> is the default and maps to Codex’s workspace-write sandbox. <code>unrestricted</code> removes workspace isolation and should only be used in an already isolated environment.</p>
+<p>Built-in themes are <code>seven-sisters</code>, <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code>. Legacy <code>catppuccin-mocha</code>, <code>dracula</code>, and <code>tokyo-night</code> values remain accepted as compatibility aliases.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="providers-and-models"><a class="header" href="#providers-and-models">Providers and models</a></h1>
 <p>Pleiades implements native OpenAI and Anthropic adapters plus an OpenAI-compatible adapter used by OpenRouter, Groq, DeepSeek, local servers, and other compatible endpoints.</p>
@@ -314,7 +379,7 @@ pleiades doctor
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tools-and-permissions"><a class="header" href="#tools-and-permissions">Tools and permissions</a></h1>
 <p>The built-in tools are read, write, edit, bash, glob, grep, diff, search, and fetch. Inspect them with <code>pleiades tool list</code> and <code>pleiades tool info NAME</code>.</p>
-<p>Tools declare read-only, workspace-write, or dangerous permission levels. <code>permissions.always_allow</code> and <code>always_deny</code> provide durable decisions; interactive agent sessions can grant or deny individual calls. Keep dangerous tools behind confirmation in shared projects.</p>
+<p>Tools declare read-only, workspace-write, or dangerous permission levels. <code>permissions.always_allow</code> and <code>always_deny</code> provide durable decisions. Interactive permission requests are keyboard-driven Ratatui modals showing the operation, target, reason, and risk, with allow-once, allow-session, deny-once, and deny-session decisions. The live workspace never falls back to a blocking stdin question.</p>
 <h2 id="agent-access-modes"><a class="header" href="#agent-access-modes">Agent access modes</a></h2>
 <p>Interactive sessions support three access modes:</p>
 <ul>
@@ -323,7 +388,8 @@ pleiades doctor
 <li><code>unrestricted</code> permits access outside the workspace and should be used only in a trusted environment.</li>
 </ul>
 <p>Switch modes with <code>/mode plan</code>, <code>/mode agent</code>, or <code>/mode unrestricted</code>, or launch with <code>--permission-mode MODE</code>.</p>
-<p>With API-key providers, Pleiades runs its built-in tools through the permission system above. With <code>openai-subscription</code>, Pleiades delegates the task to the official Codex CLI and maps these modes to Codex’s read-only, workspace-write, and danger-full-access sandboxes. The workspace is the directory where Pleiades was launched. ChatGPT credentials remain managed by Codex and are never copied into Pleiades.</p>
+<p>Built-in filesystem tools resolve relative paths against the selected workspace. They reject <code>..</code> traversal, absolute paths outside the workspace, and symlinks that resolve outside it. Agent-mode shell execution uses a platform sandbox to keep writes inside the workspace; if isolation is unavailable, the call is refused. Plan mode rejects every mutating tool before prompting.</p>
+<p>With API-key providers, Pleiades runs built-in tools through the modal permission system above. With <code>openai-subscription</code>, Pleiades delegates the task to the official Codex CLI and maps these modes to Codex’s read-only, workspace-write, and danger-full-access sandboxes. Codex owns individual delegated tool calls, so Pleiades’s own permission modal applies only to tools executed by the Pleiades runtime. The workspace is the launch directory. ChatGPT credentials remain managed by Codex and are never copied into Pleiades.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="plugins-and-hooks"><a class="header" href="#plugins-and-hooks">Plugins and hooks</a></h1>
 <p>Plugins are directories containing <code>plugin.json</code>. Install a local plugin with <code>pleiades plugin install PATH</code>, then use <code>plugin list</code>, <code>enable</code>, <code>disable</code>, and <code>uninstall</code>.</p>
@@ -355,9 +421,36 @@ pleiades git summary --base origin/master --title 'Feature title'
 <p>Commit generation reads only staged changes. Review defaults to unstaged working-tree changes. PR summaries combine commit subjects and the selected revision range. Generated text is advisory; inspect it before publishing or committing.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
-<p>Pleiades is a Cargo workspace organized around a dependency-light domain core. Provider, tool, persistence, plugin, prompt, workflow, Git, CLI, and TUI crates act as adapters around that core.</p>
-<p>The engine coordinates conversations and emits events over Tokio channels. Providers implement one trait for complete and streaming responses. Tools similarly implement a domain trait with explicit permission metadata. This hexagonal boundary keeps provider APIs and terminal concerns out of domain types.</p>
-<p>See the repository’s <a href="https://github.com/CodWasTaken/Pleiades/blob/master/docs/ARCHITECTURE.md">full architecture document</a> for crate relationships and design decisions.</p>
+<p>Pleiades is a Rust 2024 Cargo workspace organized around stable provider, tool, conversation, event, and error types. Tokio owns asynchronous execution; Ratatui and Crossterm own the live terminal frontend.</p>
+<h2 id="runtime-boundary"><a class="header" href="#runtime-boundary">Runtime boundary</a></h2>
+<p>The full-screen TUI never constructs providers, executes tools, mutates the domain conversation, or writes streamed output to stdout. It sends <code>AgentCommand</code> values over a bounded Tokio channel and reduces <code>AgentEvent</code> values into <code>AppState</code>.</p>
+<pre><code class="language-text">Crossterm events ─────┐
+AgentEvent channel ───┼─&gt; AppState reducer ─&gt; Ratatui render
+render ticks ─────────┤
+background results ───┘
+
+UI effects ─────────────&gt; AgentCommand channel ─&gt; AgentRuntime
+</code></pre>
+<p>The terminal loop uses <code>tokio::select!</code> across Crossterm’s <code>EventStream</code>, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.</p>
+<h2 id="agent-runtime"><a class="header" href="#agent-runtime">Agent runtime</a></h2>
+<p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, and shutdown.</p>
+<p>Provider streams normalize text, reasoning summaries, tool calls, provider-managed activity, tool output, usage, completion, and errors. The runtime adds typed lifecycle events for planning, permission waits, execution, validation, diff review, completion, failure, and cancellation.</p>
+<h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate responsibilities</a></h2>
+<ul>
+<li><code>pleiades-agent-core</code> — provider/tool traits and normalized domain types.</li>
+<li><code>pleiades-agent-config</code> — layered configuration and environment interpolation.</li>
+<li><code>pleiades-agent-engine</code> — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.</li>
+<li><code>pleiades-agent-tui</code> — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.</li>
+<li><code>pleiades-agent-providers</code> — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.</li>
+<li><code>pleiades-agent-tools</code> — confined filesystem/search/diff tools and sandboxed command execution.</li>
+<li>remaining crates — plugins, prompts, memory, workflows, Git automation, SDK, and CLI packaging.</li>
+</ul>
+<h2 id="safety-layers"><a class="header" href="#safety-layers">Safety layers</a></h2>
+<p>Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Shell writes use Bubblewrap on Linux or <code>sandbox-exec</code> on macOS, refusing execution when an Agent-mode boundary cannot be provided. Unrestricted mode removes that process boundary only after an explicit user choice.</p>
+<p>The ChatGPT subscription adapter delegates execution to the official Codex CLI and maps modes to Codex sandboxes. API-provider tool calls execute in Pleiades and use Pleiades permission modals.</p>
+<h2 id="reliability"><a class="header" href="#reliability">Reliability</a></h2>
+<p>Bounded channels, output caps, a moving transcript window, and background repository file discovery keep redraw work predictable. A terminal guard restores raw mode, the alternate screen, cursor, mouse capture, and bracketed paste on normal and panic exits. Mock-provider tests cover permission waits, Plan denial, queued follow-ups, cancellation, and mode changes; Ratatui snapshots and resize tests cover the frontend.</p>
+<p>See the repository’s <a href="https://github.com/CodWasTaken/Pleiades/blob/master/docs/ARCHITECTURE.md">full architecture document</a> for the detailed design.</p>
 
                     </main>
 

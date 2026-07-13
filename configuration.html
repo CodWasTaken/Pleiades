@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-563f2ddb.js";
+            window.path_to_searchindex_js = "searchindex-8a00cbab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e350ee51.js"></script>
+        <script src="toc-18fbc06d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,7 +190,7 @@
 <tbody>
 <tr><td><code>core.default_provider</code></td><td>string?</td><td>unset</td></tr>
 <tr><td><code>core.default_model</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>core.theme</code></td><td>string?</td><td>unset</td></tr>
+<tr><td><code>core.theme</code></td><td>string?</td><td><code>seven-sisters</code></td></tr>
 <tr><td><code>core.verbose</code>, <code>core.debug</code></td><td>boolean</td><td><code>false</code></td></tr>
 <tr><td><code>core.max_tokens</code></td><td>integer?</td><td><code>4096</code></td></tr>
 <tr><td><code>core.temperature</code></td><td>float?</td><td><code>0.7</code></td></tr>
@@ -233,6 +233,7 @@
 <p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
 <p>The special <code>providers.openai-subscription</code> entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with <code>pleiades auth status</code>. Run <code>pleiades setup</code> instead of editing this entry manually.</p>
 <p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|unrestricted</code> or <code>/mode plan|agent|unrestricted</code>. <code>agent</code> is the default and maps to Codex’s workspace-write sandbox. <code>unrestricted</code> removes workspace isolation and should only be used in an already isolated environment.</p>
+<p>Built-in themes are <code>seven-sisters</code>, <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code>. Legacy <code>catppuccin-mocha</code>, <code>dracula</code>, and <code>tokyo-night</code> values remain accepted as compatibility aliases.</p>
 
                     </main>
 

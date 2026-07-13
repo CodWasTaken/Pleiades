@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-563f2ddb.js";
+            window.path_to_searchindex_js = "searchindex-8a00cbab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e350ee51.js"></script>
+        <script src="toc-18fbc06d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,9 +181,36 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
-<p>Pleiades is a Cargo workspace organized around a dependency-light domain core. Provider, tool, persistence, plugin, prompt, workflow, Git, CLI, and TUI crates act as adapters around that core.</p>
-<p>The engine coordinates conversations and emits events over Tokio channels. Providers implement one trait for complete and streaming responses. Tools similarly implement a domain trait with explicit permission metadata. This hexagonal boundary keeps provider APIs and terminal concerns out of domain types.</p>
-<p>See the repository’s <a href="https://github.com/CodWasTaken/Pleiades/blob/master/docs/ARCHITECTURE.md">full architecture document</a> for crate relationships and design decisions.</p>
+<p>Pleiades is a Rust 2024 Cargo workspace organized around stable provider, tool, conversation, event, and error types. Tokio owns asynchronous execution; Ratatui and Crossterm own the live terminal frontend.</p>
+<h2 id="runtime-boundary"><a class="header" href="#runtime-boundary">Runtime boundary</a></h2>
+<p>The full-screen TUI never constructs providers, executes tools, mutates the domain conversation, or writes streamed output to stdout. It sends <code>AgentCommand</code> values over a bounded Tokio channel and reduces <code>AgentEvent</code> values into <code>AppState</code>.</p>
+<pre><code class="language-text">Crossterm events ─────┐
+AgentEvent channel ───┼─&gt; AppState reducer ─&gt; Ratatui render
+render ticks ─────────┤
+background results ───┘
+
+UI effects ─────────────&gt; AgentCommand channel ─&gt; AgentRuntime
+</code></pre>
+<p>The terminal loop uses <code>tokio::select!</code> across Crossterm’s <code>EventStream</code>, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.</p>
+<h2 id="agent-runtime"><a class="header" href="#agent-runtime">Agent runtime</a></h2>
+<p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, and shutdown.</p>
+<p>Provider streams normalize text, reasoning summaries, tool calls, provider-managed activity, tool output, usage, completion, and errors. The runtime adds typed lifecycle events for planning, permission waits, execution, validation, diff review, completion, failure, and cancellation.</p>
+<h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate responsibilities</a></h2>
+<ul>
+<li><code>pleiades-agent-core</code> — provider/tool traits and normalized domain types.</li>
+<li><code>pleiades-agent-config</code> — layered configuration and environment interpolation.</li>
+<li><code>pleiades-agent-engine</code> — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.</li>
+<li><code>pleiades-agent-tui</code> — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.</li>
+<li><code>pleiades-agent-providers</code> — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.</li>
+<li><code>pleiades-agent-tools</code> — confined filesystem/search/diff tools and sandboxed command execution.</li>
+<li>remaining crates — plugins, prompts, memory, workflows, Git automation, SDK, and CLI packaging.</li>
+</ul>
+<h2 id="safety-layers"><a class="header" href="#safety-layers">Safety layers</a></h2>
+<p>Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Shell writes use Bubblewrap on Linux or <code>sandbox-exec</code> on macOS, refusing execution when an Agent-mode boundary cannot be provided. Unrestricted mode removes that process boundary only after an explicit user choice.</p>
+<p>The ChatGPT subscription adapter delegates execution to the official Codex CLI and maps modes to Codex sandboxes. API-provider tool calls execute in Pleiades and use Pleiades permission modals.</p>
+<h2 id="reliability"><a class="header" href="#reliability">Reliability</a></h2>
+<p>Bounded channels, output caps, a moving transcript window, and background repository file discovery keep redraw work predictable. A terminal guard restores raw mode, the alternate screen, cursor, mouse capture, and bracketed paste on normal and panic exits. Mock-provider tests cover permission waits, Plan denial, queued follow-ups, cancellation, and mode changes; Ratatui snapshots and resize tests cover the frontend.</p>
+<p>See the repository’s <a href="https://github.com/CodWasTaken/Pleiades/blob/master/docs/ARCHITECTURE.md">full architecture document</a> for the detailed design.</p>
 
                     </main>
 
