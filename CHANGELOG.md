@@ -5,6 +5,21 @@ All notable changes to Pleiades will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-07-13
+
+### Added
+
+- Workflow execution with sequencing, parallel batches, conditions, retries, timeouts, variables, and CLI management.
+- AI-assisted Git commit messages, code review, PR summaries, and diff inspection.
+- Black-box CLI integration tests, snapshots, Criterion benchmarks, and cached CI builds.
+- mdBook user guide, complete configuration reference, and GitHub Pages deployment.
+- Optimized release profile, concurrent model discovery, prompt caching, and performance baselines.
+- Cross-platform GitHub Release artifacts, verified install script, Homebrew formula, and AUR package.
+
+### Changed
+
+- All workspace crates are versioned at 1.0.0 and include publishable internal dependency versions.
+
 ## [0.1.0] - 2026-07-12
 
 ### Added (Milestone 0: Planning)

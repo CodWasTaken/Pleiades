@@ -1,0 +1,26 @@
+pkgname=pleiades
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='Provider-agnostic terminal AI assistant'
+arch=('x86_64' 'aarch64')
+url='https://github.com/CodWasTaken/Pleiades'
+license=('MIT')
+makedepends=('cargo')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "Pleiades-$pkgver"
+  cargo build --release --bin pleiades
+}
+
+check() {
+  cd "Pleiades-$pkgver"
+  cargo test --workspace
+}
+
+package() {
+  cd "Pleiades-$pkgver"
+  install -Dm755 target/release/pleiades "$pkgdir/usr/bin/pleiades"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

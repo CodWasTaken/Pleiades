@@ -11,7 +11,7 @@ mod repl;
 #[derive(Parser)]
 #[command(
     name = "pleiades",
-    version = "0.1.0",
+    version = env!("CARGO_PKG_VERSION"),
     about = "A next-generation, provider-agnostic terminal AI assistant",
     long_about = "Pleiades is a terminal AI assistant that supports multiple AI providers, \
                   extensible plugins, and a beautiful terminal interface.",

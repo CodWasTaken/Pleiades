@@ -1,18 +1,18 @@
 [package]
 name = "pleiades-tui"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "Pleiades terminal user interface"
 authors = ["Nataniel"]
 license = "MIT"
-repository = "https://github.com/yourusername/pleiades"
+repository = "https://github.com/CodWasTaken/Pleiades"
 
 [dependencies]
-pleiades-core = { path = "../pleiades-core" }
-pleiades-config = { path = "../pleiades-config" }
-pleiades-engine = { path = "../pleiades-engine" }
-pleiades-providers = { path = "../pleiades-providers" }
-pleiades-tools = { path = "../pleiades-tools" }
+pleiades-core = { path = "../pleiades-core", version = "1.0.0" }
+pleiades-config = { path = "../pleiades-config", version = "1.0.0" }
+pleiades-engine = { path = "../pleiades-engine", version = "1.0.0" }
+pleiades-providers = { path = "../pleiades-providers", version = "1.0.0" }
+pleiades-tools = { path = "../pleiades-tools", version = "1.0.0" }
 
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }

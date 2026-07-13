@@ -1,19 +1,19 @@
 [package]
 name = "pleiades-engine"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "Pleiades chat and agent engine"
 authors = ["Nataniel"]
 license = "MIT"
-repository = "https://github.com/yourusername/pleiades"
+repository = "https://github.com/CodWasTaken/Pleiades"
 
 [dependencies]
-pleiades-core = { path = "../pleiades-core" }
-pleiades-config = { path = "../pleiades-config" }
-pleiades-providers = { path = "../pleiades-providers" }
-pleiades-tools = { path = "../pleiades-tools" }
-pleiades-memory = { path = "../pleiades-memory" }
-pleiades-prompts = { path = "../pleiades-prompts" }
+pleiades-core = { path = "../pleiades-core", version = "1.0.0" }
+pleiades-config = { path = "../pleiades-config", version = "1.0.0" }
+pleiades-providers = { path = "../pleiades-providers", version = "1.0.0" }
+pleiades-tools = { path = "../pleiades-tools", version = "1.0.0" }
+pleiades-memory = { path = "../pleiades-memory", version = "1.0.0" }
+pleiades-prompts = { path = "../pleiades-prompts", version = "1.0.0" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -34,7 +34,7 @@ __pycache__/
 venv/
 
 # Generated files
-docs/book/
+docs/book/book/
 
 # Local dev tool configuration
 .opencode/

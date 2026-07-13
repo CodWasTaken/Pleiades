@@ -1,11 +1,11 @@
 [package]
 name = "pleiades-core"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "Pleiades core domain types and traits"
 authors = ["Nataniel"]
 license = "MIT"
-repository = "https://github.com/yourusername/pleiades"
+repository = "https://github.com/CodWasTaken/Pleiades"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

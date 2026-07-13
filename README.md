@@ -84,7 +84,7 @@ pleiades version            Show version
 
 ## Project Status
 
-**16 of 18 milestones complete** — Pleiades is in active development with workflows, Git assistance, integration tests, and a complete user guide.
+**18 of 18 milestones complete** — Pleiades 1.0 is release-ready with cross-platform artifacts and package-manager support.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
 - [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable
@@ -103,8 +103,8 @@ pleiades version            Show version
 - [x] **M14: Git Integration** — Commit messages, PR summaries, code review
 - [x] **M15: Testing & CI** — Integration tests, snapshots, benchmarks, GitHub Actions CI
 - [x] **M16: Documentation** — mdBook site, rustdoc CI, user guide
-- [ ] **M17: Optimization** — Cold start, memory, latency, LTO
-- [ ] **M18: Release** — v1.0.0, binaries, package managers
+- [x] **M17: Optimization** — Cold start, memory, latency, LTO
+- [x] **M18: Release** — v1.0.0, binaries, installer, Homebrew, AUR
 
 ## Architecture
 

@@ -4,27 +4,27 @@ path = "src/main.rs"
 
 [package]
 name = "pleiades-cli"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "Pleiades CLI - Next-generation terminal AI assistant"
 authors = ["Nataniel"]
 license = "MIT"
-repository = "https://github.com/yourusername/pleiades"
+repository = "https://github.com/CodWasTaken/Pleiades"
 keywords = ["ai", "cli", "terminal", "assistant", "llm"]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
-pleiades-core = { path = "../pleiades-core" }
-pleiades-config = { path = "../pleiades-config" }
-pleiades-engine = { path = "../pleiades-engine" }
-pleiades-tui = { path = "../pleiades-tui" }
-pleiades-tools = { path = "../pleiades-tools" }
-pleiades-providers = { path = "../pleiades-providers" }
-pleiades-plugins = { path = "../pleiades-plugins" }
-pleiades-memory = { path = "../pleiades-memory" }
-pleiades-workflow = { path = "../pleiades-workflow" }
-pleiades-git = { path = "../pleiades-git" }
-pleiades-prompts = { path = "../pleiades-prompts" }
+pleiades-core = { path = "../pleiades-core", version = "1.0.0" }
+pleiades-config = { path = "../pleiades-config", version = "1.0.0" }
+pleiades-engine = { path = "../pleiades-engine", version = "1.0.0" }
+pleiades-tui = { path = "../pleiades-tui", version = "1.0.0" }
+pleiades-tools = { path = "../pleiades-tools", version = "1.0.0" }
+pleiades-providers = { path = "../pleiades-providers", version = "1.0.0" }
+pleiades-plugins = { path = "../pleiades-plugins", version = "1.0.0" }
+pleiades-memory = { path = "../pleiades-memory", version = "1.0.0" }
+pleiades-workflow = { path = "../pleiades-workflow", version = "1.0.0" }
+pleiades-git = { path = "../pleiades-git", version = "1.0.0" }
+pleiades-prompts = { path = "../pleiades-prompts", version = "1.0.0" }
 
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
