@@ -59,7 +59,7 @@ jobs:
     name: Publish crates.io packages
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
@@ -92,16 +92,16 @@ jobs:
               continue
             fi
             published=false
-            for attempt in 1 2 3 4 5; do
+            for attempt in $(seq 1 30); do
               if cargo publish --locked -p "$package"; then
                 published=true
                 break
               fi
-              echo "Publish attempt $attempt for $package failed; waiting for registry propagation"
-              sleep 20
+              echo "Publish attempt $attempt for $package failed; waiting for registry propagation or rate-limit reset"
+              sleep 60
             done
             if [ "$published" != true ]; then
-              echo "Failed to publish $package after 5 attempts" >&2
+              echo "Failed to publish $package after 30 attempts" >&2
               exit 1
             fi
           done
