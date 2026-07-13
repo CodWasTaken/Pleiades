@@ -8,20 +8,20 @@ class Pleiades < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.0.0/pleiades-macos-arm64.tar.gz"
-      sha256 "6d4c919ccb64c793d268bcd3dca82549fc5956af08a12d076e039f5cc663ebdd"
+      sha256 "9bcf84bb6066505bd52e1bb70f02f0fb9f09aa4819da731a07fcbce20094ab59"
     else
       url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.0.0/pleiades-macos-amd64.tar.gz"
-      sha256 "dd89dc30e4854a66086c550e107d10039a26c23cc2e1025a1d55a27b7ecae0fc"
+      sha256 "fe73d3fd401ada3fdc9165388331ceac510fbbfb04c018bcf40a4927b6e6d101"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
       url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.0.0/pleiades-linux-arm64.tar.gz"
-      sha256 "0293bc408525aec75671ec0b04c745625047e85bf5c918e663060eb58cf63e13"
+      sha256 "6021399a62e5aef717ad1b51196666b2e185f717227abffd41beebc7676e19ea"
     else
       url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.0.0/pleiades-linux-amd64.tar.gz"
-      sha256 "dd4bb576caff8c26058500434b07725bd3e41c57510e09632d63b13b300b2fd1"
+      sha256 "7a7ede273e5c37f0ab48dcaad086048b5a67b5818449816d673a01d9c5d619c4"
     end
   end
 
