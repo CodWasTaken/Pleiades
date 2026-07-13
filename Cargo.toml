@@ -1,19 +1,19 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/pleiades-cli",
-    "crates/pleiades-core",
-    "crates/pleiades-config",
-    "crates/pleiades-engine",
-    "crates/pleiades-tui",
-    "crates/pleiades-providers",
-    "crates/pleiades-tools",
-    "crates/pleiades-plugins",
-    "crates/pleiades-memory",
-    "crates/pleiades-workflow",
-    "crates/pleiades-git",
-    "crates/pleiades-prompts",
-    "crates/pleiades-sdk",
+    "crates/pleiades-agent",
+    "crates/pleiades-agent-core",
+    "crates/pleiades-agent-config",
+    "crates/pleiades-agent-engine",
+    "crates/pleiades-agent-tui",
+    "crates/pleiades-agent-providers",
+    "crates/pleiades-agent-tools",
+    "crates/pleiades-agent-plugins",
+    "crates/pleiades-agent-memory",
+    "crates/pleiades-agent-workflow",
+    "crates/pleiades-agent-git",
+    "crates/pleiades-agent-prompts",
+    "crates/pleiades-agent-sdk",
 ]
 
 [profile.release]

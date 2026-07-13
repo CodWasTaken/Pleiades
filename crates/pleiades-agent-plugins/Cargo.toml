@@ -1,0 +1,24 @@
+[package]
+name = "pleiades-agent-plugins"
+version = "1.1.0"
+edition = "2024"
+description = "Pleiades plugin manifests, lifecycle management, and shell hooks"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/CodWasTaken/Pleiades"
+
+[dependencies]
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "1.1.0" }
+pleiades-agent-config = { path = "../pleiades-agent-config", version = "1.1.0" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+thiserror = "2"
+chrono = "0.4"
+walkdir = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

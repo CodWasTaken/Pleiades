@@ -19,16 +19,16 @@
 | M10 | Terminal UI (TUI) | ✅ **Complete** |
 | M11 | Plugin System | ✅ **Complete** |
 | M12 | Prompt Library | ✅ **Complete** |
-| M13 | Workflow Engine | ❌ Pending |
-| M14 | Git Integration | ❌ Pending |
-| M15 | Testing & CI | ❌ Pending |
-| M16 | Documentation | ❌ Pending |
-| M17 | Optimization | ❌ Pending |
-| M18 | Release | ❌ Pending |
+| M13 | Workflow Engine | ✅ **Complete** |
+| M14 | Git Integration | ✅ **Complete** |
+| M15 | Testing & CI | ✅ **Complete** |
+| M16 | Documentation | ✅ **Complete** |
+| M17 | Optimization | ✅ **Complete** |
+| M18 | Release | 🟡 **Crates.io publication pending** |
 
-**Current Focus**: Milestone 13 — Workflow Engine (step sequencing, parallel steps, conditional branching)
+**Current Focus**: Publish the collision-free `pleiades-agent` v1.1.0 package family to crates.io.
 
-**Completed Commits** (12 milestones implemented):
+**Milestone commits**:
 - M1: 5fcf776 — Initial bootstrap (workspace, crate structure)
 - M2: b28648a — Config system with env interpolation, profiles, secrets
 - M3: 59e48b9 — Provider system (Anthropic, OpenAI, OpenAI-compatible)
@@ -40,17 +40,16 @@
 - M9: 46e16eb — Memory system with FileStore, LLM summarization
 - M10: 125cc2b — Terminal UI: markdown→ANSI rendering, syntax highlighting, LineEditor with tab completion, Spinner
 - M11: b638572 — Plugin System: PluginManager, PluginRegistry, HookRunner, plugin.json manifest, CLI commands
-- M12: (pending) — Prompt Library: pleiades-prompts crate with PromptTemplate engine ({{var}}, {{var|default}}), 8 built-in prompts, PromptLibrary with custom persistence, wired into Engine default system prompt, `pleiades prompt` CLI
+- M12: `f2a6d8f` — Prompt library and CLI integration
+- M13: `ed3fe30` — Workflow sequencing, parallelism, conditions, retries, and CLI
+- M14: `0bc3294` — AI-assisted Git commit, review, summary, and diff commands
+- M15: `ccd1f47` — CLI integration tests, snapshots, benchmarks, and CI tuning
+- M16: `03306bc` — mdBook, user guide, configuration reference, and docs deployment
+- M17: `bf5d46a` — Release optimization and performance baselines
+- M18: `64df221` — v1.0 release automation and platform packaging
 
 **GitHub**: https://github.com/CodWasTaken/Pleiades
 
-## What Remains (Next Priorities)
+## Remaining release operation
 
-| Priority | Milestone | Effort | Description |
-|----------|-----------|--------|-------------|
-| **1** | **M13**: Workflow Engine | 3 days | Step sequencing, parallel steps, conditional branching |
-| **2** | **M14**: Git Integration | 3 days | Commit generation, PR summaries, code review |
-| **3** | **M15**: Testing & CI | 5 days | Unit tests, integration tests, GitHub Actions CI |
-| **4** | **M16**: Documentation | 3 days | MDBook, rustdoc, guides |
-| **5** | **M17**: Optimization | 3 days | Performance profiling, caching, latency |
-| **6** | **M18**: Release | 2 days | Binary distribution, package managers |
+The GitHub release, checksummed installer, Homebrew formula, and AUR metadata are complete. Publishing the newly available `pleiades-agent` crate family requires the repository's `CARGO_REGISTRY_TOKEN` Actions secret.

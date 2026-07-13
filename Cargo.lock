@@ -1454,8 +1454,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "pleiades-cli"
-version = "1.0.1"
+name = "pleiades-agent"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1463,17 +1463,17 @@ dependencies = [
  "clap",
  "dirs 6.0.0",
  "insta",
- "pleiades-config",
- "pleiades-core",
- "pleiades-engine",
- "pleiades-git",
- "pleiades-memory",
- "pleiades-plugins",
- "pleiades-prompts",
- "pleiades-providers",
- "pleiades-tools",
- "pleiades-tui",
- "pleiades-workflow",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
+ "pleiades-agent-engine",
+ "pleiades-agent-git",
+ "pleiades-agent-memory",
+ "pleiades-agent-plugins",
+ "pleiades-agent-prompts",
+ "pleiades-agent-providers",
+ "pleiades-agent-tools",
+ "pleiades-agent-tui",
+ "pleiades-agent-workflow",
  "predicates",
  "rustyline 15.0.0",
  "serde_json",
@@ -1486,12 +1486,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-config"
-version = "1.0.1"
+name = "pleiades-agent-config"
+version = "1.1.0"
 dependencies = [
  "directories",
  "dirs 5.0.1",
- "pleiades-core",
+ "pleiades-agent-core",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1503,8 +1503,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-core"
-version = "1.0.1"
+name = "pleiades-agent-core"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1516,18 +1516,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-engine"
-version = "1.0.1"
+name = "pleiades-agent-engine"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "dirs 6.0.0",
  "futures",
- "pleiades-config",
- "pleiades-core",
- "pleiades-memory",
- "pleiades-prompts",
- "pleiades-providers",
- "pleiades-tools",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
+ "pleiades-agent-memory",
+ "pleiades-agent-prompts",
+ "pleiades-agent-providers",
+ "pleiades-agent-tools",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1537,13 +1537,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-git"
-version = "1.0.1"
+name = "pleiades-agent-git"
+version = "1.1.0"
 dependencies = [
  "async-trait",
- "pleiades-config",
- "pleiades-core",
- "pleiades-prompts",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
+ "pleiades-agent-prompts",
  "serde",
  "serde_json",
  "tempfile",
@@ -1553,12 +1553,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-memory"
-version = "1.0.1"
+name = "pleiades-agent-memory"
+version = "1.1.0"
 dependencies = [
  "dirs 6.0.0",
- "pleiades-config",
- "pleiades-core",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1568,12 +1568,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-plugins"
-version = "1.0.1"
+name = "pleiades-agent-plugins"
+version = "1.1.0"
 dependencies = [
  "chrono",
- "pleiades-config",
- "pleiades-core",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
  "serde",
  "serde_json",
  "tempfile",
@@ -1585,27 +1585,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-prompts"
-version = "1.0.1"
+name = "pleiades-agent-prompts"
+version = "1.1.0"
 dependencies = [
  "criterion",
  "dirs 6.0.0",
- "pleiades-config",
- "pleiades-core",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
 ]
 
 [[package]]
-name = "pleiades-providers"
-version = "1.0.1"
+name = "pleiades-agent-providers"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "base64",
  "futures",
- "pleiades-config",
- "pleiades-core",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
  "reqwest",
  "serde",
  "serde_json",
@@ -1615,11 +1615,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-sdk"
-version = "1.0.1"
+name = "pleiades-agent-sdk"
+version = "1.1.0"
 dependencies = [
  "async-trait",
- "pleiades-core",
+ "pleiades-agent-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1627,13 +1627,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-tools"
-version = "1.0.1"
+name = "pleiades-agent-tools"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "glob",
- "pleiades-config",
- "pleiades-core",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
  "regex",
  "reqwest",
  "serde",
@@ -1644,17 +1644,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-tui"
-version = "1.0.1"
+name = "pleiades-agent-tui"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "crossterm",
  "once_cell",
- "pleiades-config",
- "pleiades-core",
- "pleiades-engine",
- "pleiades-providers",
- "pleiades-tools",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
+ "pleiades-agent-engine",
+ "pleiades-agent-providers",
+ "pleiades-agent-tools",
  "pulldown-cmark",
  "ratatui",
  "rustyline 14.0.0",
@@ -1666,12 +1666,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pleiades-workflow"
-version = "1.0.1"
+name = "pleiades-agent-workflow"
+version = "1.1.0"
 dependencies = [
  "futures",
- "pleiades-config",
- "pleiades-core",
+ "pleiades-agent-config",
+ "pleiades-agent-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

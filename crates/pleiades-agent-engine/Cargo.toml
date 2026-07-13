@@ -1,0 +1,26 @@
+[package]
+name = "pleiades-agent-engine"
+version = "1.1.0"
+edition = "2024"
+description = "Pleiades chat and agent engine"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/CodWasTaken/Pleiades"
+
+[dependencies]
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "1.1.0" }
+pleiades-agent-config = { path = "../pleiades-agent-config", version = "1.1.0" }
+pleiades-agent-providers = { path = "../pleiades-agent-providers", version = "1.1.0" }
+pleiades-agent-tools = { path = "../pleiades-agent-tools", version = "1.1.0" }
+pleiades-agent-memory = { path = "../pleiades-agent-memory", version = "1.1.0" }
+pleiades-agent-prompts = { path = "../pleiades-agent-prompts", version = "1.1.0" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+tracing = "0.1"
+thiserror = "2"
+futures = "0.3"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"

@@ -11,5 +11,5 @@ msrv = "1.85.0"
 
 # Disallowed methods (things we never want to use)
 disallowed-methods = [
-    { path = "std::env::temp_dir", reason = "Use pleiades-config paths instead" },
+    { path = "std::env::temp_dir", reason = "Use pleiades-agent-config paths instead" },
 ]

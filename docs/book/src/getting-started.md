@@ -12,8 +12,10 @@ export PATH="$HOME/.local/bin:$PATH"
 The crates.io package named `pleiades` is an unrelated project. Do not use `cargo install pleiades`. A Rust source install of this repository is available with:
 
 ```console
-cargo install --git https://github.com/CodWasTaken/Pleiades --tag v1.0.1 pleiades-cli
+cargo install --git https://github.com/CodWasTaken/Pleiades pleiades-agent
 ```
+
+The published package family uses the `pleiades-agent` namespace because the unqualified `pleiades` and `pleiades-core` names belong to unrelated crates. The package `pleiades-agent` installs an executable named `pleiades`. Once v1.1.0 is published to crates.io, use `cargo install pleiades-agent`.
 
 ## Build a checkout
 

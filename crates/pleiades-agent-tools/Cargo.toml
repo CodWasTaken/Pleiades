@@ -1,0 +1,22 @@
+[package]
+name = "pleiades-agent-tools"
+version = "1.1.0"
+edition = "2024"
+description = "Pleiades built-in tools"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/CodWasTaken/Pleiades"
+
+[dependencies]
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "1.1.0" }
+pleiades-agent-config = { path = "../pleiades-agent-config", version = "1.1.0" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+tracing = "0.1"
+thiserror = "2"
+glob = "0.3"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

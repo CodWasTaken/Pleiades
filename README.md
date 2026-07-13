@@ -57,8 +57,10 @@ pleiades --model claude-sonnet-4
 Do **not** run `cargo install pleiades`: that name belongs to an unrelated machine-learning crate on crates.io. To compile this project directly, use:
 
 ```bash
-cargo install --git https://github.com/CodWasTaken/Pleiades --tag v1.0.1 pleiades-cli
+cargo install --git https://github.com/CodWasTaken/Pleiades pleiades-agent
 ```
+
+The crates.io distribution uses the collision-free `pleiades-agent` package name while installing the same `pleiades` executable. After v1.1.0 is published, the equivalent command is `cargo install pleiades-agent`.
 
 ## CLI Commands
 
@@ -92,7 +94,7 @@ pleiades --version          Show version
 
 ## Project Status
 
-**18 of 18 milestones complete** — Pleiades 1.0 ships cross-platform artifacts, a checksummed installer, Homebrew metadata, and AUR metadata.
+**17 milestones complete; final crates.io publication pending** — Pleiades ships cross-platform artifacts, a checksummed installer, Homebrew metadata, and AUR metadata. The collision-free v1.1.0 Cargo packages are ready to publish.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
 - [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable
@@ -112,7 +114,7 @@ pleiades --version          Show version
 - [x] **M15: Testing & CI** — Integration tests, snapshots, benchmarks, GitHub Actions CI
 - [x] **M16: Documentation** — mdBook site, rustdoc CI, user guide
 - [x] **M17: Optimization** — Cold start, memory, latency, LTO
-- [x] **M18: Release** — v1.0.0, binaries, installer, Homebrew, AUR
+- [ ] **M18: Release** — GitHub binaries, installer, Homebrew, and AUR complete; crates.io publishing awaits the repository token
 
 ## Architecture
 

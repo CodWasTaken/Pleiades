@@ -2,6 +2,7 @@
 
 - [Pleiades](README.md)
 - [Getting started](getting-started.md)
+- [Cargo packages](packages.md)
 - [Configuration reference](configuration.md)
 - [Providers and models](providers.md)
 - [Tools and permissions](tools.md)
