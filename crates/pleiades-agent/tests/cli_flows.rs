@@ -6,6 +6,7 @@ use predicates::prelude::*;
 fn command(home: &std::path::Path) -> Command {
     let mut command = Command::cargo_bin("pleiades").unwrap();
     command
+        .current_dir(home)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("config"));
     command
