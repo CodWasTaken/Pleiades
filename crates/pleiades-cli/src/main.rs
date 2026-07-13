@@ -84,6 +84,10 @@ enum Commands {
     #[command(subcommand)]
     Prompt(PromptCommand),
 
+    /// Manage and run workflows
+    #[command(subcommand)]
+    Workflow(WorkflowCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -351,6 +355,30 @@ enum PromptCommand {
         description: String,
         /// Template body (use quotes; {{var}} for substitution)
         template: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkflowCommand {
+    /// List available workflow definitions
+    List,
+    /// Run a workflow
+    Run {
+        /// Workflow name or path
+        name: String,
+        /// Variables as key=value
+        #[arg(long = "var")]
+        vars: Vec<String>,
+    },
+    /// Show a workflow definition
+    Show { name: String },
+    /// Validate a workflow definition
+    Validate { name: String },
+    /// Create a starter workflow in .pleiades/workflows
+    Create {
+        name: String,
+        #[arg(short, long)]
+        description: Option<String>,
     },
 }
 
@@ -1529,6 +1557,218 @@ fn handle_prompt_save(name: &str, description: &str, template: &str) {
     }
 }
 
+fn workflow_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![PathBuf::from(".pleiades/workflows")];
+    if let Some(config) = dirs::config_dir() {
+        dirs.push(config.join("pleiades/workflows"));
+    }
+    dirs
+}
+
+fn find_workflow(name: &str) -> Result<PathBuf, String> {
+    let supplied = PathBuf::from(name);
+    if supplied.is_file() {
+        return Ok(supplied);
+    }
+    for dir in workflow_dirs() {
+        for extension in ["toml", "yaml", "yml", "json"] {
+            let candidate = dir.join(format!("{name}.{extension}"));
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
+    Err(format!("workflow '{name}' not found"))
+}
+
+fn load_workflow(path: &std::path::Path) -> Result<pleiades_workflow::Workflow, String> {
+    let contents = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
+        "toml" => toml::from_str(&contents).map_err(|e| e.to_string()),
+        "yaml" | "yml" => serde_yaml::from_str(&contents).map_err(|e| e.to_string()),
+        "json" => serde_json::from_str(&contents).map_err(|e| e.to_string()),
+        extension => Err(format!("unsupported workflow format '{extension}'")),
+    }
+}
+
+fn resolve_workflow(name: &str) -> Result<(PathBuf, pleiades_workflow::Workflow), String> {
+    let path = find_workflow(name)?;
+    let workflow = load_workflow(&path)?;
+    Ok((path, workflow))
+}
+
+fn workflow_or_exit(name: &str) -> (PathBuf, pleiades_workflow::Workflow) {
+    resolve_workflow(name).unwrap_or_else(|e| {
+        eprintln!("\x1b[1;31m✗\x1b[0m {e}");
+        std::process::exit(1);
+    })
+}
+
+fn handle_workflow_list() {
+    let mut workflows = Vec::new();
+    for dir in workflow_dirs() {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if matches!(
+                path.extension().and_then(|e| e.to_str()),
+                Some("toml" | "yaml" | "yml" | "json")
+            ) {
+                workflows.push(path);
+            }
+        }
+    }
+    workflows.sort();
+    if workflows.is_empty() {
+        println!("No workflows found.");
+        return;
+    }
+    for path in workflows {
+        match load_workflow(&path) {
+            Ok(workflow) => println!(
+                "  \x1b[1;32m{:<24}\x1b[0m {}",
+                workflow.name,
+                workflow.description.as_deref().unwrap_or("")
+            ),
+            Err(error) => println!(
+                "  \x1b[1;31m{:<24}\x1b[0m invalid: {}",
+                path.display(),
+                error
+            ),
+        }
+    }
+}
+
+fn handle_workflow_show(name: &str) {
+    let (path, workflow) = workflow_or_exit(name);
+    println!("Name:        {}", workflow.name);
+    println!(
+        "Description: {}",
+        workflow.description.as_deref().unwrap_or("")
+    );
+    println!("Path:        {}", path.display());
+    if let Some(variables) = &workflow.variables {
+        println!("Variables:   {}", variables.join(", "));
+    }
+    println!("Steps:");
+    for (index, step) in workflow.steps.iter().enumerate() {
+        let mode = if step.is_parallel() {
+            "parallel"
+        } else {
+            "sequential"
+        };
+        println!(
+            "  {}. {} [{}] — {}",
+            index + 1,
+            step.name,
+            mode,
+            step.command
+        );
+    }
+}
+
+fn handle_workflow_validate(name: &str) {
+    let (path, workflow) = workflow_or_exit(name);
+    match workflow.validate() {
+        Ok(()) => println!("\x1b[1;32m✓\x1b[0m {} is valid", path.display()),
+        Err(errors) => {
+            for error in errors {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+            }
+            std::process::exit(1);
+        }
+    }
+}
+
+fn parse_workflow_vars(
+    vars: &[String],
+) -> Result<std::collections::HashMap<String, String>, String> {
+    vars.iter()
+        .map(|item| {
+            item.split_once('=')
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .ok_or_else(|| format!("invalid variable '{item}', expected key=value"))
+        })
+        .collect()
+}
+
+fn handle_workflow_run(name: &str, vars: &[String]) {
+    let (_, workflow) = workflow_or_exit(name);
+    let variables = parse_workflow_vars(vars).unwrap_or_else(|e| {
+        eprintln!("\x1b[1;31m✗\x1b[0m {e}");
+        std::process::exit(1);
+    });
+    let executor = pleiades_workflow::WorkflowExecutor::new().with_variables(variables);
+    let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
+    match runtime.block_on(executor.execute_detailed(&workflow)) {
+        Ok(results) => {
+            for result in results {
+                let marker = match result.status {
+                    pleiades_workflow::StepStatus::Succeeded => "\x1b[1;32m✓\x1b[0m",
+                    pleiades_workflow::StepStatus::Skipped => "\x1b[1;33m−\x1b[0m",
+                    pleiades_workflow::StepStatus::Failed => "\x1b[1;31m✗\x1b[0m",
+                };
+                println!("{marker} {} ({:.2?})", result.name, result.duration);
+                if !result.stdout.is_empty() {
+                    print!("{}", result.stdout);
+                }
+                if !result.stderr.is_empty() {
+                    eprint!("{}", result.stderr);
+                }
+            }
+        }
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_workflow_create(name: &str, description: Option<String>) {
+    if name.is_empty() || name.contains(['/', '\\']) {
+        eprintln!("\x1b[1;31m✗\x1b[0m workflow name must be a non-empty file name");
+        std::process::exit(1);
+    }
+    let dir = PathBuf::from(".pleiades/workflows");
+    if let Err(error) = std::fs::create_dir_all(&dir) {
+        eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+        std::process::exit(1);
+    }
+    let path = dir.join(format!("{name}.toml"));
+    let workflow = pleiades_workflow::Workflow {
+        name: name.to_string(),
+        description,
+        variables: Some(vec!["name=world".to_string()]),
+        steps: vec![pleiades_workflow::WorkflowStep {
+            name: "hello".to_string(),
+            command: "printf".to_string(),
+            args: Some(vec!["Hello, {{name}}!\\n".to_string()]),
+            condition: None,
+            parallel: None,
+            timeout: Some(30),
+            retry: Some(0),
+        }],
+    };
+    let serialized = toml::to_string_pretty(&workflow).expect("workflow serialization");
+    let write = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .and_then(|mut file| std::io::Write::write_all(&mut file, serialized.as_bytes()));
+    match write {
+        Ok(()) => println!("\x1b[1;32m✓\x1b[0m Created {}", path.display()),
+        Err(error) => {
+            eprintln!(
+                "\x1b[1;31m✗\x1b[0m could not create {}: {error}",
+                path.display()
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
@@ -1594,6 +1834,15 @@ fn main() {
                 description,
                 template,
             } => handle_prompt_save(&name, &description, &template),
+        },
+        Some(Commands::Workflow(cmd)) => match cmd {
+            WorkflowCommand::List => handle_workflow_list(),
+            WorkflowCommand::Run { name, vars } => handle_workflow_run(&name, &vars),
+            WorkflowCommand::Show { name } => handle_workflow_show(&name),
+            WorkflowCommand::Validate { name } => handle_workflow_validate(&name),
+            WorkflowCommand::Create { name, description } => {
+                handle_workflow_create(&name, description)
+            }
         },
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {

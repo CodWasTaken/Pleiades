@@ -3,8 +3,8 @@
 //! Define, share, and run multi-step workflows with
 //! sequencing, parallelism, and conditional branching.
 
-pub mod workflow;
 pub mod execute;
+pub mod workflow;
 
-pub use workflow::Workflow;
-pub use execute::WorkflowExecutor;
+pub use execute::{StepResult, StepStatus, WorkflowExecutor};
+pub use workflow::{Workflow, WorkflowStep};
