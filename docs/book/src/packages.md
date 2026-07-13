@@ -24,4 +24,4 @@ Package names use hyphens; Rust import paths use underscores. For example:
 use pleiades_agent_core::{Provider, Tool};
 ```
 
-For end users, `cargo install pleiades-agent` installs a binary named `pleiades`. Workspace packages are versioned together and published in dependency order by the release workflow.
+For end users, `cargo install pleiades-agent` installs a binary named `pleiades`. Workspace packages use compatible semantic versions and are published in dependency order by the release workflow; a release only republishes packages whose contents or dependency requirements changed.

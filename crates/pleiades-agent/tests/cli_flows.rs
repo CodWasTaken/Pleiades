@@ -22,6 +22,8 @@ fn top_level_and_workflow_help_snapshots() {
     assert!(text.contains("Pleiades is a terminal AI assistant"));
     assert!(text.contains("workflow"));
     assert!(text.contains("git"));
+    assert!(text.contains("setup"));
+    assert!(text.contains("doctor"));
 
     let output = command(home.path())
         .args(["workflow", "--help"])
@@ -50,6 +52,28 @@ Options:
   -v, --verbose                            Verbose output
   -h, --help                               Print help
 "###);
+}
+
+#[test]
+fn guided_api_setup_and_doctor_use_environment_reference() {
+    let home = tempfile::tempdir().unwrap();
+    command(home.path())
+        .args(["setup", "--auth", "api-key"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("usage-based OpenAI API access"));
+
+    let config = fs::read_to_string(home.path().join("config/pleiades/config.toml")).unwrap();
+    assert!(config.contains("${OPENAI_API_KEY}"));
+    assert!(!config.contains("sk-test"));
+
+    command(home.path())
+        .env("OPENAI_API_KEY", "sk-test")
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("API credential is available"))
+        .stdout(predicate::str::contains("sk-test").not());
 }
 
 #[test]

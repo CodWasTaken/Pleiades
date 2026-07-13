@@ -138,6 +138,12 @@ impl TuiApp {
         for (name, pc) in &self.config.providers {
             let api_key = pc.api_key.as_deref().unwrap_or("");
             let base_url = pc.base_url.as_deref().unwrap_or("");
+            if name == "openai-subscription" {
+                engine.register_provider(Box::new(
+                    pleiades_agent_providers::codex::CodexCliProvider::new(),
+                ));
+                continue;
+            }
             if api_key.is_empty() {
                 continue;
             }

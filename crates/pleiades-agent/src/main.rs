@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use pleiades_agent_config::loader::ConfigLoader;
 use pleiades_agent_config::profile::ProfileManager;
@@ -52,6 +52,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Configure Pleiades with a guided authentication flow
+    Setup {
+        /// Authentication method (omit for an interactive choice)
+        #[arg(long, value_enum)]
+        auth: Option<SetupAuth>,
+
+        /// Use Codex device-code authentication instead of a browser callback
+        #[arg(long)]
+        device: bool,
+    },
+
+    /// Manage OpenAI subscription authentication through the official Codex CLI
+    #[command(subcommand)]
+    Auth(AuthCommand),
+
+    /// Diagnose configuration and authentication problems
+    Doctor,
+
     /// Manage configuration
     #[command(subcommand)]
     Config(ConfigCommand),
@@ -98,6 +116,28 @@ enum Commands {
         #[arg(short, long)]
         session: Option<String>,
     },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum SetupAuth {
+    /// Use an included ChatGPT subscription through the official Codex CLI
+    Chatgpt,
+    /// Use usage-based OpenAI Platform API billing
+    ApiKey,
+}
+
+#[derive(Subcommand)]
+enum AuthCommand {
+    /// Sign in with ChatGPT and configure the subscription provider
+    Login {
+        /// Use device-code authentication for remote or headless terminals
+        #[arg(long)]
+        device: bool,
+    },
+    /// Show the current Codex authentication status
+    Status,
+    /// Sign out of the Codex session
+    Logout,
 }
 
 #[derive(Subcommand)]
@@ -713,7 +753,7 @@ fn handle_provider_list(loader: &ConfigLoader) {
 
     if config.providers.is_empty() {
         println!("No providers configured.");
-        println!("Use 'pleiades config set providers.<name>.api_key <key>' to add one.");
+        println!("Run 'pleiades setup' for guided configuration.");
         return;
     }
 
@@ -731,7 +771,11 @@ fn handle_provider_list(loader: &ConfigLoader) {
 
         let base_url = pc.base_url.as_deref().unwrap_or("(default)");
         println!("  {}:", name);
-        println!("    API Key: {}", key_display);
+        if name == "openai-subscription" {
+            println!("    Authentication: ChatGPT subscription via Codex CLI");
+        } else {
+            println!("    API Key: {}", key_display);
+        }
         println!("    Base URL: {}", base_url);
         println!();
     }
@@ -758,6 +802,12 @@ fn handle_provider_info(loader: &ConfigLoader, name: &str) {
     let env_var = secret_manager.expected_env_var(name).unwrap_or("(none)");
 
     println!("Provider: {}", name);
+    if name == "openai-subscription" {
+        println!("  Authentication: ChatGPT subscription via the official Codex CLI");
+        println!("  Credentials: managed by Codex (Pleiades never reads them)");
+        println!("  Status command: pleiades auth status");
+        return;
+    }
     println!(
         "  API Key: {}",
         pc.api_key
@@ -817,16 +867,21 @@ fn handle_provider_test(loader: &ConfigLoader, name: &str, model: Option<String>
         }
     };
 
-    let api_key = match pc.api_key.as_deref() {
-        Some(k) if !k.is_empty() => k.to_string(),
-        _ => {
-            eprintln!("No API key configured for '{}'", name);
-            std::process::exit(1);
+    let api_key = if name == "openai-subscription" {
+        String::new()
+    } else {
+        match pc.api_key.as_deref() {
+            Some(k) if !k.is_empty() => k.to_string(),
+            _ => {
+                eprintln!("No API key configured for '{}'", name);
+                std::process::exit(1);
+            }
         }
     };
     let base_url = pc.base_url.clone().unwrap_or_default();
 
     let provider: Box<dyn pleiades_agent_core::Provider> = match name {
+        "openai-subscription" => Box::new(pleiades_agent_providers::codex::CodexCliProvider::new()),
         "anthropic" => {
             if base_url.is_empty() {
                 Box::new(pleiades_agent_providers::anthropic::AnthropicProvider::new(
@@ -945,7 +1000,7 @@ fn handle_model_list(
             };
             let api_key = pc.api_key.as_deref().unwrap_or("");
             let base_url = pc.base_url.as_deref().unwrap_or("");
-            if api_key.is_empty() {
+            if api_key.is_empty() && name != "openai-subscription" {
                 eprintln!("No API key configured for '{}'", name);
                 std::process::exit(1);
             }
@@ -1233,6 +1288,12 @@ fn build_providers_from_config(
     for (name, pc) in &config.providers {
         let api_key = pc.api_key.as_deref().unwrap_or("");
         let base_url = pc.base_url.as_deref().unwrap_or("");
+        if name == "openai-subscription" {
+            providers.push(Box::new(
+                pleiades_agent_providers::codex::CodexCliProvider::new(),
+            ));
+            continue;
+        }
         if api_key.is_empty() {
             continue;
         }
@@ -1249,6 +1310,7 @@ fn build_test_provider(
     base_url: &str,
 ) -> Box<dyn pleiades_agent_core::Provider> {
     match name {
+        "openai-subscription" => Box::new(pleiades_agent_providers::codex::CodexCliProvider::new()),
         "anthropic" => {
             if base_url.is_empty() {
                 Box::new(pleiades_agent_providers::anthropic::AnthropicProvider::new(
@@ -2035,12 +2097,263 @@ fn handle_git_command(
     }
 }
 
+fn codex_binary() -> String {
+    std::env::var("PLEIADES_CODEX_BIN").unwrap_or_else(|_| "codex".to_string())
+}
+
+fn save_setup_config(loader: &ConfigLoader, config: &pleiades_agent_config::Config) {
+    let result = if loader.project_dir().exists() {
+        loader.save_project(config)
+    } else {
+        loader.save_global(config)
+    };
+    if let Err(error) = result {
+        eprintln!("\x1b[1;31m✗\x1b[0m Could not save configuration: {error}");
+        std::process::exit(1);
+    }
+}
+
+fn configure_subscription_provider(loader: &ConfigLoader) {
+    let mut config = loader.load().unwrap_or_default();
+    config.providers.insert(
+        "openai-subscription".to_string(),
+        pleiades_agent_config::ProviderConfig::default(),
+    );
+    config.core.default_provider = Some("openai-subscription".to_string());
+    config.core.default_model = Some("codex-default".to_string());
+    save_setup_config(loader, &config);
+    println!("\x1b[1;32m✓\x1b[0m Default provider: openai-subscription");
+    println!("\x1b[1;32m✓\x1b[0m Credentials remain managed by the official Codex CLI");
+}
+
+fn codex_login_status() -> Result<Option<String>, String> {
+    let output = std::process::Command::new(codex_binary())
+        .args(["login", "status"])
+        .output()
+        .map_err(|error| {
+            format!("The official Codex CLI is required for ChatGPT subscription access: {error}")
+        })?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Ok(Some(if stdout.is_empty() { stderr } else { stdout }))
+}
+
+fn handle_auth_login(loader: &ConfigLoader, device: bool) {
+    match codex_login_status() {
+        Ok(Some(status)) if status.to_lowercase().contains("chatgpt") => {
+            println!("\x1b[1;32m✓\x1b[0m Codex is already authenticated with ChatGPT")
+        }
+        Ok(status) => {
+            if let Some(status) = status {
+                println!("Codex is currently using a different login method: {status}");
+                println!("Switching to ChatGPT subscription sign-in...");
+                match std::process::Command::new(codex_binary())
+                    .arg("logout")
+                    .status()
+                {
+                    Ok(status) if status.success() => {}
+                    Ok(_) => {
+                        eprintln!(
+                            "\x1b[1;31m✗\x1b[0m Could not sign out of the current Codex session"
+                        );
+                        std::process::exit(1);
+                    }
+                    Err(error) => {
+                        eprintln!("\x1b[1;31m✗\x1b[0m Could not run Codex logout: {error}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            println!("Opening the official OpenAI sign-in flow...");
+            let mut command = std::process::Command::new(codex_binary());
+            command.arg("login");
+            if device {
+                command.arg("--device-auth");
+            }
+            match command.status() {
+                Ok(status) if status.success() => {
+                    println!("\x1b[1;32m✓\x1b[0m OpenAI sign-in complete")
+                }
+                Ok(_) => {
+                    eprintln!("\x1b[1;31m✗\x1b[0m OpenAI sign-in did not complete");
+                    std::process::exit(1);
+                }
+                Err(error) => {
+                    eprintln!("\x1b[1;31m✗\x1b[0m Could not start Codex: {error}");
+                    eprintln!("Install the official Codex CLI, then run `pleiades auth login`.");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+            std::process::exit(1);
+        }
+    }
+
+    configure_subscription_provider(loader);
+    println!("Run `pleiades provider test openai-subscription` to verify access.");
+}
+
+fn handle_auth_status() {
+    match std::process::Command::new(codex_binary())
+        .args(["login", "status"])
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(_) => std::process::exit(1),
+        Err(error) => {
+            eprintln!("Could not run the official Codex CLI: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_auth_logout() {
+    match std::process::Command::new(codex_binary())
+        .arg("logout")
+        .status()
+    {
+        Ok(status) if status.success() => println!("Signed out of OpenAI subscription access"),
+        Ok(_) => std::process::exit(1),
+        Err(error) => {
+            eprintln!("Could not run the official Codex CLI: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn configure_api_key_provider(loader: &ConfigLoader) {
+    let mut config = loader.load().unwrap_or_default();
+    let mut provider = config.providers.get("openai").cloned().unwrap_or_default();
+    provider.api_key = Some("${OPENAI_API_KEY}".to_string());
+    config.providers.insert("openai".to_string(), provider);
+    config.core.default_provider = Some("openai".to_string());
+    if config.core.default_model.as_deref() == Some("codex-default")
+        || config.core.default_model.is_none()
+    {
+        config.core.default_model = Some("gpt-4o".to_string());
+    }
+    save_setup_config(loader, &config);
+
+    println!("\x1b[1;32m✓\x1b[0m Configured usage-based OpenAI API access");
+    if std::env::var_os("OPENAI_API_KEY").is_none() {
+        println!("Set the key in your shell before starting Pleiades:");
+        println!("  export OPENAI_API_KEY=\"your-new-key\"");
+    }
+    println!("OpenAI API billing is separate from ChatGPT subscriptions.");
+    println!("Run `pleiades provider test openai` to verify API access.");
+}
+
+fn handle_setup(loader: &ConfigLoader, method: Option<SetupAuth>, device: bool) {
+    println!("\x1b[1;36mPleiades setup\x1b[0m");
+    println!("Credentials are never copied into Pleiades when using ChatGPT sign-in.\n");
+
+    let method = method.unwrap_or_else(|| {
+        println!("Choose how to access OpenAI:");
+        println!("  1) ChatGPT subscription (browser sign-in through official Codex CLI)");
+        println!("  2) OpenAI Platform API key (usage-based billing)");
+        print!("Selection [1]: ");
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        let mut selection = String::new();
+        let _ = std::io::stdin().read_line(&mut selection);
+        if selection.trim() == "2" {
+            SetupAuth::ApiKey
+        } else {
+            SetupAuth::Chatgpt
+        }
+    });
+
+    match method {
+        SetupAuth::Chatgpt => handle_auth_login(loader, device),
+        SetupAuth::ApiKey => configure_api_key_provider(loader),
+    }
+}
+
+fn handle_doctor(loader: &ConfigLoader) {
+    println!("\x1b[1;36mPleiades doctor\x1b[0m");
+    let config = match loader.load_with_interpolation() {
+        Ok(config) => {
+            println!("\x1b[1;32m✓\x1b[0m Configuration parses and validates");
+            config
+        }
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Configuration: {error}");
+            eprintln!("Run `pleiades config path` to locate the active files.");
+            std::process::exit(1);
+        }
+    };
+
+    let Some(provider_name) = config.core.default_provider.as_deref() else {
+        eprintln!("\x1b[1;31m✗\x1b[0m No default provider is selected");
+        eprintln!("Run `pleiades setup`.");
+        std::process::exit(1);
+    };
+    println!("\x1b[1;32m✓\x1b[0m Default provider: {provider_name}");
+    println!(
+        "\x1b[1;32m✓\x1b[0m Default model: {}",
+        config
+            .core
+            .default_model
+            .as_deref()
+            .unwrap_or("provider default")
+    );
+
+    let Some(provider) = config.providers.get(provider_name) else {
+        eprintln!("\x1b[1;31m✗\x1b[0m Provider '{provider_name}' has no configuration");
+        eprintln!("Run `pleiades setup`.");
+        std::process::exit(1);
+    };
+
+    if provider_name == "openai-subscription" {
+        match codex_login_status() {
+            Ok(Some(status)) if status.to_lowercase().contains("chatgpt") => {
+                println!("\x1b[1;32m✓\x1b[0m ChatGPT subscription login is active")
+            }
+            Ok(Some(status)) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m Codex login is not using ChatGPT: {status}");
+                eprintln!("Run `pleiades auth login` to switch authentication methods.");
+                std::process::exit(1);
+            }
+            Ok(None) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m Codex is installed but not signed in");
+                eprintln!("Run `pleiades auth login`.");
+                std::process::exit(1);
+            }
+            Err(error) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+                std::process::exit(1);
+            }
+        }
+    } else if provider.api_key.as_deref().unwrap_or("").is_empty() {
+        eprintln!("\x1b[1;31m✗\x1b[0m Provider '{provider_name}' has no resolved API key");
+        eprintln!("Check its environment variable, then restart your shell.");
+        std::process::exit(1);
+    } else {
+        println!("\x1b[1;32m✓\x1b[0m API credential is available (value hidden)");
+    }
+
+    println!("\nConfiguration looks ready.");
+    println!("For a live request, run `pleiades provider test {provider_name}`.");
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
     let loader = ConfigLoader::with_dirs(config_dir, project_dir);
 
     match cli.command {
+        Some(Commands::Setup { auth, device }) => handle_setup(&loader, auth, device),
+        Some(Commands::Auth(command)) => match command {
+            AuthCommand::Login { device } => handle_auth_login(&loader, device),
+            AuthCommand::Status => handle_auth_status(),
+            AuthCommand::Logout => handle_auth_logout(),
+        },
+        Some(Commands::Doctor) => handle_doctor(&loader),
         Some(Commands::Config(cmd)) => match cmd {
             ConfigCommand::Get { key } => handle_config_get(&loader, &key),
             ConfigCommand::Set { key, value } => handle_config_set(&loader, &key, &value),
@@ -2195,10 +2508,30 @@ fn main() {
                 return;
             }
 
-            println!();
-            println!("Usage: pleiades [OPTIONS] [PROMPT]...");
-            println!();
-            println!("Run 'pleiades --help' for more information.");
+            let config = match loader.load_with_interpolation() {
+                Ok(config) => config,
+                Err(error) => {
+                    eprintln!("Configuration error: {error}");
+                    eprintln!("Run `pleiades setup` to repair configuration.");
+                    std::process::exit(1);
+                }
+            };
+            let configured = config
+                .core
+                .default_provider
+                .as_ref()
+                .is_some_and(|provider| config.providers.contains_key(provider));
+            if !configured {
+                handle_setup(&loader, None, false);
+                println!("\nSetup complete. Run `pleiades` again to start chatting.");
+                return;
+            }
+
+            let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
+            if let Err(error) = runtime.block_on(repl::Repl::new(config).run()) {
+                eprintln!("REPL error: {error}");
+                std::process::exit(1);
+            }
         }
     }
 }

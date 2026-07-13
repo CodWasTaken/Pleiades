@@ -5,6 +5,7 @@
 
 pub mod anthropic;
 pub mod client;
+pub mod codex;
 pub mod openai;
 pub mod openai_compat;
 
@@ -46,6 +47,10 @@ impl ProviderRegistry {
     /// Automatically creates providers for all configured API keys.
     pub fn from_config(config: &Config) -> Self {
         let mut registry = Self::new();
+
+        if config.providers.contains_key("openai-subscription") {
+            registry.register(Box::new(codex::CodexCliProvider::new()));
+        }
 
         let register_builtin = |registry: &mut Self, name: &str, api_key: &str, base_url: &str| {
             if api_key.is_empty() {

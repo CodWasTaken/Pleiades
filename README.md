@@ -13,13 +13,14 @@
 
 ## Overview
 
-Pleiades is a **next-generation terminal AI assistant** that puts you in control. It has native OpenAI and Anthropic adapters plus a generic OpenAI-compatible adapter for services such as OpenRouter, Groq, DeepSeek, and self-hosted endpoints.
+Pleiades is a **next-generation terminal AI assistant** that puts you in control. It supports OpenAI through either usage-based API keys or ChatGPT subscription sign-in delegated to the official Codex CLI, alongside Anthropic and OpenAI-compatible services such as OpenRouter, Groq, DeepSeek, and self-hosted endpoints.
 
 Named after the Seven Sisters star cluster, Pleiades represents a constellation of capabilities working in harmony.
 
 ## Key Features
 
 - **Provider Agnostic** — Use OpenAI, Anthropic, or an OpenAI-compatible service
+- **Two OpenAI Login Modes** — Choose Platform API billing or ChatGPT subscription access through the official Codex CLI
 - **Plugin Architecture** — Install local plugin manifests with pre/post shell hooks
 - **Multi-Engine** — Chat, agent, workflow — choose the right interaction model for each task
 - **Beautiful Terminal** — Markdown rendering, syntax highlighting, status bar, progress indicators
@@ -37,11 +38,11 @@ curl -fsSL https://raw.githubusercontent.com/CodWasTaken/Pleiades/master/install
 # Ensure the default install directory is on PATH
 export PATH="$HOME/.local/bin:$PATH"
 
-# Create configuration
-pleiades config init
-pleiades config set core.default_provider openai
-pleiades config set core.default_model gpt-4o
-pleiades config set providers.openai.api_key '${OPENAI_API_KEY}'
+# Choose ChatGPT subscription sign-in or an API key
+pleiades setup
+
+# Diagnose configuration at any time
+pleiades doctor
 
 # Start a chat
 pleiades
@@ -72,6 +73,9 @@ cargo install pleiades-agent
 pleiades --chat             Start interactive session
 pleiades <prompt>           One-shot prompt
 pleiades repl               Start REPL session
+pleiades setup              Guided provider and authentication setup
+pleiades auth               Sign in, check status, or sign out through Codex
+pleiades doctor             Diagnose configuration and authentication
 pleiades config             Configure settings (get, set, edit, validate, show, path, init, reset)
 pleiades profile            Manage profiles (list, save, load, delete, active)
 pleiades provider           Manage AI providers (list, info, test, remove)
@@ -89,7 +93,8 @@ pleiades --version          Show version
 
 | Provider | Status |
 |----------|--------|
-| OpenAI | ✅ Implemented |
+| OpenAI API key | ✅ Implemented |
+| OpenAI ChatGPT subscription | ✅ Via official Codex CLI |
 | Anthropic | ✅ Implemented |
 | OpenRouter | ✅ Implemented |
 | Groq | ✅ Implemented |
@@ -98,7 +103,7 @@ pleiades --version          Show version
 
 ## Project Status
 
-**18 milestones complete** — Pleiades v1.1.0 is available from crates.io and as cross-platform GitHub release binaries, with a checksummed installer, Homebrew metadata, and AUR metadata.
+**18 milestones complete** — Pleiades v1.1.1 is available from crates.io and as cross-platform GitHub release binaries, with a checksummed installer, Homebrew metadata, and AUR metadata.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
 - [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable

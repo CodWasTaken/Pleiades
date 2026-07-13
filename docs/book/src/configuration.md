@@ -45,3 +45,5 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `agent.auto_edit` | boolean | `false` |
 
 Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.
+
+The special `providers.openai-subscription` entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with `pleiades auth status`. Run `pleiades setup` instead of editing this entry manually.

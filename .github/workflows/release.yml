@@ -87,6 +87,11 @@ jobs:
           )
           version="${GITHUB_REF_NAME#v}"
           for package in "${packages[@]}"; do
+            package_version=$(cargo metadata --no-deps --format-version 1 | jq -r --arg package "$package" '.packages[] | select(.name == $package) | .version')
+            if [ "$package_version" != "$version" ]; then
+              echo "$package is version $package_version, not $version; skipping"
+              continue
+            fi
             if cargo info --registry crates-io "$package@$version" >/dev/null 2>&1; then
               echo "$package@$version is already published; skipping"
               continue
@@ -109,7 +114,7 @@ jobs:
         if: env.CARGO_REGISTRY_TOKEN == ''
         run: |
           echo "CARGO_REGISTRY_TOKEN is not configured."
-          echo "Add it under Settings > Secrets and variables > Actions before publishing v1.1.0."
+          echo "Add it under Settings > Secrets and variables > Actions before publishing this release."
 
   create-release:
     name: Create Release

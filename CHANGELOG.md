@@ -5,6 +5,19 @@ All notable changes to Pleiades will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-07-13
+
+### Added
+
+- Added guided `pleiades setup`, OpenAI subscription `auth`, and configuration `doctor` commands.
+- Added ChatGPT subscription access by delegating authentication and execution to the official Codex CLI without reading its OAuth token cache.
+
+### Fixed
+
+- Preserve OpenAI HTTP 429 details and distinguish exhausted API quota from temporary request throttling.
+- Explain that ChatGPT subscriptions and OpenAI Platform API billing are separate, with actionable recovery commands.
+- Start the interactive REPL when `pleiades` is run without a subcommand after setup.
+
 ## [1.1.0] - 2026-07-13
 
 ### Changed

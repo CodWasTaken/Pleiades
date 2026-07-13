@@ -47,6 +47,11 @@ jobs:
           )
           version="${{ inputs.version }}"
           for package in "${packages[@]}"; do
+            package_version=$(cargo metadata --no-deps --format-version 1 | jq -r --arg package "$package" '.packages[] | select(.name == $package) | .version')
+            if [ "$package_version" != "$version" ]; then
+              echo "$package is version $package_version, not $version; skipping"
+              continue
+            fi
             if cargo info --registry crates-io "$package@$version" >/dev/null 2>&1; then
               echo "$package@$version is already published; skipping"
               continue
