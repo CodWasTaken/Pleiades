@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a28aceeb.js";
+            window.path_to_searchindex_js = "searchindex-563f2ddb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e350ee51.js"></script>
@@ -183,6 +183,15 @@
                         <h1 id="tools-and-permissions"><a class="header" href="#tools-and-permissions">Tools and permissions</a></h1>
 <p>The built-in tools are read, write, edit, bash, glob, grep, diff, search, and fetch. Inspect them with <code>pleiades tool list</code> and <code>pleiades tool info NAME</code>.</p>
 <p>Tools declare read-only, workspace-write, or dangerous permission levels. <code>permissions.always_allow</code> and <code>always_deny</code> provide durable decisions; interactive agent sessions can grant or deny individual calls. Keep dangerous tools behind confirmation in shared projects.</p>
+<h2 id="agent-access-modes"><a class="header" href="#agent-access-modes">Agent access modes</a></h2>
+<p>Interactive sessions support three access modes:</p>
+<ul>
+<li><code>plan</code> keeps the agent read-only.</li>
+<li><code>agent</code> allows changes inside the workspace and is the default.</li>
+<li><code>unrestricted</code> permits access outside the workspace and should be used only in a trusted environment.</li>
+</ul>
+<p>Switch modes with <code>/mode plan</code>, <code>/mode agent</code>, or <code>/mode unrestricted</code>, or launch with <code>--permission-mode MODE</code>.</p>
+<p>With API-key providers, Pleiades runs its built-in tools through the permission system above. With <code>openai-subscription</code>, Pleiades delegates the task to the official Codex CLI and maps these modes to Codex’s read-only, workspace-write, and danger-full-access sandboxes. The workspace is the directory where Pleiades was launched. ChatGPT credentials remain managed by Codex and are never copied into Pleiades.</p>
 
                     </main>
 

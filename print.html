@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a28aceeb.js";
+            window.path_to_searchindex_js = "searchindex-563f2ddb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e350ee51.js"></script>
@@ -202,10 +202,11 @@ cargo build --release --bin pleiades
 <p>The binary is written to <code>target/release/pleiades</code>. Run the guided setup and choose either ChatGPT subscription sign-in or usage-based OpenAI API access:</p>
 <pre><code class="language-console">pleiades setup
 pleiades doctor
-pleiades repl
+pleiades chat
 </code></pre>
 <p>For ChatGPT subscription access, install the official Codex CLI; Pleiades delegates <code>codex login</code> and never reads its token cache. For API access, setup stores <code>${OPENAI_API_KEY}</code> and asks you to export a newly created Platform API key. ChatGPT and API billing are separate.</p>
-<p>Use <code>pleiades --help</code> for the complete command tree. Running <code>pleiades</code> starts the REPL once configured, <code>pleiades "your prompt"</code> runs once, and <code>pleiades repl --session ID</code> resumes a saved session.</p>
+<p>Use <code>pleiades --help</code> for the complete command tree. Running <code>pleiades</code> or <code>pleiades chat</code> starts the autonomous terminal agent once configured, <code>pleiades "your task"</code> runs an autonomous task once, and <code>pleiades chat --session ID</code> resumes a saved session.</p>
+<p>The directory where Pleiades starts is the workspace root. ChatGPT subscription sessions default to <code>agent</code> mode: the official Codex CLI may inspect, create, and edit files and run commands inside that workspace, while its <code>workspace-write</code> sandbox prevents writes elsewhere. Use <code>/mode plan</code> for read-only analysis or start with <code>--permission-mode plan</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cargo-packages"><a class="header" href="#cargo-packages">Cargo packages</a></h1>
 <p>The crates.io names <code>pleiades</code> and <code>pleiades-core</code> are owned by unrelated projects. Pleiades therefore publishes under one collision-free namespace while keeping its user-facing command unchanged.</p>
@@ -290,13 +291,14 @@ pleiades repl
 </div>
 <p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
 <p>The special <code>providers.openai-subscription</code> entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with <code>pleiades auth status</code>. Run <code>pleiades setup</code> instead of editing this entry manually.</p>
+<p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|unrestricted</code> or <code>/mode plan|agent|unrestricted</code>. <code>agent</code> is the default and maps to Codex’s workspace-write sandbox. <code>unrestricted</code> removes workspace isolation and should only be used in an already isolated environment.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="providers-and-models"><a class="header" href="#providers-and-models">Providers and models</a></h1>
 <p>Pleiades implements native OpenAI and Anthropic adapters plus an OpenAI-compatible adapter used by OpenRouter, Groq, DeepSeek, local servers, and other compatible endpoints.</p>
 <h2 id="openai-authentication"><a class="header" href="#openai-authentication">OpenAI authentication</a></h2>
 <p>Run <code>pleiades setup</code> to choose one of two supported modes:</p>
 <ul>
-<li><strong>ChatGPT subscription</strong>: <code>pleiades auth login</code> delegates the browser or device-code flow to the official Codex CLI. Pleiades invokes <code>codex exec</code> in an ephemeral, read-only mode and does not read, copy, or refresh the Codex credential cache. This provider is named <code>openai-subscription</code>.</li>
+<li><strong>ChatGPT subscription</strong>: <code>pleiades auth login</code> delegates the browser or device-code flow to the official Codex CLI. Pleiades invokes <code>codex exec</code> ephemerally and does not read, copy, or refresh the Codex credential cache. This provider is named <code>openai-subscription</code>.</li>
 <li><strong>Platform API key</strong>: Pleiades calls the OpenAI API directly with <code>${OPENAI_API_KEY}</code>. API usage has separate usage-based billing and is not funded by a ChatGPT Plus, Pro, Business, or Enterprise subscription.</li>
 </ul>
 <p>See OpenAI’s official <a href="https://developers.openai.com/codex/auth/">Codex authentication guide</a> and <a href="https://help.openai.com/en/articles/9039756-billing-settings-in-chatgpt-vs-platform">ChatGPT versus Platform billing explanation</a>.</p>
@@ -307,12 +309,21 @@ pleiades auth status
 pleiades provider test openai-subscription
 pleiades doctor
 </code></pre>
-<p>Subscription mode intentionally does not import OAuth tokens into Pleiades. It currently returns Codex’s final response rather than token-by-token streaming and delegates model selection to Codex when <code>codex-default</code> is configured.</p>
+<p>Subscription mode intentionally does not import OAuth tokens into Pleiades. Codex performs autonomous agent work in the launch directory and streams command and file activity back to the Pleiades interface. The default <code>workspace-write</code> sandbox permits writes only within that workspace; use <code>/mode plan</code> for read-only work. Model selection remains delegated to Codex when <code>codex-default</code> is configured.</p>
 <p>Use <code>provider list</code>, <code>provider info NAME</code>, and <code>provider test NAME</code>. Model discovery and aliases are managed with <code>model discover</code>, <code>model list</code>, <code>model alias ALIAS MODEL</code>, and <code>model set-default MODEL</code>. Global <code>--provider</code> and <code>--model</code> flags override configuration for a command.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tools-and-permissions"><a class="header" href="#tools-and-permissions">Tools and permissions</a></h1>
 <p>The built-in tools are read, write, edit, bash, glob, grep, diff, search, and fetch. Inspect them with <code>pleiades tool list</code> and <code>pleiades tool info NAME</code>.</p>
 <p>Tools declare read-only, workspace-write, or dangerous permission levels. <code>permissions.always_allow</code> and <code>always_deny</code> provide durable decisions; interactive agent sessions can grant or deny individual calls. Keep dangerous tools behind confirmation in shared projects.</p>
+<h2 id="agent-access-modes"><a class="header" href="#agent-access-modes">Agent access modes</a></h2>
+<p>Interactive sessions support three access modes:</p>
+<ul>
+<li><code>plan</code> keeps the agent read-only.</li>
+<li><code>agent</code> allows changes inside the workspace and is the default.</li>
+<li><code>unrestricted</code> permits access outside the workspace and should be used only in a trusted environment.</li>
+</ul>
+<p>Switch modes with <code>/mode plan</code>, <code>/mode agent</code>, or <code>/mode unrestricted</code>, or launch with <code>--permission-mode MODE</code>.</p>
+<p>With API-key providers, Pleiades runs its built-in tools through the permission system above. With <code>openai-subscription</code>, Pleiades delegates the task to the official Codex CLI and maps these modes to Codex’s read-only, workspace-write, and danger-full-access sandboxes. The workspace is the directory where Pleiades was launched. ChatGPT credentials remain managed by Codex and are never copied into Pleiades.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="plugins-and-hooks"><a class="header" href="#plugins-and-hooks">Plugins and hooks</a></h1>
 <p>Plugins are directories containing <code>plugin.json</code>. Install a local plugin with <code>pleiades plugin install PATH</code>, then use <code>plugin list</code>, <code>enable</code>, <code>disable</code>, and <code>uninstall</code>.</p>

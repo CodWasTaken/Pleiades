@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a28aceeb.js";
+            window.path_to_searchindex_js = "searchindex-563f2ddb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e350ee51.js"></script>
@@ -232,6 +232,7 @@
 </div>
 <p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
 <p>The special <code>providers.openai-subscription</code> entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with <code>pleiades auth status</code>. Run <code>pleiades setup</code> instead of editing this entry manually.</p>
+<p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|unrestricted</code> or <code>/mode plan|agent|unrestricted</code>. <code>agent</code> is the default and maps to Codex’s workspace-write sandbox. <code>unrestricted</code> removes workspace isolation and should only be used in an already isolated environment.</p>
 
                     </main>
 
