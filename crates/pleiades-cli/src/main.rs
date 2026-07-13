@@ -347,7 +347,7 @@ enum PromptCommand {
         /// Prompt name
         name: String,
         /// Variables as key=value
-        #[arg(short, long = "var", num_args = 0..)]
+        #[arg(long = "var", num_args = 0..)]
         vars: Vec<String>,
     },
 
