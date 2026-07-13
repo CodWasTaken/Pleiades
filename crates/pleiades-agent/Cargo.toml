@@ -4,7 +4,7 @@ path = "src/main.rs"
 
 [package]
 name = "pleiades-agent"
-version = "1.2.0"
+version = "2.0.0"
 edition = "2024"
 description = "Pleiades CLI - Next-generation terminal AI assistant"
 authors = ["Nataniel"]
@@ -14,17 +14,17 @@ keywords = ["ai", "cli", "terminal", "assistant", "llm"]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
-pleiades-agent-core = { path = "../pleiades-agent-core", version = "1.2.0" }
-pleiades-agent-config = { path = "../pleiades-agent-config", version = "1.1.0" }
-pleiades-agent-engine = { path = "../pleiades-agent-engine", version = "1.1.0" }
-pleiades-agent-tui = { path = "../pleiades-agent-tui", version = "1.2.0" }
-pleiades-agent-tools = { path = "../pleiades-agent-tools", version = "1.1.0" }
-pleiades-agent-providers = { path = "../pleiades-agent-providers", version = "1.2.0" }
-pleiades-agent-plugins = { path = "../pleiades-agent-plugins", version = "1.1.0" }
-pleiades-agent-memory = { path = "../pleiades-agent-memory", version = "1.1.0" }
-pleiades-agent-workflow = { path = "../pleiades-agent-workflow", version = "1.1.0" }
-pleiades-agent-git = { path = "../pleiades-agent-git", version = "1.1.0" }
-pleiades-agent-prompts = { path = "../pleiades-agent-prompts", version = "1.1.0" }
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
+pleiades-agent-config = { path = "../pleiades-agent-config", version = "2.0.0" }
+pleiades-agent-engine = { path = "../pleiades-agent-engine", version = "2.0.0" }
+pleiades-agent-tui = { path = "../pleiades-agent-tui", version = "2.0.0" }
+pleiades-agent-tools = { path = "../pleiades-agent-tools", version = "2.0.0" }
+pleiades-agent-providers = { path = "../pleiades-agent-providers", version = "2.0.0" }
+pleiades-agent-plugins = { path = "../pleiades-agent-plugins", version = "2.0.0" }
+pleiades-agent-memory = { path = "../pleiades-agent-memory", version = "2.0.0" }
+pleiades-agent-workflow = { path = "../pleiades-agent-workflow", version = "2.0.0" }
+pleiades-agent-git = { path = "../pleiades-agent-git", version = "2.0.0" }
+pleiades-agent-prompts = { path = "../pleiades-agent-prompts", version = "2.0.0" }
 
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }

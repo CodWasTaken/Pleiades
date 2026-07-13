@@ -1,6 +1,6 @@
 [package]
 name = "pleiades-agent-config"
-version = "1.1.0"
+version = "2.0.0"
 edition = "2024"
 description = "Pleiades multi-level configuration system"
 authors = ["Nataniel"]
@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/CodWasTaken/Pleiades"
 
 [dependencies]
-pleiades-agent-core = { path = "../pleiades-agent-core", version = "1.1.0" }
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
