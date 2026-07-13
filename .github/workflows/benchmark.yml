@@ -24,12 +24,8 @@ jobs:
         run: cargo install cargo-criterion --locked
       - name: Run benchmarks
         run: cargo criterion --workspace --all-features
-      - name: Store benchmark results
-        uses: benchmark-action/github-action-benchmark@v1
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
         with:
-          tool: 'cargo'
-          output-file-path: target/criterion/benchmark_results.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-          alert-threshold: '200%'
-          comment-on-alert: true
+          name: criterion-results
+          path: target/criterion

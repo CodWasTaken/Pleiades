@@ -16,7 +16,9 @@ fn top_level_and_workflow_help_snapshots() {
     let home = tempfile::tempdir().unwrap();
     let output = command(home.path()).arg("--help").output().unwrap();
     assert!(output.status.success());
-    let text = String::from_utf8(output.stdout).unwrap();
+    let text = String::from_utf8(output.stdout)
+        .unwrap()
+        .replace("pleiades.exe", "pleiades");
     assert!(text.contains("Pleiades is a terminal AI assistant"));
     assert!(text.contains("workflow"));
     assert!(text.contains("git"));
@@ -25,7 +27,9 @@ fn top_level_and_workflow_help_snapshots() {
         .args(["workflow", "--help"])
         .output()
         .unwrap();
-    let text = String::from_utf8(output.stdout).unwrap();
+    let text = String::from_utf8(output.stdout)
+        .unwrap()
+        .replace("pleiades.exe", "pleiades");
     insta::assert_snapshot!(text, @r###"
 Manage and run workflows
 
