@@ -892,8 +892,8 @@ mod tests {
     #[test]
     fn streamed_message_is_reconciled_with_completed_message() {
         let mut state = state();
-        state.apply_agent(AgentEvent::TextDelta("hel".into()));
-        state.apply_agent(AgentEvent::TextDelta("lo".into()));
+        state.apply_agent(AgentEvent::TextDelta("he".into()));
+        state.apply_agent(AgentEvent::TextDelta("llo".into()));
         state.apply_agent(AgentEvent::AssistantMessageCompleted("hello".into()));
         assert_eq!(state.messages.len(), 1);
         assert_eq!(state.messages[0].content, "hello");
