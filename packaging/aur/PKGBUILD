@@ -7,7 +7,7 @@ url='https://github.com/CodWasTaken/Pleiades'
 license=('MIT')
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('2879adb71e32a37e35a3b05f70798b201191f8feba2c7c21d873d7cffc7f89a7')
 
 build() {
   cd "Pleiades-$pkgver"
