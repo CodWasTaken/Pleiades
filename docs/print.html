@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9dc83553.js";
+            window.path_to_searchindex_js = "searchindex-36f51025.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d783fdbd.js"></script>
+        <script src="toc-e350ee51.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -189,8 +189,9 @@
 export PATH="$HOME/.local/bin:$PATH"
 </code></pre>
 <p>The crates.io package named <code>pleiades</code> is an unrelated project. Do not use <code>cargo install pleiades</code>. A Rust source install of this repository is available with:</p>
-<pre><code class="language-console">cargo install --git https://github.com/CodWasTaken/Pleiades --tag v1.0.1 pleiades-cli
+<pre><code class="language-console">cargo install --git https://github.com/CodWasTaken/Pleiades pleiades-agent
 </code></pre>
+<p>The published package family uses the <code>pleiades-agent</code> namespace because the unqualified <code>pleiades</code> and <code>pleiades-core</code> names belong to unrelated crates. The package <code>pleiades-agent</code> installs an executable named <code>pleiades</code>. Once v1.1.0 is published to crates.io, use <code>cargo install pleiades-agent</code>.</p>
 <h2 id="build-a-checkout"><a class="header" href="#build-a-checkout">Build a checkout</a></h2>
 <pre><code class="language-console">git clone https://github.com/CodWasTaken/Pleiades.git
 cd Pleiades
@@ -205,6 +206,37 @@ pleiades config validate
 pleiades repl
 </code></pre>
 <p>Set the referenced variable in your shell, for example <code>export OPENAI_API_KEY="..."</code>. Use <code>pleiades --help</code> for the complete command tree. <code>pleiades --chat</code> starts a chat session, <code>pleiades "your prompt"</code> runs once, and <code>pleiades repl --session ID</code> resumes a saved session.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cargo-packages"><a class="header" href="#cargo-packages">Cargo packages</a></h1>
+<p>The crates.io names <code>pleiades</code> and <code>pleiades-core</code> are owned by unrelated projects. Pleiades therefore publishes under one collision-free namespace while keeping its user-facing command unchanged.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Package</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pleiades-agent</code></td><td>Installable CLI package; provides the <code>pleiades</code> executable</td></tr>
+<tr><td><code>pleiades-agent-core</code></td><td>Domain traits and types</td></tr>
+<tr><td><code>pleiades-agent-config</code></td><td>Configuration loading and validation</td></tr>
+<tr><td><code>pleiades-agent-engine</code></td><td>Chat and agent orchestration</td></tr>
+<tr><td><code>pleiades-agent-providers</code></td><td>Provider adapters</td></tr>
+<tr><td><code>pleiades-agent-tools</code></td><td>Built-in tools</td></tr>
+<tr><td><code>pleiades-agent-tui</code></td><td>Terminal UI</td></tr>
+<tr><td><code>pleiades-agent-plugins</code></td><td>Plugin manifests and shell hooks</td></tr>
+<tr><td><code>pleiades-agent-memory</code></td><td>Persistent memory tiers</td></tr>
+<tr><td><code>pleiades-agent-prompts</code></td><td>Prompt templates and library</td></tr>
+<tr><td><code>pleiades-agent-workflow</code></td><td>Workflow definitions and executor</td></tr>
+<tr><td><code>pleiades-agent-git</code></td><td>AI-assisted Git operations</td></tr>
+<tr><td><code>pleiades-agent-sdk</code></td><td>Re-exported extension API</td></tr>
+</tbody>
+</table>
+</div>
+<p>Package names use hyphens; Rust import paths use underscores. For example:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use pleiades_agent_core::{Provider, Tool};
+<span class="boring">}</span></code></pre>
+<p>For end users, <code>cargo install pleiades-agent</code> installs a binary named <code>pleiades</code>. Workspace packages are versioned together and published in dependency order by the release workflow.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="configuration-reference"><a class="header" href="#configuration-reference">Configuration reference</a></h1>
 <p>Configuration is merged in this order: built-in defaults, global configuration, project configuration, environment variables, then CLI flags. Global files live under <code>~/.config/pleiades</code>; project files live under <code>.pleiades</code>. TOML, JSON, and YAML are supported. <code>${NAME}</code> interpolates an environment variable.</p>
