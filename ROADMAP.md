@@ -26,7 +26,7 @@
 | M17 | Optimization | ✅ **Complete** |
 | M18 | Release | ✅ **Complete** |
 
-**Status**: All 18 milestones are complete. The collision-free `pleiades-agent` v1.1.0 package family and cross-platform release artifacts are published.
+**Status**: All 18 original milestones are complete. Pleiades v2.0 evolves the terminal milestone into a full-screen event-driven Ratatui workspace and hardens the agent runtime, cancellation, permissions, and workspace boundary.
 
 **Milestone commits**:
 - M1: 5fcf776 — Initial bootstrap (workspace, crate structure)
@@ -47,9 +47,11 @@
 - M16: `03306bc` — mdBook, user guide, configuration reference, and docs deployment
 - M17: `bf5d46a` — Release optimization and performance baselines
 - M18: `64df221` — v1.0 release automation and platform packaging
+- Live workspace: `3d9495c` — asynchronous Ratatui shell and typed runtime channels
+- Safe autonomy: `3724f90` — permission modals, cancellation tests, path confinement, searchable overlays
 
 **GitHub**: https://github.com/CodWasTaken/Pleiades
 
 ## Release availability
 
-Pleiades v1.1.0 is published on crates.io under the `pleiades-agent` package family. The GitHub release includes five platform binaries and checksums; installer, Homebrew, and AUR metadata are also available.
+Pleiades is published on crates.io under the `pleiades-agent` package family. GitHub releases include five platform binaries and checksums; installer, Homebrew, and AUR metadata are also available.

@@ -89,7 +89,7 @@
 | wasmtime | WASM runtime | Medium | wasmer |
 | rusqlite | SQLite for memory | Low | sled, redb |
 | notify | File watching | Medium | - |
-| rustyline | Line editing | Low | - |
+| tui-textarea | Full-screen multiline editing | Medium | Snapshot, resize, paste, and input-state tests |
 | criterion | Benchmarking | Low | - |
 | insta | Snapshot testing | Low | - |
 | proptest | Property testing | Low | - |

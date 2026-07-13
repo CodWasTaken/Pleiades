@@ -4,8 +4,9 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.0.x   | ✅ |
-| < 1.0   | ❌ (Development) |
+| 2.0.x   | ✅ |
+| 1.x     | Security fixes only |
+| < 1.0   | ❌ |
 
 ## Reporting a Vulnerability
 
@@ -47,14 +48,13 @@ We take security seriously. If you discover a security vulnerability in Pleiades
 - Only install plugins from trusted sources
 
 ### Telemetry
-- Pleiades collects **no telemetry** by default
-- Any telemetry is opt-in and clearly documented
-- No data is sent without explicit user consent
+- Pleiades contains no product telemetry collection
+- Provider requests necessarily send the selected conversation context to the configured provider
 
 ## Security Architecture
 
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md#security-architecture) for detailed security design including:
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md#tool-and-permission-boundary) for detailed security design including:
 - Permission levels (ReadOnly, WorkspaceWrite, Dangerous)
-- Approval modes (Auto, Ask, Deny, Plan)
+- Plan, Agent, and Unrestricted modes plus once/session modal decisions
 - Environment-variable secret interpolation and masked configuration output
-- Tool permission checks and timeouts
+- Canonical workspace confinement, process isolation, permission checks, cancellation, and timeouts

@@ -1,336 +1,152 @@
 # Pleiades Architecture
 
-## System Architecture Overview
+Pleiades is a native Rust 2024 autonomous coding agent. Its architecture separates terminal rendering, agent orchestration, provider protocols, tools, and domain types so that no provider or frontend owns the whole product.
 
-Pleiades follows a clean hexagonal architecture (ports and adapters) pattern with event-driven communication between subsystems.
+## System map
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   CLI / TUI Layer                    │
-│  ┌─────────┐  ┌─────────┐  ┌────────┐  ┌─────────┐ │
-│  │  Clap   │  │ Ratatui │  │ Stdout │  │  JSON   │ │
-│  │ Parser  │  │  TUI    │  │ Output │  │  Output │ │
-│  └────┬────┘  └────┬────┘  └────┬───┘  └────┬────┘ │
-└───────┼────────────┼─────────────┼────────────┼──────┘
-        │            │             │            │
-┌───────┴────────────┴─────────────┴────────────┴──────┐
-│                   Application Layer                   │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌────────┐ │
-│  │  Config  │  │  Engine  │  │ Memory │  │ Plugin │ │
-│  │  System  │  │          │  │ System │  │ Manager│ │
-│  └──────────┘  └────┬─────┘  └────────┘  └────────┘ │
-│                     │                                │
-│  ┌──────────┐  ┌────┴─────┐  ┌────────┐  ┌────────┐ │
-│  │  Chat    │  │  Agent   │  │  Tool  │  │Workflow│ │
-│  │  Engine  │  │  Engine  │  │ System │  │ Engine │ │
-│  └──────────┘  └──────────┘  └────────┘  └────────┘ │
-└───────┬───────────────────────────────────────────────┘
-        │
-┌───────┴───────────────────────────────────────────────┐
-│                   Domain / Core Layer                  │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌──────────┐│
-│  │ Provider │  │  Model   │  │Convers-│  │  Prompt  ││
-│  │  Trait   │  │ Registry │  │ ation  │  │  System  ││
-│  └──────────┘  └──────────┘  └────────┘  └──────────┘│
-└───────┬───────────────────────────────────────────────┘
-        │
-┌───────┴───────────────────────────────────────────────┐
-│                 Infrastructure Layer                   │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌──────────┐│
-│  │  HTTP    │  │  File    │  │Process │  │  Crypto  ││
-│  │  Client  │  │  System  │  │ Exec   │  │          ││
-│  └──────────┘  └──────────┘  └────────┘  └──────────┘│
-└───────────────────────────────────────────────────────┘
+```text
+┌──────────────────────── Full-screen terminal ─────────────────────────┐
+│ Crossterm EventStream -> reducer -> AppState -> Ratatui widgets       │
+│ composer · conversation · activity · overlays · status                │
+└──────────────────────────────┬─────────────────────────────────────────┘
+                               │ bounded AgentCommand / AgentEvent channels
+┌──────────────────────────────▼─────────────────────────────────────────┐
+│ AgentRuntime actor                                                     │
+│ task queue · cancellation · permissions · sessions · normalized events│
+└──────────────┬───────────────────────────────┬─────────────────────────┘
+               │                               │
+┌──────────────▼──────────────┐  ┌────────────▼─────────────────────────┐
+│ Provider ports             │  │ Tool ports                           │
+│ OpenAI · Anthropic         │  │ read · write · edit · bash           │
+│ compatible endpoints      │  │ glob · grep · diff · search · fetch  │
+│ official Codex delegation │  │ canonical workspace + process sandbox│
+└──────────────┬──────────────┘  └────────────┬─────────────────────────┘
+               └──────────────────┬────────────┘
+                                  ▼
+                   pleiades-agent-core domain types
 ```
 
-## Module Architecture
+## Workspace crates
 
-### Core Domain Layer
+| Crate | Responsibility |
+|---|---|
+| `pleiades-agent` | Clap command tree, setup/auth/doctor, one-shot commands, binary packaging |
+| `pleiades-agent-core` | Provider and tool traits, conversations, models, normalized events and errors |
+| `pleiades-agent-config` | Defaults, global/project files, profiles, environment interpolation, validation |
+| `pleiades-agent-engine` | Provider/tool orchestration, autonomous runtime, permissions, cancellation, queue, memory, sessions |
+| `pleiades-agent-tui` | Ratatui app, reducer, native Markdown, textarea composer, overlays, terminal lifecycle, design tokens |
+| `pleiades-agent-providers` | OpenAI, Anthropic, OpenAI-compatible, and official Codex CLI adapters |
+| `pleiades-agent-tools` | Nine built-in tools, workspace path confinement, process isolation |
+| `pleiades-agent-plugins` | Manifest lifecycle and pre/post shell hooks |
+| `pleiades-agent-memory` | Session, project, and user memory stores |
+| `pleiades-agent-prompts` | Templates and professional coding-agent protocol |
+| `pleiades-agent-workflow` | Reusable sequential, parallel, conditional, retryable workflows |
+| `pleiades-agent-git` | Commit, review, summary, and diff generation |
+| `pleiades-agent-sdk` | Stable re-exports for integrations |
 
-The innermost layer contains pure domain logic with zero external dependencies.
+Dependencies point inward toward core domain traits. The terminal crate depends on the engine command/event interface, not provider implementations or direct tools.
 
-#### Provider Trait
-```rust
-#[async_trait]
-pub trait Provider: Send + Sync {
-    fn name(&self) -> &str;
-    fn display_name(&self) -> &str;
-    fn supports_streaming(&self) -> bool;
-    fn supports_tools(&self) -> bool;
-    fn supports_vision(&self) -> bool;
-    fn default_model(&self) -> &str;
-    fn available_models(&self) -> Vec<ModelInfo>;
-    async fn chat(&self, request: ChatRequest, config: &Config) -> Result<ChatResponse>;
-    async fn chat_stream(&self, request: ChatRequest, config: &Config) -> Result<ChatStream>;
-    async fn embed(&self, input: Vec<String>, model: &str) -> Result<EmbeddingResponse>;
+## Live application loop
+
+`TuiApp::run` owns a panic-safe terminal guard and continuously selects independent event sources:
+
+```rust,ignore
+loop {
+    tokio::select! {
+        Some(event) = terminal_events.next() => reduce_terminal(event),
+        Some(event) = agent_events.recv() => app.apply_agent(event),
+        Some(files) = background_files.recv() => app.file_options = files,
+        _ = render_tick.tick() => {}
+    }
+
+    terminal.draw(|frame| ui::render(frame, &mut app))?;
 }
 ```
 
-#### Model Registry
-```rust
-pub struct ModelRegistry {
-    models: HashMap<String, ModelEntry>,
-    aliases: HashMap<String, String>,
-}
+The real implementation handles input errors, shutdown effects, paste, mouse, and resize events. The important invariant is that model streams and tools never occupy the terminal task. The TUI contains no provider construction, tool execution, or direct stream printing.
 
-pub struct ModelEntry {
-    pub id: String,
-    pub provider: String,
-    pub capabilities: ModelCapabilities,
-    pub context_window: usize,
-    pub max_output_tokens: usize,
-    pub pricing: Pricing,
-}
-```
+### State and effects
 
-#### Conversation
-```rust
-pub struct Conversation {
-    pub id: String,
-    pub messages: Vec<Message>,
-    pub metadata: ConversationMetadata,
-    pub config: ConversationConfig,
-}
+Terminal actions update `AppState` and may return an `Effect::Command(AgentCommand)`. Agent events update transcript, activity, permissions, usage, Git state, diff, queue count, task timing, or selected provider/model. Every visible operation can therefore be recorded, collapsed, filtered, tested, and redrawn.
 
-pub enum Message {
-    System { content: String },
-    User { content: ContentBlock },
-    Assistant { content: ContentBlock, reasoning: Option<String> },
-    Tool { name: String, input: serde_json::Value, result: String },
-}
+The application keeps five persistent regions and renders permission, palette, provider/model, file, session, help, configuration, tool detail/output, diff, and diagnostics overlays above them.
 
-pub enum ContentBlock {
-    Text(String),
-    Image { mime_type: String, data: Vec<u8> },
-    ToolCall { id: String, name: String, input: serde_json::Value },
-    ToolResult { id: String, content: String },
-}
-```
+## Autonomous runtime
 
-### Application Layer
+`AgentRuntime` is a long-lived actor owning the domain conversation and configured `Engine`. It accepts:
 
-The application layer orchestrates domain objects and coordinates workflows.
+- task submissions and queued follow-ups;
+- cancellation;
+- four-way permission decisions;
+- Plan, Agent, and Unrestricted mode changes;
+- provider/model changes;
+- session load/save/clear;
+- shutdown.
 
-#### Engine
-The central coordinator that ties together providers, tools, and conversation management.
-- Processes user input
-- Routes to appropriate handler (chat, command, tool)
-- Manages conversation lifecycle
-- Coordinates streaming and rendering
+Each active task owns a `CancellationToken` and a permission-response channel. Provider streaming and tool waits are wrapped in `tokio::select!` with that token. A mode change cancels work running under the prior security boundary before rebuilding the configured engine.
 
-#### Config System
-Multi-level configuration with layering:
-1. Defaults (hardcoded safe defaults)
-2. Global config (`~/.config/pleiades/config.toml`)
-3. Project config (`./.pleiades/config.toml`)
-4. Environment variables (`PLEIADES_*`)
-5. CLI flags (highest priority)
+### Typed activity
 
-#### Tool System
-Interface-driven tool architecture:
-```rust
-#[async_trait]
-pub trait Tool: Send + Sync {
-    fn name(&self) -> &str;
-    fn description(&self) -> &str;
-    fn input_schema(&self) -> serde_json::Value;
-    fn is_readonly(&self) -> bool;
-    fn is_concurrency_safe(&self) -> bool;
-    fn permission_level(&self) -> PermissionLevel;
-    async fn execute(&self, input: serde_json::Value, ctx: &ToolContext) -> Result<ToolResult>;
-}
-```
+Provider and runtime activity use `AgentActivityKind` and `AgentActivityStatus`, not display strings. Kinds include inspecting, searching, reading, planning, editing, writing, executing, testing, reviewing, and tool. Statuses include queued, running, waiting for approval, completed, failed, and cancelled.
 
-#### Memory System
-Multi-tier memory architecture:
-1. **Working Memory**: Current conversation context
-2. **Session Memory**: Recent conversations within a session
-3. **Project Memory**: Persistent knowledge about the current project
-4. **User Memory**: Long-term user preferences and patterns
+The Codex adapter maps official JSON events to these types. API providers return tool calls which the runtime wraps with the same lifecycle.
 
-#### Plugin Manager
-Manifest and shell-hook plugin system:
-- Plugin manifest with versioning and dependencies
-- PreToolUse, PostToolUse, and PostToolUseFailure hooks
-- Lifecycle management (install, remove, enable, disable)
+## Provider boundary
 
-Hooks are normal child processes and are not sandboxed. WASM execution remains a possible future extension, not a current security boundary.
+The `Provider` trait normalizes complete chat, streaming chat, model discovery, capabilities, usage, errors, and optional embeddings. A frontend never branches on provider JSON.
 
-### Infrastructure Layer
+There are two autonomous execution paths:
 
-#### HTTP Client
-Generic HTTP client with:
-- Retry with exponential backoff
-- Connection pooling
-- Timeout management
-- Proxy support
-- Rate limiting
+1. **Pleiades tool runtime** — OpenAI API, Anthropic, and compatible providers emit tool calls. Pleiades applies permissions, executes tools, captures results, and continues the loop.
+2. **Official Codex delegation** — `openai-subscription` calls the installed Codex CLI. Authentication remains in Codex's credential store. Pleiades receives normalized activity/text/usage events and maps its mode to Codex's sandbox.
 
-#### File System
-Safe file operations with:
-- Path traversal protection
-- Binary file detection
-- Large file handling
-- Encoding detection
+Because Codex owns individual calls in path 2, Pleiades permission modals cannot interpose on each delegated command. The selected Codex sandbox is the enforcement boundary.
 
-#### Process Execution
-Tool and hook process execution:
-- Configurable tool timeout
-- Explicit working directory
-- Permission checks for built-in tools
-- Structured JSON hook input
+## Tool and permission boundary
 
-## Data Flow
+Tools declare `ReadOnly`, `WorkspaceWrite`, or `Dangerous`. The runtime combines that level with:
 
-### Chat Flow
-```
-User Input
-  → CLI Parser (clap)
-  → Config Resolution
-  → Engine.process_input()
-      → If command: route to command handler
-      → If chat: 
-          → Conversation.add_message()
-          → Provider.chat_stream()
-          → Stream response
-              → Render tokens (TUI/Stdout)
-              → Handle tool calls
-                  → Permission check
-                  → Tool.execute()
-                  → Conversation.add_tool_result()
-                  → Continue or return
-```
+- active mode;
+- durable `always_allow` / `always_deny` configuration;
+- allow/deny decisions stored for the current session;
+- a structured modal request for unresolved sensitive calls.
 
-### Tool Execution Flow
-```
-LLM decides to call tool
-  → Tool call extracted from stream
-  → Permission check (mode + rules)
-      → If denied: return error message
-      → If ask: prompt user for approval
-  → Execute tool with timeout
-  → Process result (truncation, summarization)
-  → Return result to LLM
-  → LLM continues generation
-```
+The modal includes operation, target, reason, risk, and the four once/session decisions. Plan mode rejects mutation before a prompt. No active full-screen session reads approval from stdin.
 
-### Plugin Loading Flow
-```
-Plugin directory scan
-  → Read manifest (plugin.json)
-  → Validate version compatibility
-  → Register configured shell hooks
-  → Plugin is active
-```
+### Filesystem confinement
 
-## Event System
+Filesystem tools resolve relative paths against the canonical workspace. Existing targets are canonicalized to detect symlink escapes. Missing write targets resolve their nearest existing ancestor so a symlinked parent cannot escape. Absolute paths and parent traversal outside the workspace are rejected.
 
-```rust
-pub enum Event {
-    MessageAdded { message: Message },
-    ToolCalled { tool: String, input: Value },
-    ToolCompleted { tool: String, result: Result<ToolResult> },
-    TokenStreamed { token: String },
-    Error { error: Error },
-    ConfigChanged { key: String, old: Option<Value>, new: Value },
-    PluginLoaded { name: String, version: String },
-    PluginUnloaded { name: String },
-    SessionStarted { id: String },
-    SessionEnded { id: String },
-}
-```
+### Command isolation
 
-## Configuration File Format
+Agent-mode API-provider commands execute with workspace-write process isolation:
 
-### Global Config (`~/.config/pleiades/config.toml`)
-```toml
-[core]
-default_provider = "anthropic"
-default_model = "claude-sonnet-4"
-theme = "catppuccin-mocha"
-verbose = false
+- Linux: Bubblewrap, read-only root plus a writable workspace bind;
+- macOS: `sandbox-exec`, denying writes outside the workspace and temporary directory;
+- unsupported platform/isolation: refuse the call.
 
-[providers.anthropic]
-api_key = "${ANTHROPIC_API_KEY}"  # Environment variable reference
-base_url = "https://api.anthropic.com"
+Unrestricted mode uses the ordinary shell only after explicit selection. Child processes are killed when the future is dropped or the configured timeout expires.
 
-[providers.openai]
-api_key = "${OPENAI_API_KEY}"
-base_url = "https://api.openai.com/v1"
+## Rendering and terminal lifecycle
 
-[models]
-default = "claude-sonnet-4"
-aliases.opus = "claude-opus-4"
-aliases.gpt4 = "gpt-4o"
+The `seven-sisters` design system contains typed colors, state styles, borders, diff colors, and Unicode/ASCII symbols. Native Markdown rendering produces Ratatui `Line` and `Span` values rather than ANSI strings, enabling wrapping and safe redraws.
 
-[plugins]
-enabled = ["git-workflow", "web-search"]
-path = ["~/.config/pleiades/plugins", "./.pleiades/plugins"]
+Transcript messages, activities, tool output, and diffs are bounded at UTF-8 boundaries. Only a moving conversation window is converted into widgets each frame. Workspace file discovery runs off the terminal task.
 
-[permissions]
-mode = "default"  # allow, ask, deny
-always_allow = ["read", "glob", "grep"]
-always_deny = ["rm -rf /"]
-```
+`TerminalGuard` enables raw mode, alternate screen, mouse capture, and bracketed paste. `Drop` and the installed panic hook restore every capability and cursor visibility. Ctrl+C cancels active work; Ctrl+Q performs runtime shutdown before restoration.
 
-## Directory Structure
+## Persistence and evidence
 
-```
-~/.config/pleiades/
-├── config.toml           # Global configuration
-├── profiles/             # Named configuration profiles
-│   ├── default.toml
-│   └── work.toml
-├── plugins/              # Installed plugins
-│   ├── git-workflow/
-│   └── web-search/
-├── themes/               # Custom themes
-│   └── my-theme.toml
-├── sessions/             # Session storage
-│   └── *.jsonl
-└── memory/               # Long-term memory
-    ├── vectors.db
-    └── summaries.db
+Sessions persist domain messages, not rendered terminal text. The runtime saves after tool iterations, completion, cancellation, explicit save, and shutdown. Git status is refreshed around tasks; the current diff is captured for the review overlay when a task completes.
 
-.pleiades/                # Project-local config (in repo)
-├── config.toml
-└── plugins/
-```
+The professional system prompt requires repository inspection, a focused plan for substantial work, real validation, final diff review, and an evidence-based completion report. It explicitly prohibits claiming an unobserved check passed.
 
-## Security Architecture
+## Verification strategy
 
-### Permission Levels
-```rust
-pub enum PermissionLevel {
-    ReadOnly,       // Safe read operations
-    WorkspaceWrite, // Write within project directory
-    Dangerous,      // Shell execution, network, etc.
-}
-```
-
-### Approval Modes
-```rust
-pub enum ApprovalMode {
-    Auto,    // Auto-approve allowed operations
-    Ask,     // Always ask before dangerous operations
-    Deny,    // Deny all dangerous operations
-    Plan,    // Plan mode - no execution
-}
-```
-
-### Credential Storage
-- API keys stored in config with env var references
-- Optional OS keyring integration
-- Encrypted at rest via system keychain
-- Never logged or exposed in error messages
-
-## Performance Targets
-
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Cold start | < 100ms | Time from command to ready |
-| First token | < 50ms | Time from request to first streamed token |
-| Memory usage | < 50MB idle | RSS after startup |
-| Plugin load | < 10ms per plugin | Time to validate and register |
-| Config parse | < 5ms | Time to load and merge all config levels |
-| Tool execution | < 100ms overhead | Time beyond the actual tool operation |
+- deterministic mock-provider/tool tests for approvals, Plan denial, cancellation, mode changes, and queued follow-ups;
+- path traversal and symlink-boundary tests;
+- Ratatui shell snapshots and resize tests;
+- huge UTF-8 stream bounds;
+- CLI integration flows and help snapshots;
+- Linux, macOS, and Windows build/test matrix;
+- clippy, rustfmt, rustdoc, coverage, audit, typos, benchmarks, and mdBook deployment.

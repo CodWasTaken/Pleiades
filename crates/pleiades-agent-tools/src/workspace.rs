@@ -19,9 +19,6 @@ pub(crate) fn resolve_path(
         workspace.join(value)
     };
     let candidate = normalize(&candidate)?;
-    if !candidate.starts_with(&workspace) {
-        return Err(boundary_error(value, &workspace));
-    }
 
     if candidate.exists() {
         let resolved = candidate.canonicalize().map_err(|error| {
@@ -144,5 +141,25 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         std::os::unix::fs::symlink("/etc", root.path().join("external")).unwrap();
         assert!(resolve_path("external/passwd", &context(root.path()), false).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn accepts_an_absolute_path_through_a_workspace_alias() {
+        let root = tempfile::tempdir().unwrap();
+        let aliases = tempfile::tempdir().unwrap();
+        let alias = aliases.path().join("workspace");
+        std::os::unix::fs::symlink(root.path(), &alias).unwrap();
+        let file = alias.join("sample.txt");
+        std::fs::write(root.path().join("sample.txt"), "content").unwrap();
+
+        assert_eq!(
+            resolve_path(&file, &context(root.path()), false).unwrap(),
+            root.path().canonicalize().unwrap().join("sample.txt")
+        );
+        assert_eq!(
+            resolve_path(alias.join("new.txt"), &context(root.path()), true).unwrap(),
+            root.path().canonicalize().unwrap().join("new.txt")
+        );
     }
 }

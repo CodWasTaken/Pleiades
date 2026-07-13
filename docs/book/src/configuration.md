@@ -6,7 +6,7 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 |---|---|---|
 | `core.default_provider` | string? | unset |
 | `core.default_model` | string? | unset |
-| `core.theme` | string? | unset |
+| `core.theme` | string? | `seven-sisters` |
 | `core.verbose`, `core.debug` | boolean | `false` |
 | `core.max_tokens` | integer? | `4096` |
 | `core.temperature` | float? | `0.7` |
@@ -49,3 +49,5 @@ Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environ
 The special `providers.openai-subscription` entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with `pleiades auth status`. Run `pleiades setup` instead of editing this entry manually.
 
 Interactive agent sandbox modes are selected with `--permission-mode plan|agent|unrestricted` or `/mode plan|agent|unrestricted`. `agent` is the default and maps to Codex's workspace-write sandbox. `unrestricted` removes workspace isolation and should only be used in an already isolated environment.
+
+Built-in themes are `seven-sisters`, `andromeda`, `orion`, `event-horizon`, `solar-wind`, `high-contrast`, and `ascii`. Legacy `catppuccin-mocha`, `dracula`, and `tokyo-night` values remain accepted as compatibility aliases.

@@ -1,121 +1,43 @@
-# Pleiades Feature Matrix
+# Pleiades implementation matrix
 
-## Comparison with Reference Implementations
+This document records implemented behavior rather than planned or competitor claims. `Implemented` means the repository contains a wired production path and tests or CI coverage; `Partial` identifies an explicit limitation.
 
-This matrix compares Pleiades (planned) with Claude Code, Claw Code, OpenCode, and Gemini CLI across key capabilities.
-
-| Feature | Pleiades (planned) | Claude Code | Claw Code | OpenCode | Gemini CLI |
-|---------|-------------------|-------------|-----------|----------|------------|
-| **Core** | | | | | |
-| Language | Rust | TypeScript/Bun | Rust | TypeScript | TypeScript |
-| Open Source | ✅ MIT | ❌ Proprietary | ✅ MIT | ✅ Apache 2.0 | ❌ Proprietary |
-| Provider Agnostic | ✅ Primary | ❌ Anthropic-only | ⚠️ Anthropic-first | ✅ Multiple | ❌ Google-only |
-| Plugin System | ✅ WASM-based | ⚠️ Built-in only | ✅ Hook-based | ✅ SDK | ❌ |
-| **Providers** | | | | | |
-| Anthropic | ✅ | ✅ Native | ✅ Native | ✅ | ❌ |
-| OpenAI | ✅ | ❌ | ⚠️ Compat | ✅ | ❌ |
-| Google/Gemini | ✅ | ❌ | ❌ | ⚠️ | ✅ Native |
-| OpenRouter | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Groq | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Ollama | ✅ | ❌ | ❌ | ✅ | ❌ |
-| LM Studio | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Mistral | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Cohere | ✅ | ❌ | ❌ | ❌ | ❌ |
-| DeepSeek | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Together AI | ✅ | ❌ | ❌ | ❌ | ❌ |
-| xAI/Grok | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Perplexity | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Azure OpenAI | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Custom Endpoint | ✅ Generic | ❌ | ❌ | ✅ | ❌ |
-| **Models** | | | | | |
-| Model Registry | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Model Aliases | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Auto-Discovery | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Pricing Info | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Context Window Mgmt | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Chat** | | | | | |
-| Streaming | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Multi-turn | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Session Persistence | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Search History | ✅ | ❌ | ❌ | ✅ | ❌ |
-| Export | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Message Edit | ✅ | ⚠️ Limited | ❌ | ❌ | ❌ |
-| **Tools** | | | | | |
-| File Read | ✅ | ✅ | ✅ | ✅ | ✅ |
-| File Write | ✅ | ✅ | ✅ | ✅ | ✅ |
-| File Edit | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Glob | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Grep | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bash/Shell | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Diff | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Web Search | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Web Fetch | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Clipboard | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Memory | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Sub-Agent | ✅ | ✅ | ✅ | ❌ | ❌ |
-| **Permissions** | | | | | |
-| 3-Tier Mode | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Granular Rules | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Plan Mode | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Sandboxed Bash | ✅ | ❌ | ✅ | ❌ | ❌ |
-| **UI** | | | | | |
-| Markdown Rendering | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Syntax Highlighting | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Code Blocks | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Tables | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Status Bar | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Progress Indicators | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Images in Terminal | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Customization** | | | | | |
-| Themes | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Font Config | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Keybindings | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Terminal Wallpaper | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Plugin System** | | | | | |
-| External Plugins | ✅ | ❌ | ⚠️ Limited | ✅ | ❌ |
-| WASM Runtime | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Hook System | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Marketplace | ✅ | ❌ | ❌ | ❌ | ❌ |
-| SDK/Tooling | ✅ | ❌ | ❌ | ✅ | ❌ |
-| **Memory** | | | | | |
-| Conversation Memory | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Project Memory | ✅ | ❌ | ❌ | ❌ | ❌ |
-| User Memory | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Semantic Search | ✅ | ❌ | ❌ | ✅ | ❌ |
-| Auto-Pruning | ✅ | ✅ | ❌ | ❌ | ❌ |
-| **Advanced** | | | | | |
-| Agent Planning | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Multi-Agent | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Workflow Engine | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Git Integration | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Prompt Templates | ✅ | ❌ | ❌ | ✅ | ❌ |
-| **Operations** | | | | | |
-| Config Profiles | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Doctor/Diagnostics | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Update Mechanism | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Telemetry (opt-in) | ✅ | ⚠️ Mixed | ❌ | ✅ | ❌ |
-| **Release Channels** | | | | | |
-| Homebrew | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Cargo | ✅ | ❌ | ❌ | ❌ | ❌ |
-| npm | ✅ | ✅ | ❌ | ❌ | ❌ |
-| AUR | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Deb/RPM | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Scoop/Winget | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Binary Downloads | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-## Legend
-- ✅ = Supported / First-class
-- ⚠️ = Partial / Limited / Bolted-on
-- ❌ = Not supported
-- ? = Unknown
-
-## Key Differentiators for Pleiades
-
-1. **True Provider Agnosticism**: Not Anthropic-first with others working via compat layer. Every provider is a first-class citizen.
-2. **WASM Plugin System**: External plugins via WebAssembly — full isolation, multiple languages, runtime safety.
-3. **Memory System**: Multi-tier (conversation, session, project, user) with semantic search.
-4. **Workflow Engine**: Define, share, and run multi-step workflows.
-5. **Terminal Customization**: Themes, fonts, keybindings, even wallpapers where supported.
-6. **Multi-Format Config**: TOML, JSON, and YAML with profiles and live reload.
-7. **Comprehensive Release**: Every major package manager across all platforms.
-8. **Open Source from Day One**: MIT licensed with full transparency.
+| Area | Capability | Status | Notes |
+|---|---|---|---|
+| Runtime | Live full-screen Ratatui workspace | Implemented | Persistent async loop; no blocking read in the active TUI |
+| Runtime | Concurrent input, streaming, tools, resize, ticks | Implemented | Bounded Tokio channels and `tokio::select!` |
+| Runtime | Cancellation and queued follow-ups | Implemented | Deterministic mock tests |
+| UI | Five persistent regions | Implemented | Header, conversation, activity, composer, status |
+| UI | Native Markdown and code highlighting | Implemented | Ratatui spans plus Syntect regions |
+| UI | Multiline selection, undo/redo, paste, history | Implemented | `tui-textarea`, bracketed paste, input history |
+| UI | Palette/help/provider/model/file/session overlays | Implemented | Searchable keyboard navigation |
+| UI | Permission, diff, output, details, diagnostics | Implemented | Ratatui modals; no active stdin prompts |
+| UI | Theme/capability fallback | Implemented | Seven themes including high-contrast and ASCII |
+| UI | Terminal background integration | Not implemented | Pleiades does not modify emulator settings |
+| Providers | OpenAI Platform API | Implemented | Chat, streaming, tools, model/embedding APIs |
+| Providers | Anthropic | Implemented | Chat, streaming, tool calls |
+| Providers | OpenAI-compatible endpoints | Implemented | OpenRouter, Groq, DeepSeek, and configurable endpoints |
+| Providers | ChatGPT subscription | Implemented | Delegated to the official Codex CLI; credentials are not copied |
+| Providers | Local models | Implemented | Through an OpenAI-compatible local endpoint |
+| Agent | Multi-turn tool loop | Implemented | Tool results return to the provider until completion/limit |
+| Agent | Professional coding protocol | Implemented | Inspection, plan, focused changes, observed checks, diff review, report |
+| Agent | Provider-independent activity | Implemented | Typed kinds and lifecycle statuses |
+| Agent | Per-tool modal for API providers | Implemented | Four once/session decisions |
+| Agent | Per-tool modal for delegated Codex calls | Partial | Codex owns internal calls; selected Codex sandbox is the boundary |
+| Safety | Plan / Agent / Unrestricted | Implemented | Mode changes cancel old-boundary work |
+| Safety | Workspace path confinement | Implemented | Traversal and symlink escape tests |
+| Safety | Sandboxed built-in shell | Partial | Bubblewrap on Linux, sandbox-exec on macOS; refused elsewhere in Agent mode |
+| Tools | Read, write, edit, bash, glob, grep, diff | Implemented | Structured inputs/results and permission metadata |
+| Tools | Web search and fetch | Implemented | DuckDuckGo/HTTP adapters |
+| Sessions | Persistence, resume, export | Implemented | JSON domain state and Markdown/JSON export |
+| Memory | Session/project/user tiers | Implemented | File-backed stores and summarization integration |
+| Memory | Embedding semantic search | Not implemented | Embedding/vector-storage path remains future work |
+| Plugins | Local manifests and shell hooks | Implemented | Install/enable lifecycle and pre/post hooks |
+| Plugins | WASM sandbox | Not implemented | Hooks are trusted child processes |
+| Workflows | Sequence, parallel, condition, retry, timeout | Implemented | CLI create/list/show/validate/run |
+| Git | Commit, review, PR summary, diff explanation | Implemented | Provider-backed prompt flows |
+| Quality | Linux/macOS/Windows CI | Implemented | Build/test matrix plus lint, docs, audit, coverage, typos |
+| Quality | Widget snapshots and resize tests | Implemented | Ratatui `TestBackend` |
+| Distribution | crates.io and release binaries | Implemented | Collision-free `pleiades-agent` package family |
+| Distribution | Installer, Homebrew, AUR metadata | Implemented | Checked-in packaging assets |
+| Telemetry | Anonymous usage collection | Not implemented | Pleiades sends no product telemetry |

@@ -5,7 +5,7 @@ This document describes the current v1.1 workspace. Public Cargo packages use th
 ```text
 Pleiades/
 ├── crates/
-│   ├── pleiades-agent/            # CLI binary, REPL, command handlers, integration tests
+│   ├── pleiades-agent/            # CLI binary, setup/commands, compatibility REPL, integration tests
 │   ├── pleiades-agent-core/       # Provider, tool, conversation, model, event, and error types
 │   ├── pleiades-agent-config/     # Layered config, profiles, interpolation, secrets, validation
 │   ├── pleiades-agent-engine/     # Chat orchestration, agent entry point, memory and sessions

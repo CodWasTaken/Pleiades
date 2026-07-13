@@ -1,6 +1,6 @@
 # Pleiades
 
-> A next-generation, provider-agnostic terminal AI assistant. Extensible, fast, and beautifully designed for modern development workflows.
+> A professional, provider-agnostic autonomous coding agent. Native Rust, live Ratatui workspace, safe project automation.
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-active-green" alt="Status: Active"/>
@@ -13,7 +13,7 @@
 
 ## Overview
 
-Pleiades is a **next-generation terminal AI assistant** that puts you in control. It supports OpenAI through either usage-based API keys or ChatGPT subscription sign-in delegated to the official Codex CLI, alongside Anthropic and OpenAI-compatible services such as OpenRouter, Groq, DeepSeek, and self-hosted endpoints.
+Pleiades is a continuously running development environment that can inspect a project, plan a solution, edit code, execute guarded commands, diagnose failures, validate its work, review the resulting diff, and report the evidence. It supports OpenAI through usage-based API keys or ChatGPT subscription sign-in delegated to the official Codex CLI, alongside Anthropic and OpenAI-compatible services such as OpenRouter, Groq, DeepSeek, and self-hosted endpoints.
 
 Named after the Seven Sisters star cluster, Pleiades represents a constellation of capabilities working in harmony.
 
@@ -22,11 +22,12 @@ Named after the Seven Sisters star cluster, Pleiades represents a constellation 
 - **Provider Agnostic** — Use OpenAI, Anthropic, or an OpenAI-compatible service
 - **Two OpenAI Login Modes** — Choose Platform API billing or ChatGPT subscription access through the official Codex CLI
 - **Plugin Architecture** — Install local plugin manifests with pre/post shell hooks
-- **Multi-Engine** — Chat, agent, workflow — choose the right interaction model for each task
+- **Live Ratatui Workspace** — Input, rendering, model streams, tools, permissions, and cancellation remain concurrent
 - **Autonomous Coding Agent** — Inspect projects, create and edit files, run commands, and verify results
-- **Star-Themed Terminal** — Constellation-inspired interface, markdown rendering, syntax highlighting, and live task activity
+- **Transparent Activity** — Typed planning, searching, reading, editing, testing, review, completion, and failure events
+- **Seven Sisters Design** — Native Markdown widgets, multiline composer, searchable overlays, diffs, tool output, and accessible fallbacks
 - **Memory System** — Multi-tier memory from conversation context to long-term project knowledge
-- **Permission System** — Granular control over what the AI can do. Read-only, workspace-write, or full access
+- **Safe Autonomy** — Plan, Agent, and Unrestricted modes; workspace path confinement; modal permission decisions; process isolation
 - **Customizable** — Select terminal themes and configure models, permissions, prompts, and workflows
 - **Production Quality** — Cross-platform CI, integration tests, release binaries, and checksummed installs
 
@@ -45,7 +46,7 @@ pleiades setup
 # Diagnose configuration at any time
 pleiades doctor
 
-# Start a chat
+# Start the live coding workspace
 pleiades
 
 # Or use the explicit agent command
@@ -76,8 +77,8 @@ cargo install pleiades-agent
 ```
 pleiades --chat             Start interactive session
 pleiades <prompt>           One-shot prompt
-pleiades repl               Start REPL session
-pleiades chat               Start the autonomous terminal agent
+pleiades repl               Start the legacy line-oriented compatibility REPL
+pleiades chat               Start the live autonomous coding workspace
 pleiades setup              Guided provider and authentication setup
 pleiades auth               Sign in, check status, or sign out through Codex
 pleiades doctor             Diagnose configuration and authentication
@@ -108,7 +109,7 @@ pleiades --version          Show version
 
 ## Project Status
 
-**18 milestones complete** — Pleiades v1.2.0 adds autonomous workspace tasks and a star-themed terminal agent experience.
+**18 milestones complete** — Pleiades v2.0.0 is a live, event-driven autonomous coding workspace built with Ratatui.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
 - [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable
@@ -120,7 +121,7 @@ pleiades --version          Show version
 - [x] **M7: Interactive REPL** — rustyline editing, history, streaming tokens, slash commands, session auto-save
 - [x] **M8: Agent Loop** — Multi-turn tool calling, Anthropic streaming fix, permission prompts, iteration limits
 - [x] **M9: Memory & Persistence** — FileStore, Session/Project/User tiers, LLM summarization, auto-compression
-- [x] **M10: Terminal UI** — Markdown→ANSI rendering, syntax highlighting, LineEditor with tab completion, Spinner
+- [x] **M10: Terminal UI** — Full-screen Ratatui loop, native Markdown widgets, multiline editor, overlays, typed themes
 - [x] **M11: Plugin System** — PluginManager, PluginRegistry, HookRunner (PreToolUse/PostToolUse/PostToolUseFailure), CLI
 - [x] **M12: Prompt Library** — PromptTemplate engine, 8 built-in prompts, PromptLibrary with persistence, CLI
 - [x] **M13: Workflow Engine** — Step sequencing, parallel steps, conditional branching
@@ -132,16 +133,14 @@ pleiades --version          Show version
 
 ## Architecture
 
-Pleiades follows a clean **hexagonal architecture** with event-driven communication between subsystems.
+Pleiades follows a clean **hexagonal architecture** with typed, event-driven communication between the live UI and autonomous runtime.
 
 ```
-┌─────────────┐  ┌─────────────┐  ┌──────────────┐
-│   CLI/TUI   │  │   Engine    │  │   Plugins    │
-├─────────────┤  ├─────────────┤  ├──────────────┤
-│    clap     │  │  Provider   │  │ Shell Hooks  │
-│   ratatui   │  │    Chat     │  │  Hook System │
-│   crossterm │  │    Agent    │  │  Tool API    │
-└─────────────┘  └─────────────┘  └──────────────┘
+Terminal events ─┐
+Agent events ────┼─> AppState reducer ─> Ratatui render
+Render ticks ────┘
+
+UI actions ─────────> AgentCommand channel ─> Runtime ─> Providers + tools
 ```
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete design.
@@ -157,6 +156,8 @@ Pleiades supports multiple configuration formats (TOML, JSON, YAML) with five le
 5. CLI flags
 
 Profiles allow switching between configurations for different contexts.
+
+The default `seven-sisters` theme is joined by `andromeda`, `orion`, `event-horizon`, `solar-wind`, `high-contrast`, and `ascii`. Press `F1` inside the application for searchable keyboard help.
 
 ## Development
 

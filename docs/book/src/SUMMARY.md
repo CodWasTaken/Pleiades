@@ -2,6 +2,8 @@
 
 - [Pleiades](README.md)
 - [Getting started](getting-started.md)
+- [Live terminal workspace](terminal-workspace.md)
+- [Autonomous coding behavior](agent-behavior.md)
 - [Cargo packages](packages.md)
 - [Configuration reference](configuration.md)
 - [Providers and models](providers.md)

@@ -1,7 +1,46 @@
 # Architecture
 
-Pleiades is a Cargo workspace organized around a dependency-light domain core. Provider, tool, persistence, plugin, prompt, workflow, Git, CLI, and TUI crates act as adapters around that core.
+Pleiades is a Rust 2024 Cargo workspace organized around stable provider, tool, conversation, event, and error types. Tokio owns asynchronous execution; Ratatui and Crossterm own the live terminal frontend.
 
-The engine coordinates conversations and emits events over Tokio channels. Providers implement one trait for complete and streaming responses. Tools similarly implement a domain trait with explicit permission metadata. This hexagonal boundary keeps provider APIs and terminal concerns out of domain types.
+## Runtime boundary
 
-See the repository's [full architecture document](https://github.com/CodWasTaken/Pleiades/blob/master/docs/ARCHITECTURE.md) for crate relationships and design decisions.
+The full-screen TUI never constructs providers, executes tools, mutates the domain conversation, or writes streamed output to stdout. It sends `AgentCommand` values over a bounded Tokio channel and reduces `AgentEvent` values into `AppState`.
+
+```text
+Crossterm events ─────┐
+AgentEvent channel ───┼─> AppState reducer ─> Ratatui render
+render ticks ─────────┤
+background results ───┘
+
+UI effects ─────────────> AgentCommand channel ─> AgentRuntime
+```
+
+The terminal loop uses `tokio::select!` across Crossterm's `EventStream`, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.
+
+## Agent runtime
+
+`AgentRuntime` owns the configured `Engine`, `Conversation`, `SessionStore`, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, and shutdown.
+
+Provider streams normalize text, reasoning summaries, tool calls, provider-managed activity, tool output, usage, completion, and errors. The runtime adds typed lifecycle events for planning, permission waits, execution, validation, diff review, completion, failure, and cancellation.
+
+## Crate responsibilities
+
+- `pleiades-agent-core` — provider/tool traits and normalized domain types.
+- `pleiades-agent-config` — layered configuration and environment interpolation.
+- `pleiades-agent-engine` — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.
+- `pleiades-agent-tui` — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.
+- `pleiades-agent-providers` — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.
+- `pleiades-agent-tools` — confined filesystem/search/diff tools and sandboxed command execution.
+- remaining crates — plugins, prompts, memory, workflows, Git automation, SDK, and CLI packaging.
+
+## Safety layers
+
+Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Shell writes use Bubblewrap on Linux or `sandbox-exec` on macOS, refusing execution when an Agent-mode boundary cannot be provided. Unrestricted mode removes that process boundary only after an explicit user choice.
+
+The ChatGPT subscription adapter delegates execution to the official Codex CLI and maps modes to Codex sandboxes. API-provider tool calls execute in Pleiades and use Pleiades permission modals.
+
+## Reliability
+
+Bounded channels, output caps, a moving transcript window, and background repository file discovery keep redraw work predictable. A terminal guard restores raw mode, the alternate screen, cursor, mouse capture, and bracketed paste on normal and panic exits. Mock-provider tests cover permission waits, Plan denial, queued follow-ups, cancellation, and mode changes; Ratatui snapshots and resize tests cover the frontend.
+
+See the repository's [full architecture document](https://github.com/CodWasTaken/Pleiades/blob/master/docs/ARCHITECTURE.md) for the detailed design.

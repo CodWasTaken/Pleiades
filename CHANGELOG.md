@@ -5,6 +5,31 @@ All notable changes to Pleiades will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-07-13
+
+### Added
+
+- Added a real full-screen Ratatui application with concurrent terminal input, provider streams, agent events, background work, resize handling, and 20 FPS redraws.
+- Added five persistent regions, native Markdown and Syntect-to-Ratatui code highlighting, multiline `tui-textarea` composition, history, slash completion, queued follow-ups, and preserved scrolling.
+- Added searchable command, provider, model, file, session, and help overlays plus configuration, diagnostics, tool detail/output, diff, and keyboard-driven permission views.
+- Added typed provider-independent activity kinds/statuses and an engine-owned autonomous runtime with bounded command/event channels.
+- Added deterministic mock-agent coverage for permission waits, Plan-mode denial, cancellation, mode-boundary changes, and queued follow-ups.
+- Added canonical workspace confinement, symlink escape protection, Agent-mode Linux/macOS command isolation, huge-output bounds, resize tests, and Ratatui snapshots.
+- Added the `seven-sisters`, `andromeda`, `orion`, `event-horizon`, `solar-wind`, `high-contrast`, and `ascii` design systems.
+
+### Changed
+
+- Replaced blocking Rustyline, direct ANSI streaming, direct tool execution in the TUI, and stdin permission prompts in the default session.
+- Made `seven-sisters` the default theme and retained legacy theme names as aliases.
+- Upgraded the default system protocol to require repository inspection, focused planning, observed validation, final diff review, and evidence-based completion reports.
+- Changed public activity events and tool contexts to typed lifecycle and sandbox-boundary models, requiring a major version bump.
+
+### Security
+
+- Filesystem tools now reject traversal, absolute outside-workspace targets, and symlinked ancestors that escape the selected workspace.
+- Plan mode rejects mutating tools before approval; mode changes cancel work executing under the previous boundary.
+- Agent-mode shell execution refuses to run when the platform workspace-write isolation layer is unavailable.
+
 ## [1.2.0] - 2026-07-13
 
 ### Added

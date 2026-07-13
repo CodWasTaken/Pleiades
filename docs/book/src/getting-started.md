@@ -34,11 +34,13 @@ The binary is written to `target/release/pleiades`. Run the guided setup and cho
 ```console
 pleiades setup
 pleiades doctor
-pleiades chat
+pleiades
 ```
 
 For ChatGPT subscription access, install the official Codex CLI; Pleiades delegates `codex login` and never reads its token cache. For API access, setup stores `${OPENAI_API_KEY}` and asks you to export a newly created Platform API key. ChatGPT and API billing are separate.
 
-Use `pleiades --help` for the complete command tree. Running `pleiades` or `pleiades chat` starts the autonomous terminal agent once configured, `pleiades "your task"` runs an autonomous task once, and `pleiades chat --session ID` resumes a saved session.
+Use `pleiades --help` for the complete command tree. Running `pleiades` or `pleiades chat` starts the live full-screen coding workspace once configured, `pleiades "your task"` runs an autonomous task once, and `pleiades chat --session ID` resumes a saved session.
 
-The directory where Pleiades starts is the workspace root. ChatGPT subscription sessions default to `agent` mode: the official Codex CLI may inspect, create, and edit files and run commands inside that workspace, while its `workspace-write` sandbox prevents writes elsewhere. Use `/mode plan` for read-only analysis or start with `--permission-mode plan`.
+The directory where Pleiades starts is the workspace root. Sessions default to `agent` mode. Use `/mode plan` for read-only analysis or start with `--permission-mode plan`. Press `F1` inside the workspace for searchable keyboard help.
+
+On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (`bwrap`) for write isolation. On macOS they use `sandbox-exec`. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation; `unrestricted` remains an explicit opt-in.

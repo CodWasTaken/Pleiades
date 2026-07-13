@@ -1659,8 +1659,6 @@ dependencies = [
  "pleiades-agent-config",
  "pleiades-agent-core",
  "pleiades-agent-engine",
- "pleiades-agent-providers",
- "pleiades-agent-tools",
  "pulldown-cmark",
  "ratatui",
  "rustyline 14.0.0",

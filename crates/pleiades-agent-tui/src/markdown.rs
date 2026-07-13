@@ -5,19 +5,36 @@
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{FontStyle, ThemeSet};
+use syntect::parsing::SyntaxSet;
+
+use once_cell::sync::Lazy;
 
 use crate::theme::Theme;
+
+static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(SyntaxSet::load_defaults_newlines);
+static SYNTAX_THEMES: Lazy<ThemeSet> = Lazy::new(ThemeSet::load_defaults);
 
 pub fn render_markdown(source: &str, theme: Theme) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     let mut code_language: Option<String> = None;
+    let mut highlighter: Option<HighlightLines<'static>> = None;
 
     for raw in source.lines() {
         if let Some(language) = raw.strip_prefix("```") {
             if code_language.is_some() {
                 code_language = None;
+                highlighter = None;
             } else {
                 code_language = Some(language.trim().to_string());
+                let syntax = SYNTAXES
+                    .find_syntax_by_token(language.trim())
+                    .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text());
+                highlighter = Some(HighlightLines::new(
+                    syntax,
+                    &SYNTAX_THEMES.themes["base16-ocean.dark"],
+                ));
                 let label = if language.trim().is_empty() {
                     "code".to_string()
                 } else {
@@ -32,10 +49,35 @@ pub fn render_markdown(source: &str, theme: Theme) -> Vec<Line<'static>> {
         }
 
         if code_language.is_some() {
-            lines.push(Line::from(Span::styled(
-                format!("  {raw}"),
-                Style::default().fg(theme.foreground).bg(theme.surface),
-            )));
+            let mut spans = vec![Span::styled("  ", Style::default().bg(theme.surface))];
+            if let Some(highlighter) = highlighter.as_mut() {
+                match highlighter.highlight_line(raw, &SYNTAXES) {
+                    Ok(regions) => spans.extend(regions.into_iter().map(|(style, text)| {
+                        let mut output = Style::default()
+                            .fg(ratatui::style::Color::Rgb(
+                                style.foreground.r,
+                                style.foreground.g,
+                                style.foreground.b,
+                            ))
+                            .bg(theme.surface);
+                        if style.font_style.contains(FontStyle::BOLD) {
+                            output = output.add_modifier(Modifier::BOLD);
+                        }
+                        if style.font_style.contains(FontStyle::ITALIC) {
+                            output = output.add_modifier(Modifier::ITALIC);
+                        }
+                        if style.font_style.contains(FontStyle::UNDERLINE) {
+                            output = output.add_modifier(Modifier::UNDERLINED);
+                        }
+                        Span::styled(text.to_string(), output)
+                    })),
+                    Err(_) => spans.push(Span::styled(
+                        raw.to_string(),
+                        Style::default().fg(theme.foreground).bg(theme.surface),
+                    )),
+                }
+            }
+            lines.push(Line::from(spans));
             continue;
         }
 
@@ -190,5 +232,20 @@ mod tests {
         );
         assert_eq!(lines.len(), 3);
         assert!(lines[1].spans.len() >= 3);
+    }
+
+    #[test]
+    fn syntax_highlights_fenced_rust_as_native_spans() {
+        let lines = render_markdown(
+            "```rust\nfn main() { let answer = 42; }\n```",
+            Theme::default(),
+        );
+        assert!(lines[1].spans.len() > 3);
+        let colors = lines[1]
+            .spans
+            .iter()
+            .filter_map(|span| span.style.fg)
+            .collect::<std::collections::HashSet<_>>();
+        assert!(colors.len() > 1);
     }
 }

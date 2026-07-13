@@ -99,7 +99,7 @@
 ### Milestone 8: Agent Loop (✅ Complete)
 - [x] Multi-turn tool calling loop
 - [x] Anthropic streaming tool call fix (accumulate input_json_delta)
-- [x] Permission prompts (y/n) for tool execution
+- [x] Typed four-way Ratatui permission decisions for runtime tool execution
 - [x] Config-driven always_allow/always_deny support
 - [x] Tool execution with output truncation
 - [x] Tool result display inline
@@ -113,19 +113,18 @@
 - [x] LLM-based conversation summarization
 - [x] Summary injection as system messages
 - [x] Auto-save summaries on compression
-- [ ] Embedding generation — **pending**
-- [ ] Vector storage — **pending**
-- [ ] Semantic search — **pending**
+- Future extension: embedding generation, vector storage, and semantic search are not implemented
 - **Deliverable**: Multi-tier memory system with persistence
 
 ### Milestone 10: Terminal UI (✅ Complete)
-- [x] `pleiades-agent-tui` crate with `TuiApp`, `TerminalRenderer`, `LineEditor`
-- [x] Markdown→ANSI rendering (pulldown-cmark + syntect syntax highlighting)
-- [x] Streaming token renderer with `MarkdownStreamState`
-- [x] `Spinner` with braille frames for progress indication
-- [x] `LineEditor` with slash-command tab completion
-- [x] Engine integration, permission prompts, session auto-save
-- **Deliverable**: Beautiful terminal UI
+- [x] Full-screen Ratatui application with panic-safe alternate-screen lifecycle
+- [x] Concurrent terminal, provider, agent, background, resize, and render events
+- [x] Ratatui-native Markdown and Syntect syntax spans
+- [x] Multiline textarea, history, paste, slash completion, queue, and cancellation
+- [x] Persistent header, conversation, activity, composer, and status regions
+- [x] Permission, palette, provider/model, file/session, diff, output, help, configuration, and diagnostics overlays
+- [x] Seven Sisters typed design system and ASCII/high-contrast fallback
+- **Deliverable**: Live autonomous coding workspace
 
 ### Milestone 11: Plugin System (✅ Complete)
 - [x] `pleiades-agent-plugins` crate: manifest, hooks, plugin, registry, manager
@@ -189,7 +188,7 @@
 ### Milestone 18: Release (✅ Complete)
 - [x] Semantic versioning and v1.0.x releases
 - [x] GitHub Releases with five platform binaries
-- [x] Publish the `pleiades-agent` v1.1.0 package family
+- [x] Publish the `pleiades-agent` package family
 - [x] Homebrew formula
 - [x] AUR package metadata
 - **Deliverable**: v1.0.0 release across multiple channels
@@ -223,4 +222,4 @@
 
 ## Current Focus
 
-All planned milestones are complete. Pleiades v1.1.0 is published under the collision-free `pleiades-agent` crates.io namespace and as cross-platform GitHub release artifacts.
+All original milestones are complete. The current v2 architecture upgrades the default session to a live Ratatui coding workspace with typed agent events, safe cancellation, workspace confinement, modal permissions, and evidence-based autonomous behavior. Future work is listed explicitly as future work rather than presented as implemented.
