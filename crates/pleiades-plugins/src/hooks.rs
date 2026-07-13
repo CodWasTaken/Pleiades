@@ -312,10 +312,26 @@ impl HookCommandExt for Command {
 mod tests {
     use super::*;
 
+    fn exit_command(code: u8) -> String {
+        if cfg!(windows) {
+            format!("exit /b {code}")
+        } else {
+            format!("exit {code}")
+        }
+    }
+
+    fn echo_and_exit(message: &str, code: u8) -> String {
+        if cfg!(windows) {
+            format!("echo {message} & exit /b {code}")
+        } else {
+            format!("printf '{message}'; exit {code}")
+        }
+    }
+
     #[test]
     fn pre_tool_use_allows_when_hooks_succeed() {
         let runner = HookRunner::new(PluginHooks {
-            pre_tool_use: vec!["printf 'all good'".to_string()],
+            pre_tool_use: vec!["echo all good".to_string()],
             post_tool_use: Vec::new(),
             post_tool_use_failure: Vec::new(),
         });
@@ -330,7 +346,7 @@ mod tests {
     #[test]
     fn pre_tool_use_denies_when_hook_exits_two() {
         let runner = HookRunner::new(PluginHooks {
-            pre_tool_use: vec!["printf 'blocked'; exit 2".to_string()],
+            pre_tool_use: vec![echo_and_exit("blocked", 2)],
             post_tool_use: Vec::new(),
             post_tool_use_failure: Vec::new(),
         });
@@ -344,7 +360,7 @@ mod tests {
     #[test]
     fn pre_tool_use_fails_on_nonzero_exit() {
         let runner = HookRunner::new(PluginHooks {
-            pre_tool_use: vec!["exit 1".to_string()],
+            pre_tool_use: vec![exit_command(1)],
             post_tool_use: Vec::new(),
             post_tool_use_failure: Vec::new(),
         });
@@ -357,7 +373,7 @@ mod tests {
     #[test]
     fn pre_tool_use_first_failure_stops_later_hooks() {
         let runner = HookRunner::new(PluginHooks {
-            pre_tool_use: vec!["exit 2".to_string(), "printf 'should not run'".to_string()],
+            pre_tool_use: vec![exit_command(2), "echo should not run".to_string()],
             post_tool_use: Vec::new(),
             post_tool_use_failure: Vec::new(),
         });
@@ -377,7 +393,7 @@ mod tests {
     fn post_tool_use_runs_after_successful_tool() {
         let runner = HookRunner::new(PluginHooks {
             pre_tool_use: Vec::new(),
-            post_tool_use: vec!["printf 'tool completed'".to_string()],
+            post_tool_use: vec!["echo tool completed".to_string()],
             post_tool_use_failure: Vec::new(),
         });
 
@@ -397,7 +413,7 @@ mod tests {
         let runner = HookRunner::new(PluginHooks {
             pre_tool_use: Vec::new(),
             post_tool_use: Vec::new(),
-            post_tool_use_failure: vec!["printf 'tool errored'".to_string()],
+            post_tool_use_failure: vec!["echo tool errored".to_string()],
         });
 
         let result =
