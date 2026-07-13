@@ -63,7 +63,20 @@ fn guided_api_setup_and_doctor_use_environment_reference() {
         .success()
         .stdout(predicate::str::contains("usage-based OpenAI API access"));
 
-    let config = fs::read_to_string(home.path().join("config/pleiades/config.toml")).unwrap();
+    let output = command(home.path())
+        .args(["config", "path"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let paths = String::from_utf8(output.stdout).unwrap();
+    let config_path = paths
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("Global: ")
+                .and_then(|value| value.rsplit_once(" (").map(|(path, _)| path))
+        })
+        .expect("global config path");
+    let config = fs::read_to_string(config_path).unwrap();
     assert!(config.contains("${OPENAI_API_KEY}"));
     assert!(!config.contains("sk-test"));
 
