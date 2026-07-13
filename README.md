@@ -57,7 +57,7 @@ pleiades --model claude-sonnet-4
 Do **not** run `cargo install pleiades`: that name belongs to an unrelated machine-learning crate on crates.io. To compile this project directly, use:
 
 ```bash
-cargo install --git https://github.com/CodWasTaken/Pleiades --tag v1.0.1 --locked pleiades-cli
+cargo install --git https://github.com/CodWasTaken/Pleiades --tag v1.0.1 pleiades-cli
 ```
 
 ## CLI Commands
