@@ -2,7 +2,7 @@ name: Documentation
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'docs/**'
       - 'crates/**/*.rs'
@@ -29,7 +29,7 @@ jobs:
         with:
           mdbook-version: 'latest'
       - name: Build user guide
-        run: mdbook build docs/guide -d ../../target/docs/guide
+        run: mdbook build docs/book -d ../../target/docs
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:

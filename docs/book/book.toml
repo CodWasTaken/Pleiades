@@ -1,0 +1,13 @@
+[book]
+title = "Pleiades User Guide"
+authors = ["Pleiades contributors"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/CodWasTaken/Pleiades"
+edit-url-template = "https://github.com/CodWasTaken/Pleiades/edit/master/docs/book/{path}"
+site-url = "/Pleiades/"

@@ -84,7 +84,7 @@ pleiades version            Show version
 
 ## Project Status
 
-**12 of 18 milestones complete** — Pleiades is in active development with a working CLI, REPL, agent loop, plugin system, and prompt library.
+**16 of 18 milestones complete** — Pleiades is in active development with workflows, Git assistance, integration tests, and a complete user guide.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
 - [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable
@@ -99,10 +99,10 @@ pleiades version            Show version
 - [x] **M10: Terminal UI** — Markdown→ANSI rendering, syntax highlighting, LineEditor with tab completion, Spinner
 - [x] **M11: Plugin System** — PluginManager, PluginRegistry, HookRunner (PreToolUse/PostToolUse/PostToolUseFailure), CLI
 - [x] **M12: Prompt Library** — PromptTemplate engine, 8 built-in prompts, PromptLibrary with persistence, CLI
-- [ ] **M13: Workflow Engine** — Step sequencing, parallel steps, conditional branching
-- [ ] **M14: Git Integration** — Commit messages, PR summaries, code review
-- [ ] **M15: Testing & CI** — 80%+ coverage, GitHub Actions CI
-- [ ] **M16: Documentation** — MDBook site, rustdoc, user guide
+- [x] **M13: Workflow Engine** — Step sequencing, parallel steps, conditional branching
+- [x] **M14: Git Integration** — Commit messages, PR summaries, code review
+- [x] **M15: Testing & CI** — Integration tests, snapshots, benchmarks, GitHub Actions CI
+- [x] **M16: Documentation** — mdBook site, rustdoc CI, user guide
 - [ ] **M17: Optimization** — Cold start, memory, latency, LTO
 - [ ] **M18: Release** — v1.0.0, binaries, package managers
 

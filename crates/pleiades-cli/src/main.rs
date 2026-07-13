@@ -272,7 +272,7 @@ enum SessionCommand {
         /// Output format (markdown, json)
         #[arg(short, long, default_value = "markdown")]
         format: String,
-        /// Output file path (defaults to <id>.<format>)
+        /// Output file path (defaults to `ID.FORMAT`)
         #[arg(short, long)]
         output: Option<String>,
     },
