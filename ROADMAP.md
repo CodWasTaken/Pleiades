@@ -24,9 +24,9 @@
 | M15 | Testing & CI | ✅ **Complete** |
 | M16 | Documentation | ✅ **Complete** |
 | M17 | Optimization | ✅ **Complete** |
-| M18 | Release | 🟡 **Crates.io publication pending** |
+| M18 | Release | ✅ **Complete** |
 
-**Current Focus**: Publish the collision-free `pleiades-agent` v1.1.0 package family to crates.io.
+**Status**: All 18 milestones are complete. The collision-free `pleiades-agent` v1.1.0 package family and cross-platform release artifacts are published.
 
 **Milestone commits**:
 - M1: 5fcf776 — Initial bootstrap (workspace, crate structure)
@@ -50,6 +50,6 @@
 
 **GitHub**: https://github.com/CodWasTaken/Pleiades
 
-## Remaining release operation
+## Release availability
 
-The GitHub release, checksummed installer, Homebrew formula, and AUR metadata are complete. Publishing the newly available `pleiades-agent` crate family requires the repository's `CARGO_REGISTRY_TOKEN` Actions secret.
+Pleiades v1.1.0 is published on crates.io under the `pleiades-agent` package family. The GitHub release includes five platform binaries and checksums; installer, Homebrew, and AUR metadata are also available.

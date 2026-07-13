@@ -1,5 +1,5 @@
 pkgname=pleiades
-pkgver=1.0.1
+pkgver=1.1.0
 pkgrel=1
 pkgdesc='Provider-agnostic terminal AI assistant'
 arch=('x86_64' 'aarch64')
@@ -7,7 +7,7 @@ url='https://github.com/CodWasTaken/Pleiades'
 license=('MIT')
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('bfec58df9651ea75fefa0da355476668237db5a39a8deaa110e78e2b251a0abc')
+sha256sums=('263154b5bb785ea235c56e2cb7feeb36367de8ec675d27dc9085a8b6488be946')
 
 build() {
   cd "Pleiades-$pkgver"

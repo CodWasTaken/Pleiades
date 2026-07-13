@@ -186,10 +186,10 @@
 - [x] Fat LTO, symbol stripping, and release code-size optimization
 - **Deliverable**: Performance-optimized release
 
-### Milestone 18: Release (🟡 Crates.io publication pending)
+### Milestone 18: Release (✅ Complete)
 - [x] Semantic versioning and v1.0.x releases
 - [x] GitHub Releases with five platform binaries
-- [ ] Publish the `pleiades-agent` v1.1.0 package family (requires repository secret)
+- [x] Publish the `pleiades-agent` v1.1.0 package family
 - [x] Homebrew formula
 - [x] AUR package metadata
 - **Deliverable**: v1.0.0 release across multiple channels
@@ -216,11 +216,11 @@
 | M15: Testing & CI | ✅ Done | Medium | M1-M14 |
 | M16: Documentation | ✅ Done | Medium | M1-M14 |
 | M17: Optimization | ✅ Done | Medium | M15 |
-| M18: Release | 🟡 Publishing | Low | M15, M16, M17 |
+| M18: Release | ✅ Done | Low | M15, M16, M17 |
 
-**Completed**: 17 milestones ✅
-**Remaining**: crates.io publication within M18
+**Completed**: 18 milestones ✅
+**Remaining**: None
 
 ## Current Focus
 
-**We are here → Milestone 18: Release** — publish the collision-free `pleiades-agent` v1.1.0 package family.
+All planned milestones are complete. Pleiades v1.1.0 is published under the collision-free `pleiades-agent` crates.io namespace and as cross-platform GitHub release artifacts.

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Kept the installed executable name as `pleiades` for command-line compatibility.
 - Added dependency-ordered crates.io publication with registry propagation retries.
 - Updated installation, roadmap, architecture, and package documentation for the new namespace.
+- Published all 13 v1.1.0 packages and five cross-platform release binaries.
 
 ## [1.0.1] - 2026-07-13
 
