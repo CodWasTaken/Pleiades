@@ -54,7 +54,11 @@ impl AnthropicProvider {
         headers
     }
 
-    fn convert_messages(&self, messages: &[Message], system_prompt: Option<&str>) -> AnthropicRequest {
+    fn convert_messages(
+        &self,
+        messages: &[Message],
+        system_prompt: Option<&str>,
+    ) -> AnthropicRequest {
         let mut system = system_prompt.map(|s| s.to_string());
         let mut anthropic_messages = Vec::new();
 
@@ -96,7 +100,11 @@ impl AnthropicProvider {
         }
     }
 
-    fn convert_content_blocks(&self, blocks: &[ContentBlock], role: &MessageRole) -> Vec<AnthropicContent> {
+    fn convert_content_blocks(
+        &self,
+        blocks: &[ContentBlock],
+        role: &MessageRole,
+    ) -> Vec<AnthropicContent> {
         let mut result = Vec::new();
 
         for block in blocks {
@@ -127,7 +135,11 @@ impl AnthropicProvider {
                         });
                     }
                 }
-                ContentBlock::ToolResult { id, content, is_error } => {
+                ContentBlock::ToolResult {
+                    id,
+                    content,
+                    is_error,
+                } => {
                     result.push(AnthropicContent {
                         content_type: "tool_result".to_string(),
                         text: Some(content.clone()),
@@ -169,7 +181,10 @@ impl AnthropicProvider {
                             source_type: "base64".to_string(),
                             url: None,
                             media_type: Some(mime_type.clone()),
-                            data: Some(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data)),
+                            data: Some(base64::Engine::encode(
+                                &base64::engine::general_purpose::STANDARD,
+                                data,
+                            )),
                         }),
                     });
                 }
@@ -202,7 +217,9 @@ impl AnthropicProvider {
                     }
                 }
                 "tool_use" => {
-                    if let (Some(id), Some(name), Some(input)) = (&block.id, &block.name, &block.input) {
+                    if let (Some(id), Some(name), Some(input)) =
+                        (&block.id, &block.name, &block.input)
+                    {
                         content_blocks.push(ContentBlock::ToolUse {
                             id: id.clone(),
                             name: name.clone(),
@@ -327,7 +344,8 @@ impl Provider for AnthropicProvider {
     }
 
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, Error> {
-        let mut api_request = self.convert_messages(&request.messages, request.system_prompt.as_deref());
+        let mut api_request =
+            self.convert_messages(&request.messages, request.system_prompt.as_deref());
         api_request.model = request.model;
         api_request.max_tokens = request.max_tokens.unwrap_or(4096) as u32;
         api_request.temperature = request.temperature;
@@ -343,14 +361,22 @@ impl Provider for AnthropicProvider {
         let body = serde_json::to_value(&api_request)?;
 
         let url = format!("{}/messages", self.base_url);
-        let req = self.http_client.post(&url).headers(self.build_headers()).json(&body);
+        let req = self
+            .http_client
+            .post(&url)
+            .headers(self.build_headers())
+            .json(&body);
 
         let response = client::send_request(&self.http_client, req, "anthropic").await?;
         let status = response.status();
         let response_body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(client::map_api_error(status.as_u16(), &response_body, "anthropic"));
+            return Err(client::map_api_error(
+                status.as_u16(),
+                &response_body,
+                "anthropic",
+            ));
         }
 
         let anthropic_response: AnthropicResponse = serde_json::from_str(&response_body)?;
@@ -361,7 +387,8 @@ impl Provider for AnthropicProvider {
         &self,
         request: ChatRequest,
     ) -> Result<tokio::sync::mpsc::Receiver<StreamEvent>, Error> {
-        let mut api_request = self.convert_messages(&request.messages, request.system_prompt.as_deref());
+        let mut api_request =
+            self.convert_messages(&request.messages, request.system_prompt.as_deref());
         api_request.model = request.model;
         api_request.max_tokens = request.max_tokens.unwrap_or(4096) as u32;
         api_request.temperature = request.temperature;
@@ -378,7 +405,11 @@ impl Provider for AnthropicProvider {
         let body = serde_json::to_value(&api_request)?;
 
         let url = format!("{}/messages", self.base_url);
-        let req = self.http_client.post(&url).headers(self.build_headers()).json(&body);
+        let req = self
+            .http_client
+            .post(&url)
+            .headers(self.build_headers())
+            .json(&body);
 
         let response = client::send_request(&self.http_client, req, "anthropic").await?;
         let status = response.status();
@@ -404,95 +435,108 @@ impl Provider for AnthropicProvider {
 
             while let Some(event_result) = sse_rx.recv().await {
                 match event_result {
-                    Ok(event) => {
-                        match event.event.as_str() {
-                            "message_start" => {
-                                if let Ok(start) = event.parse_json::<AnthropicStreamMessageStart>() {
-                                    input_tokens = start.message.usage.input_tokens as u64;
-                                    cache_read = start.message.usage.cache_read_input_tokens;
-                                    cache_write = start.message.usage.cache_creation_input_tokens;
-                                }
+                    Ok(event) => match event.event.as_str() {
+                        "message_start" => {
+                            if let Ok(start) = event.parse_json::<AnthropicStreamMessageStart>() {
+                                input_tokens = start.message.usage.input_tokens as u64;
+                                cache_read = start.message.usage.cache_read_input_tokens;
+                                cache_write = start.message.usage.cache_creation_input_tokens;
                             }
-                            "content_block_start" => {
-                                if let Ok(block) = event.parse_json::<AnthropicStreamContentBlockStart>() {
-                                    if block.content_block.type_ == "tool_use" {
-                                        pending_tool_id = block.content_block.id;
-                                        pending_tool_name = block.content_block.name;
-                                        pending_tool_input.clear();
-                                    }
-                                }
-                            }
-                            "content_block_delta" => {
-                                if let Ok(delta) = event.parse_json::<AnthropicStreamContentBlockDelta>() {
-                                    match delta.delta.type_.as_str() {
-                                        "text_delta" => {
-                                            if let Some(text) = &delta.delta.text {
-                                                content_buffer.push_str(text);
-                                                let _ = tx.send(StreamEvent::Token(text.clone())).await;
-                                            }
-                                        }
-                                        "input_json_delta" => {
-                                            if let Some(partial) = &delta.delta.partial_json {
-                                                pending_tool_input.push_str(partial);
-                                            }
-                                        }
-                                        "thinking_delta" => {
-                                            if let Some(thinking) = &delta.delta.thinking {
-                                                let _ = tx.send(StreamEvent::ReasoningToken(thinking.clone())).await;
-                                            }
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                            "content_block_stop" => {
-                                if let (Some(id), Some(name)) = (pending_tool_id.take(), pending_tool_name.take()) {
-                                    let input: serde_json::Value = serde_json::from_str(&pending_tool_input)
-                                        .unwrap_or_else(|_| serde_json::Value::String(pending_tool_input.clone()));
+                        }
+                        "content_block_start" => {
+                            if let Ok(block) =
+                                event.parse_json::<AnthropicStreamContentBlockStart>()
+                            {
+                                if block.content_block.type_ == "tool_use" {
+                                    pending_tool_id = block.content_block.id;
+                                    pending_tool_name = block.content_block.name;
                                     pending_tool_input.clear();
-                                    let _ = tx.send(StreamEvent::ToolCall {
-                                        id,
-                                        name,
-                                        input,
-                                    }).await;
                                 }
                             }
-                            "message_delta" => {
-                                if let Ok(delta) = event.parse_json::<AnthropicStreamMessageDelta>() {
-                                    output_tokens = delta.usage.output_tokens as u64;
-                                    finish_reason = delta.delta.stop_reason;
+                        }
+                        "content_block_delta" => {
+                            if let Ok(delta) =
+                                event.parse_json::<AnthropicStreamContentBlockDelta>()
+                            {
+                                match delta.delta.type_.as_str() {
+                                    "text_delta" => {
+                                        if let Some(text) = &delta.delta.text {
+                                            content_buffer.push_str(text);
+                                            let _ = tx.send(StreamEvent::Token(text.clone())).await;
+                                        }
+                                    }
+                                    "input_json_delta" => {
+                                        if let Some(partial) = &delta.delta.partial_json {
+                                            pending_tool_input.push_str(partial);
+                                        }
+                                    }
+                                    "thinking_delta" => {
+                                        if let Some(thinking) = &delta.delta.thinking {
+                                            let _ = tx
+                                                .send(StreamEvent::ReasoningToken(thinking.clone()))
+                                                .await;
+                                        }
+                                    }
+                                    _ => {}
                                 }
                             }
-                            "message_stop" => {
-                                let _ = tx.send(StreamEvent::Done {
-                                    finish_reason: finish_reason.clone().unwrap_or_else(|| "end_turn".to_string()),
+                        }
+                        "content_block_stop" => {
+                            if let (Some(id), Some(name)) =
+                                (pending_tool_id.take(), pending_tool_name.take())
+                            {
+                                let input: serde_json::Value =
+                                    serde_json::from_str(&pending_tool_input).unwrap_or_else(
+                                        |_| serde_json::Value::String(pending_tool_input.clone()),
+                                    );
+                                pending_tool_input.clear();
+                                let _ = tx.send(StreamEvent::ToolCall { id, name, input }).await;
+                            }
+                        }
+                        "message_delta" => {
+                            if let Ok(delta) = event.parse_json::<AnthropicStreamMessageDelta>() {
+                                output_tokens = delta.usage.output_tokens as u64;
+                                finish_reason = delta.delta.stop_reason;
+                            }
+                        }
+                        "message_stop" => {
+                            let _ = tx
+                                .send(StreamEvent::Done {
+                                    finish_reason: finish_reason
+                                        .clone()
+                                        .unwrap_or_else(|| "end_turn".to_string()),
                                     usage: Some(Usage {
                                         input_tokens,
                                         output_tokens,
                                         cache_read_tokens: cache_read,
                                         cache_write_tokens: cache_write,
                                     }),
-                                }).await;
-                            }
-                            "error" => {
-                                let err_msg = if let Ok(err) = event.parse_json::<AnthropicStreamError>() {
+                                })
+                                .await;
+                        }
+                        "error" => {
+                            let err_msg =
+                                if let Ok(err) = event.parse_json::<AnthropicStreamError>() {
                                     err.error.message
                                 } else {
                                     event.data.clone()
                                 };
-                                let _ = tx.send(StreamEvent::Error {
+                            let _ = tx
+                                .send(StreamEvent::Error {
                                     message: err_msg,
                                     code: Some("stream_error".to_string()),
-                                }).await;
-                            }
-                            _ => {}
+                                })
+                                .await;
                         }
-                    }
+                        _ => {}
+                    },
                     Err(e) => {
-                        let _ = tx.send(StreamEvent::Error {
-                            message: e.to_string(),
-                            code: None,
-                        }).await;
+                        let _ = tx
+                            .send(StreamEvent::Error {
+                                message: e.to_string(),
+                                code: None,
+                            })
+                            .await;
                     }
                 }
             }

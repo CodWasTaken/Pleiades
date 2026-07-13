@@ -77,20 +77,26 @@ impl Tool for FetchTool {
     }
 
     async fn execute(&self, input: Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let url = input.get("url")
+        let url = input
+            .get("url")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required field 'url'"))?;
 
         if !url.starts_with("http://") && !url.starts_with("https://") {
-            return Err(Error::invalid_input(format!("Invalid URL '{}'. Must start with http:// or https://", url)));
+            return Err(Error::invalid_input(format!(
+                "Invalid URL '{}'. Must start with http:// or https://",
+                url
+            )));
         }
 
-        let method = input.get("method")
+        let method = input
+            .get("method")
             .and_then(|v| v.as_str())
             .unwrap_or("GET")
             .to_uppercase();
 
-        let max_size = input.get("max_size")
+        let max_size = input
+            .get("max_size")
             .and_then(|v| v.as_i64())
             .unwrap_or(1_048_576) as usize;
 
@@ -106,7 +112,12 @@ impl Tool for FetchTool {
             }
             "DELETE" => self.http_client.delete(url),
             "HEAD" => self.http_client.head(url),
-            _ => return Err(Error::invalid_input(format!("Unsupported method: {}", method))),
+            _ => {
+                return Err(Error::invalid_input(format!(
+                    "Unsupported method: {}",
+                    method
+                )));
+            }
         };
 
         if let Some(headers) = input.get("headers").and_then(|v| v.as_object()) {
@@ -122,8 +133,10 @@ impl Tool for FetchTool {
             }
         }
 
-        let response = req.send().await
-                .map_err(|e| Error::Network(format!("Request failed: {}", e)))?;
+        let response = req
+            .send()
+            .await
+            .map_err(|e| Error::Network(format!("Request failed: {}", e)))?;
 
         let status = response.status();
         let headers = response.headers().clone();
@@ -133,8 +146,10 @@ impl Tool for FetchTool {
             .unwrap_or("unknown")
             .to_string();
 
-        let body_bytes = response.bytes().await
-                .map_err(|e| Error::Network(format!("Failed to read response body: {}", e)))?;
+        let body_bytes = response
+            .bytes()
+            .await
+            .map_err(|e| Error::Network(format!("Failed to read response body: {}", e)))?;
 
         let size = body_bytes.len();
 
@@ -143,7 +158,9 @@ impl Tool for FetchTool {
                 success: true,
                 content: format!(
                     "Response too large: {} bytes (max: {}). Showing first {} bytes:\n\n{}",
-                    size, max_size, max_size,
+                    size,
+                    max_size,
+                    max_size,
                     String::from_utf8_lossy(&body_bytes[..max_size])
                 ),
                 error: None,

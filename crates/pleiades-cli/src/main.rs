@@ -15,7 +15,7 @@ mod repl;
     about = "A next-generation, provider-agnostic terminal AI assistant",
     long_about = "Pleiades is a terminal AI assistant that supports multiple AI providers, \
                   extensible plugins, and a beautiful terminal interface.",
-    subcommand_required = false,
+    subcommand_required = false
 )]
 struct Cli {
     #[command(subcommand)]
@@ -469,7 +469,10 @@ fn handle_config_edit() {
         config_dir.join("config.toml"),
     ];
 
-    let config_path = paths.iter().find(|p| p.exists()).cloned()
+    let config_path = paths
+        .iter()
+        .find(|p| p.exists())
+        .cloned()
         .unwrap_or_else(|| {
             let dir = if PathBuf::from(".pleiades").exists() {
                 PathBuf::from(".pleiades")
@@ -566,7 +569,11 @@ fn handle_config_path() {
 fn handle_config_init(force: bool, format: &str) {
     let valid_formats = ["toml", "json", "yaml"];
     if !valid_formats.contains(&format) {
-        eprintln!("Invalid format '{}'. Must be one of: {}", format, valid_formats.join(", "));
+        eprintln!(
+            "Invalid format '{}'. Must be one of: {}",
+            format,
+            valid_formats.join(", ")
+        );
         std::process::exit(1);
     }
 
@@ -751,8 +758,17 @@ fn handle_provider_info(loader: &ConfigLoader, name: &str) {
     let env_var = secret_manager.expected_env_var(name).unwrap_or("(none)");
 
     println!("Provider: {}", name);
-    println!("  API Key: {}", pc.api_key.as_ref().map(|k| pleiades_config::env_interpolate::mask_secrets(k)).unwrap_or_else(|| "not set".to_string()));
-    println!("  Base URL: {}", pc.base_url.as_deref().unwrap_or("(default)"));
+    println!(
+        "  API Key: {}",
+        pc.api_key
+            .as_ref()
+            .map(|k| pleiades_config::env_interpolate::mask_secrets(k))
+            .unwrap_or_else(|| "not set".to_string())
+    );
+    println!(
+        "  Base URL: {}",
+        pc.base_url.as_deref().unwrap_or("(default)")
+    );
     println!("  Expected Env Var: {}", env_var);
     println!("  Max Retries: {}", pc.max_retries);
     println!("  Timeout: {}s", pc.timeout_secs);
@@ -813,28 +829,40 @@ fn handle_provider_test(loader: &ConfigLoader, name: &str, model: Option<String>
     let provider: Box<dyn pleiades_core::Provider> = match name {
         "anthropic" => {
             if base_url.is_empty() {
-                Box::new(pleiades_providers::anthropic::AnthropicProvider::new(api_key))
+                Box::new(pleiades_providers::anthropic::AnthropicProvider::new(
+                    api_key,
+                ))
             } else {
-                Box::new(pleiades_providers::anthropic::AnthropicProvider::with_base_url(api_key, base_url))
+                Box::new(
+                    pleiades_providers::anthropic::AnthropicProvider::with_base_url(
+                        api_key, base_url,
+                    ),
+                )
             }
         }
         "openai" => {
             if base_url.is_empty() {
                 Box::new(pleiades_providers::openai::OpenAIProvider::new(api_key))
             } else {
-                Box::new(pleiades_providers::openai::OpenAIProvider::with_base_url(api_key, base_url))
+                Box::new(pleiades_providers::openai::OpenAIProvider::with_base_url(
+                    api_key, base_url,
+                ))
             }
         }
         _ => {
             let display = name;
             let model_name = model.clone().unwrap_or_else(|| "gpt-4o".to_string());
-            Box::new(pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
-                name, display, api_key, base_url, model_name,
-            ))
+            Box::new(
+                pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
+                    name, display, api_key, base_url, model_name,
+                ),
+            )
         }
     };
 
-    let model_name = model.clone().unwrap_or_else(|| provider.default_model().to_string());
+    let model_name = model
+        .clone()
+        .unwrap_or_else(|| provider.default_model().to_string());
     println!("Testing provider '{}' with model '{}'...", name, model_name);
 
     let rt = match tokio::runtime::Runtime::new() {
@@ -846,16 +874,21 @@ fn handle_provider_test(loader: &ConfigLoader, name: &str, model: Option<String>
     };
 
     rt.block_on(async {
-        match provider.chat_stream(pleiades_core::provider::ChatRequest {
-            model: model_name,
-            messages: vec![pleiades_core::conversation::Message::user("Respond with exactly: Hello from Pleiades!")],
-            system_prompt: None,
-            temperature: Some(0.0),
-            top_p: None,
-            max_tokens: Some(50),
-            stop: None,
-            tools: None,
-        }).await {
+        match provider
+            .chat_stream(pleiades_core::provider::ChatRequest {
+                model: model_name,
+                messages: vec![pleiades_core::conversation::Message::user(
+                    "Respond with exactly: Hello from Pleiades!",
+                )],
+                system_prompt: None,
+                temperature: Some(0.0),
+                top_p: None,
+                max_tokens: Some(50),
+                stop: None,
+                tools: None,
+            })
+            .await
+        {
             Ok(mut rx) => {
                 println!("  Connection successful! Response:");
                 print!("  ");
@@ -883,7 +916,11 @@ fn handle_provider_test(loader: &ConfigLoader, name: &str, model: Option<String>
     });
 }
 
-fn handle_model_list(loader: &ConfigLoader, provider_filter: Option<String>, search: Option<String>) {
+fn handle_model_list(
+    loader: &ConfigLoader,
+    provider_filter: Option<String>,
+    search: Option<String>,
+) {
     let config = match loader.load_with_interpolation() {
         Ok(c) => c,
         Err(e) => {
@@ -915,7 +952,8 @@ fn handle_model_list(loader: &ConfigLoader, provider_filter: Option<String>, sea
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let provider_refs: Vec<&dyn pleiades_core::Provider> =
+            providers.iter().map(|p| p.as_ref()).collect();
         let results = registry.discover_from_providers(&provider_refs).await;
         for (name, result) in &results {
             match result {
@@ -945,12 +983,11 @@ fn handle_model_list(loader: &ConfigLoader, provider_filter: Option<String>, sea
     for model in &models {
         let ctx = model.capabilities.max_context_length;
         let ctx_str = pleiades_core::model::format_context_length(ctx);
-        let pricing = model.pricing.as_ref().map(|p| {
-            format!(
-                "${:.2}i/${:.2}o",
-                p.input_per_million, p.output_per_million
-            )
-        }).unwrap_or_else(|| "pricing N/A".to_string());
+        let pricing = model
+            .pricing
+            .as_ref()
+            .map(|p| format!("${:.2}i/${:.2}o", p.input_per_million, p.output_per_million))
+            .unwrap_or_else(|| "pricing N/A".to_string());
 
         let name = model.display_name.as_deref().unwrap_or(&model.id);
         println!(
@@ -974,7 +1011,8 @@ fn handle_model_info(loader: &ConfigLoader, name: &str) {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let provider_refs: Vec<&dyn pleiades_core::Provider> =
+            providers.iter().map(|p| p.as_ref()).collect();
         let _ = registry.discover_from_providers(&provider_refs).await;
     });
 
@@ -986,34 +1024,69 @@ fn handle_model_info(loader: &ConfigLoader, name: &str) {
         }
     };
 
-    println!("Model: {}", model.display_name.as_deref().unwrap_or(&model.id));
+    println!(
+        "Model: {}",
+        model.display_name.as_deref().unwrap_or(&model.id)
+    );
     println!("  ID:       {}", model.id);
     println!("  Provider: {}", model.provider);
     if let Some(ref desc) = model.description {
         println!("  Description: {}", desc);
     }
     println!("  Capabilities:");
-    println!("    Context:  {} tokens", pleiades_core::model::format_context_length(model.capabilities.max_context_length));
-    println!("    Output:   {} tokens", model.capabilities.max_output_tokens);
+    println!(
+        "    Context:  {} tokens",
+        pleiades_core::model::format_context_length(model.capabilities.max_context_length)
+    );
+    println!(
+        "    Output:   {} tokens",
+        model.capabilities.max_output_tokens
+    );
     println!("    Tools:    {}", yesno(model.capabilities.supports_tools));
-    println!("    Vision:   {}", yesno(model.capabilities.supports_vision));
-    println!("    Streaming: {}", yesno(model.capabilities.supports_streaming));
-    println!("    Thinking: {}", yesno(model.capabilities.supports_thinking));
-    println!("    JSON mode: {}", yesno(model.capabilities.supports_json_mode));
+    println!(
+        "    Vision:   {}",
+        yesno(model.capabilities.supports_vision)
+    );
+    println!(
+        "    Streaming: {}",
+        yesno(model.capabilities.supports_streaming)
+    );
+    println!(
+        "    Thinking: {}",
+        yesno(model.capabilities.supports_thinking)
+    );
+    println!(
+        "    JSON mode: {}",
+        yesno(model.capabilities.supports_json_mode)
+    );
 
     if let Some(ref pricing) = model.pricing {
         println!("  Pricing (per million tokens):");
-        println!("    Input:  {}", pleiades_core::model::format_price(pricing.input_per_million));
-        println!("    Output: {}", pleiades_core::model::format_price(pricing.output_per_million));
+        println!(
+            "    Input:  {}",
+            pleiades_core::model::format_price(pricing.input_per_million)
+        );
+        println!(
+            "    Output: {}",
+            pleiades_core::model::format_price(pricing.output_per_million)
+        );
         if let Some(cr) = pricing.cache_read_per_million {
-            println!("    Cache Read:  {}", pleiades_core::model::format_price(cr));
+            println!(
+                "    Cache Read:  {}",
+                pleiades_core::model::format_price(cr)
+            );
         }
         if let Some(cw) = pricing.cache_write_per_million {
-            println!("    Cache Write: {}", pleiades_core::model::format_price(cw));
+            println!(
+                "    Cache Write: {}",
+                pleiades_core::model::format_price(cw)
+            );
         }
     }
 
-    let aliases: Vec<String> = registry.aliases().iter()
+    let aliases: Vec<String> = registry
+        .aliases()
+        .iter()
         .filter(|(_, v)| *v == &model.id)
         .map(|(k, _)| k.clone())
         .collect();
@@ -1055,14 +1128,18 @@ fn handle_model_alias(loader: &ConfigLoader, alias: &str, model: &str) {
     let providers = build_providers_from_config(&config);
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let provider_refs: Vec<&dyn pleiades_core::Provider> =
+            providers.iter().map(|p| p.as_ref()).collect();
         let _ = registry.discover_from_providers(&provider_refs).await;
     });
 
     match registry.add_alias(alias, model) {
         Ok(_) => {
             let mut config = config.clone();
-            config.models.aliases.insert(alias.to_string(), model.to_string());
+            config
+                .models
+                .aliases
+                .insert(alias.to_string(), model.to_string());
             match loader.save_project(&config) {
                 Ok(_) => println!("Alias '{}' -> '{}' created", alias, model),
                 Err(e) => eprintln!("Error saving config: {}", e),
@@ -1106,7 +1183,9 @@ fn handle_model_discover(loader: &ConfigLoader) {
 
     let providers = build_providers_from_config(&config);
     if providers.is_empty() {
-        println!("No providers configured. Use 'pleiades config set providers.<name>.api_key <key>' first.");
+        println!(
+            "No providers configured. Use 'pleiades config set providers.<name>.api_key <key>' first."
+        );
         return;
     }
 
@@ -1115,7 +1194,8 @@ fn handle_model_discover(loader: &ConfigLoader) {
 
     println!("Discovering models from {} provider(s)...", providers.len());
     rt.block_on(async {
-        let provider_refs: Vec<&dyn pleiades_core::Provider> = providers.iter().map(|p| p.as_ref()).collect();
+        let provider_refs: Vec<&dyn pleiades_core::Provider> =
+            providers.iter().map(|p| p.as_ref()).collect();
         let results = registry.discover_from_providers(&provider_refs).await;
 
         for (name, result) in &results {
@@ -1128,7 +1208,11 @@ fn handle_model_discover(loader: &ConfigLoader) {
 
     if !registry.is_empty() {
         let total = registry.len();
-        println!("\nTotal: {} models across {} provider(s)", total, registry.summary_by_provider().len());
+        println!(
+            "\nTotal: {} models across {} provider(s)",
+            total,
+            registry.summary_by_provider().len()
+        );
     }
 }
 
@@ -1137,7 +1221,9 @@ fn yesno(v: bool) -> &'static str {
 }
 
 /// Build provider instances from configuration (without starting a runtime).
-fn build_providers_from_config(config: &pleiades_config::Config) -> Vec<Box<dyn pleiades_core::Provider>> {
+fn build_providers_from_config(
+    config: &pleiades_config::Config,
+) -> Vec<Box<dyn pleiades_core::Provider>> {
     let mut providers: Vec<Box<dyn pleiades_core::Provider>> = Vec::new();
 
     for (name, pc) in &config.providers {
@@ -1153,31 +1239,47 @@ fn build_providers_from_config(config: &pleiades_config::Config) -> Vec<Box<dyn 
 }
 
 /// Build a single provider instance by name.
-fn build_test_provider(name: &str, api_key: &str, base_url: &str) -> Box<dyn pleiades_core::Provider> {
+fn build_test_provider(
+    name: &str,
+    api_key: &str,
+    base_url: &str,
+) -> Box<dyn pleiades_core::Provider> {
     match name {
         "anthropic" => {
             if base_url.is_empty() {
-                Box::new(pleiades_providers::anthropic::AnthropicProvider::new(api_key.to_string()))
-            } else {
-                Box::new(pleiades_providers::anthropic::AnthropicProvider::with_base_url(
-                    api_key.to_string(), base_url.to_string(),
+                Box::new(pleiades_providers::anthropic::AnthropicProvider::new(
+                    api_key.to_string(),
                 ))
+            } else {
+                Box::new(
+                    pleiades_providers::anthropic::AnthropicProvider::with_base_url(
+                        api_key.to_string(),
+                        base_url.to_string(),
+                    ),
+                )
             }
         }
         "openai" => {
             if base_url.is_empty() {
-                Box::new(pleiades_providers::openai::OpenAIProvider::new(api_key.to_string()))
+                Box::new(pleiades_providers::openai::OpenAIProvider::new(
+                    api_key.to_string(),
+                ))
             } else {
                 Box::new(pleiades_providers::openai::OpenAIProvider::with_base_url(
-                    api_key.to_string(), base_url.to_string(),
+                    api_key.to_string(),
+                    base_url.to_string(),
                 ))
             }
         }
-        _ => {
-            Box::new(pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
-                name, name, api_key.to_string(), base_url.to_string(), "gpt-4o".to_string(),
-            ))
-        }
+        _ => Box::new(
+            pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
+                name,
+                name,
+                api_key.to_string(),
+                base_url.to_string(),
+                "gpt-4o".to_string(),
+            ),
+        ),
     }
 }
 
@@ -1205,7 +1307,11 @@ fn handle_session_list(loader: &ConfigLoader) {
                 let title = session.metadata.title.as_deref().unwrap_or("Untitled");
                 let created = session.metadata.created_at.format("%Y-%m-%d %H:%M");
                 let model = session.metadata.model.as_deref().unwrap_or("?");
-                let count = session.metadata.total_tokens.map(|t| t.to_string()).unwrap_or_else(|| "?".to_string());
+                let count = session
+                    .metadata
+                    .total_tokens
+                    .map(|t| t.to_string())
+                    .unwrap_or_else(|| "?".to_string());
                 println!("  {}  {}  {}", &session.id[..8], created, title);
                 println!("      model: {} | tokens: {}", model, count);
                 println!();
@@ -1232,9 +1338,18 @@ fn handle_session_show(loader: &ConfigLoader, id: &str) {
     match store.load(id) {
         Ok(conv) => {
             println!("Session: {}", conv.id);
-            println!("  Title:    {}", conv.metadata.title.as_deref().unwrap_or("Untitled"));
-            println!("  Created:  {}", conv.metadata.created_at.format("%Y-%m-%d %H:%M UTC"));
-            println!("  Updated:  {}", conv.metadata.updated_at.format("%Y-%m-%d %H:%M UTC"));
+            println!(
+                "  Title:    {}",
+                conv.metadata.title.as_deref().unwrap_or("Untitled")
+            );
+            println!(
+                "  Created:  {}",
+                conv.metadata.created_at.format("%Y-%m-%d %H:%M UTC")
+            );
+            println!(
+                "  Updated:  {}",
+                conv.metadata.updated_at.format("%Y-%m-%d %H:%M UTC")
+            );
             if let Some(ref model) = conv.metadata.model {
                 println!("  Model:    {}", model);
             }
@@ -1303,7 +1418,9 @@ fn handle_session_export(loader: &ConfigLoader, id: &str, format: &str, output: 
 
     match content {
         Ok(data) => {
-            let path = output.unwrap_or_else(|| format!("{}.{}", id, if format == "json" { "json" } else { "md" }));
+            let path = output.unwrap_or_else(|| {
+                format!("{}.{}", id, if format == "json" { "json" } else { "md" })
+            });
             match std::fs::write(&path, &data) {
                 Ok(_) => println!("Exported to {}", path),
                 Err(e) => {
@@ -1336,7 +1453,11 @@ fn handle_tool_list(loader: &ConfigLoader) {
     println!("Available tools ({}):", tools.len());
     println!();
     for tool in &tools {
-        let ro = if tool.is_readonly() { "readonly" } else { "modifies" };
+        let ro = if tool.is_readonly() {
+            "readonly"
+        } else {
+            "modifies"
+        };
         println!("  {:<12}  {}  [{}]", tool.name(), tool.description(), ro);
     }
 }
@@ -1415,7 +1536,10 @@ fn handle_tool_call(loader: &ConfigLoader, name: &str, input_str: &str) {
                 if result.success {
                     println!("{}", result.content);
                 } else {
-                    eprintln!("Tool failed: {}", result.error.unwrap_or_else(|| "unknown error".to_string()));
+                    eprintln!(
+                        "Tool failed: {}",
+                        result.error.unwrap_or_else(|| "unknown error".to_string())
+                    );
                     std::process::exit(1);
                 }
             }
@@ -1459,8 +1583,15 @@ fn handle_plugin_list(_loader: &ConfigLoader) {
                 return;
             }
             for p in &plugins {
-                let status = if p.enabled { "\x1b[1;32menabled\x1b[0m" } else { "\x1b[2mdisabled\x1b[0m" };
-                println!("  {:<30}  {:<8}  {}  {} tools  {}", p.id, p.version, status, p.tool_count, p.description);
+                let status = if p.enabled {
+                    "\x1b[1;32menabled\x1b[0m"
+                } else {
+                    "\x1b[2mdisabled\x1b[0m"
+                };
+                println!(
+                    "  {:<30}  {:<8}  {}  {} tools  {}",
+                    p.id, p.version, status, p.tool_count, p.description
+                );
             }
         }
         Err(e) => {
@@ -1474,7 +1605,10 @@ fn handle_plugin_install(_loader: &ConfigLoader, path: &str) {
     let mut manager = build_plugin_manager();
     match manager.install(path) {
         Ok(outcome) => {
-            println!("\x1b[1;32m✓\x1b[0m Plugin installed: {} v{}", outcome.plugin_id, outcome.version);
+            println!(
+                "\x1b[1;32m✓\x1b[0m Plugin installed: {} v{}",
+                outcome.plugin_id, outcome.version
+            );
         }
         Err(e) => {
             eprintln!("\x1b[1;31m✗\x1b[0m Install failed: {}", e);
@@ -1525,7 +1659,10 @@ fn handle_prompt_list() {
     }
     println!("Prompt templates ({}):\n", summaries.len());
     for s in &summaries {
-        println!("  \x1b[1;32m{:<22}\x1b[0m [\x1b[2m{}\x1b[0m] {}", s.name, s.source, s.description);
+        println!(
+            "  \x1b[1;32m{:<22}\x1b[0m [\x1b[2m{}\x1b[0m] {}",
+            s.name, s.source, s.description
+        );
         if !s.variables.is_empty() {
             println!("      variables: {}", s.variables.join(", "));
         }
@@ -1556,7 +1693,10 @@ fn handle_prompt_render(name: &str, vars: &[String]) {
         if let Some((k, v)) = kv.split_once('=') {
             map.insert(k.to_string(), v.to_string());
         } else {
-            eprintln!("\x1b[1;31m✗\x1b[0m Invalid variable '{}', expected key=value", kv);
+            eprintln!(
+                "\x1b[1;31m✗\x1b[0m Invalid variable '{}', expected key=value",
+                kv
+            );
             std::process::exit(1);
         }
     }
@@ -1930,7 +2070,9 @@ fn main() {
             SessionCommand::List => handle_session_list(&loader),
             SessionCommand::Show { id } => handle_session_show(&loader, &id),
             SessionCommand::Delete { id } => handle_session_delete(&loader, &id),
-            SessionCommand::Export { id, format, output } => handle_session_export(&loader, &id, &format, output),
+            SessionCommand::Export { id, format, output } => {
+                handle_session_export(&loader, &id, &format, output)
+            }
             SessionCommand::Path => handle_session_path(&loader),
         },
         Some(Commands::Tool(cmd)) => match cmd {
@@ -2073,7 +2215,10 @@ fn get_core_field(config: &pleiades_config::Config, field: &str) -> Option<Strin
 fn get_provider_field(config: &pleiades_config::Config, name: &str, field: &str) -> Option<String> {
     let provider = config.providers.get(name)?;
     match field {
-        "api_key" => provider.api_key.clone().map(|v| pleiades_config::env_interpolate::mask_secrets(&v)),
+        "api_key" => provider
+            .api_key
+            .clone()
+            .map(|v| pleiades_config::env_interpolate::mask_secrets(&v)),
         "base_url" => provider.base_url.clone(),
         "organization_id" => provider.organization_id.clone(),
         "max_retries" => Some(provider.max_retries.to_string()),
@@ -2092,7 +2237,10 @@ fn get_models_field(config: &pleiades_config::Config, field: &str) -> Option<Str
 fn get_session_field(config: &pleiades_config::Config, field: &str) -> Option<String> {
     match field {
         "context_size" => Some(config.session.context_size.to_string()),
-        "auto_save_interval_secs" => config.session.auto_save_interval_secs.map(|v| v.to_string()),
+        "auto_save_interval_secs" => config
+            .session
+            .auto_save_interval_secs
+            .map(|v| v.to_string()),
         "max_concurrent" => Some(config.session.max_concurrent.to_string()),
         "compress_history" => Some(config.session.compress_history.to_string()),
         _ => None,
@@ -2158,69 +2306,112 @@ fn set_core_field(config: &mut pleiades_config::Config, field: &str, value: &str
         "theme" => config.core.theme = Some(value.to_string()),
         "verbose" => config.core.verbose = value == "true" || value == "1",
         "debug" => config.core.debug = value == "true" || value == "1",
-        "max_tokens" => { config.core.max_tokens = value.parse().ok(); }
-        "temperature" => { config.core.temperature = value.parse().ok(); }
-        "auto_update" => { config.core.auto_update = value == "true" || value == "1"; }
-        "log_level" => { config.core.log_level = value.to_string(); }
+        "max_tokens" => {
+            config.core.max_tokens = value.parse().ok();
+        }
+        "temperature" => {
+            config.core.temperature = value.parse().ok();
+        }
+        "auto_update" => {
+            config.core.auto_update = value == "true" || value == "1";
+        }
+        "log_level" => {
+            config.core.log_level = value.to_string();
+        }
         _ => eprintln!("Warning: unknown core field '{}'", field),
     }
 }
 
 fn set_provider_field(config: &mut pleiades_config::Config, name: &str, field: &str, value: &str) {
-    let provider = config.providers.entry(name.to_string())
-        .or_default();
+    let provider = config.providers.entry(name.to_string()).or_default();
     match field {
         "api_key" => provider.api_key = Some(value.to_string()),
         "base_url" => provider.base_url = Some(value.to_string()),
         "organization_id" => provider.organization_id = Some(value.to_string()),
-        "max_retries" => { provider.max_retries = value.parse().unwrap_or(3); }
-        "timeout_secs" => { provider.timeout_secs = value.parse().unwrap_or(120); }
+        "max_retries" => {
+            provider.max_retries = value.parse().unwrap_or(3);
+        }
+        "timeout_secs" => {
+            provider.timeout_secs = value.parse().unwrap_or(120);
+        }
         _ => eprintln!("Warning: unknown provider field '{}'", field),
     }
 }
 
 fn set_session_field(config: &mut pleiades_config::Config, field: &str, value: &str) {
     match field {
-        "context_size" => { config.session.context_size = value.parse().unwrap_or(100); }
-        "auto_save_interval_secs" => { config.session.auto_save_interval_secs = value.parse().ok(); }
-        "max_concurrent" => { config.session.max_concurrent = value.parse().unwrap_or(10); }
-        "compress_history" => { config.session.compress_history = value == "true"; }
+        "context_size" => {
+            config.session.context_size = value.parse().unwrap_or(100);
+        }
+        "auto_save_interval_secs" => {
+            config.session.auto_save_interval_secs = value.parse().ok();
+        }
+        "max_concurrent" => {
+            config.session.max_concurrent = value.parse().unwrap_or(10);
+        }
+        "compress_history" => {
+            config.session.compress_history = value == "true";
+        }
         _ => eprintln!("Warning: unknown session field '{}'", field),
     }
 }
 
 fn set_display_field(config: &mut pleiades_config::Config, field: &str, value: &str) {
     match field {
-        "style" => { config.display.style = value.to_string(); }
-        "syntax_highlighting" => { config.display.syntax_highlighting = value == "true"; }
-        "show_token_usage" => { config.display.show_token_usage = value == "true"; }
-        "show_timing" => { config.display.show_timing = value == "true"; }
-        "output_width" => { config.display.output_width = value.parse().unwrap_or(0); }
-        "show_progress" => { config.display.show_progress = value == "true"; }
+        "style" => {
+            config.display.style = value.to_string();
+        }
+        "syntax_highlighting" => {
+            config.display.syntax_highlighting = value == "true";
+        }
+        "show_token_usage" => {
+            config.display.show_token_usage = value == "true";
+        }
+        "show_timing" => {
+            config.display.show_timing = value == "true";
+        }
+        "output_width" => {
+            config.display.output_width = value.parse().unwrap_or(0);
+        }
+        "show_progress" => {
+            config.display.show_progress = value == "true";
+        }
         _ => eprintln!("Warning: unknown display field '{}'", field),
     }
 }
 
 fn set_agent_field(config: &mut pleiades_config::Config, field: &str, value: &str) {
     match field {
-        "default_persona" => { config.agent.default_persona = Some(value.to_string()); }
-        "max_tool_iterations" => { config.agent.max_tool_iterations = value.parse().unwrap_or(25); }
-        "auto_edit" => { config.agent.auto_edit = value == "true"; }
+        "default_persona" => {
+            config.agent.default_persona = Some(value.to_string());
+        }
+        "max_tool_iterations" => {
+            config.agent.max_tool_iterations = value.parse().unwrap_or(25);
+        }
+        "auto_edit" => {
+            config.agent.auto_edit = value == "true";
+        }
         _ => eprintln!("Warning: unknown agent field '{}'", field),
     }
 }
 
 fn set_permissions_field(config: &mut pleiades_config::Config, field: &str, value: &str) {
     match field {
-        "ask_always" => { config.permissions.ask_always = value == "true"; }
-        "grant_duration_minutes" => { config.permissions.grant_duration_minutes = value.parse().unwrap_or(60); }
+        "ask_always" => {
+            config.permissions.ask_always = value == "true";
+        }
+        "grant_duration_minutes" => {
+            config.permissions.grant_duration_minutes = value.parse().unwrap_or(60);
+        }
         _ => eprintln!("Warning: unknown permissions field '{}'", field),
     }
 }
 
 fn set_models_field(config: &mut pleiades_config::Config, field: &str, value: &str) {
     match field {
-        "default" => { config.models.default = Some(value.to_string()); }
+        "default" => {
+            config.models.default = Some(value.to_string());
+        }
         _ => eprintln!("Warning: unknown models field '{}'", field),
     }
 }
@@ -2232,8 +2423,14 @@ mod tests {
     #[test]
     fn test_get_core_value() {
         let config = pleiades_config::Config::default();
-        assert_eq!(get_nested_value(&config, "core.max_tokens"), Some("4096".to_string()));
-        assert_eq!(get_nested_value(&config, "core.verbose"), Some("false".to_string()));
+        assert_eq!(
+            get_nested_value(&config, "core.max_tokens"),
+            Some("4096".to_string())
+        );
+        assert_eq!(
+            get_nested_value(&config, "core.verbose"),
+            Some("false".to_string())
+        );
     }
 
     #[test]

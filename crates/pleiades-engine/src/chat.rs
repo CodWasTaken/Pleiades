@@ -22,7 +22,11 @@ impl<'a> ChatSession<'a> {
     }
 
     /// Create a chat session with an existing conversation (for resume).
-    pub fn from_conversation(engine: &'a Engine, conversation: Conversation, provider: impl Into<String>) -> Self {
+    pub fn from_conversation(
+        engine: &'a Engine,
+        conversation: Conversation,
+        provider: impl Into<String>,
+    ) -> Self {
         Self {
             engine,
             conversation,
@@ -34,7 +38,9 @@ impl<'a> ChatSession<'a> {
     pub async fn send(&mut self, content: impl Into<String>) -> Result<Message, Error> {
         let message = Message::user(content);
         self.conversation.add_message(message);
-        self.engine.chat(&mut self.conversation, &self.provider).await
+        self.engine
+            .chat(&mut self.conversation, &self.provider)
+            .await
     }
 
     /// Stream a chat response, processing tokens as they arrive.

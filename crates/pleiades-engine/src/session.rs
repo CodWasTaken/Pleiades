@@ -67,8 +67,7 @@ impl SessionStore {
         let json = std::fs::read_to_string(&path)
             .map_err(|e| Error::Io(format!("Failed to read session: {}", e)))?;
 
-        serde_json::from_str(&json)
-            .map_err(|e| Error::Serialization(e.to_string()))
+        serde_json::from_str(&json).map_err(|e| Error::Serialization(e.to_string()))
     }
 
     /// Delete a session file by ID.
@@ -123,11 +122,17 @@ impl SessionStore {
         let mut output = format!("# {}\n\n", title);
         output.push_str(&format!(
             "- **Created**: {}\n",
-            conversation.metadata.created_at.format("%Y-%m-%d %H:%M UTC")
+            conversation
+                .metadata
+                .created_at
+                .format("%Y-%m-%d %H:%M UTC")
         ));
         output.push_str(&format!(
             "- **Updated**: {}\n",
-            conversation.metadata.updated_at.format("%Y-%m-%d %H:%M UTC")
+            conversation
+                .metadata
+                .updated_at
+                .format("%Y-%m-%d %H:%M UTC")
         ));
         if let Some(ref model) = conversation.metadata.model {
             output.push_str(&format!("- **Model**: {}\n", model));
@@ -139,7 +144,10 @@ impl SessionStore {
             output.push_str(&format!("- **Total Tokens**: {}\n", tokens));
         }
         if !conversation.metadata.tags.is_empty() {
-            output.push_str(&format!("- **Tags**: {}\n", conversation.metadata.tags.join(", ")));
+            output.push_str(&format!(
+                "- **Tags**: {}\n",
+                conversation.metadata.tags.join(", ")
+            ));
         }
         output.push_str("\n---\n\n");
 
@@ -155,8 +163,7 @@ impl SessionStore {
     /// Export a conversation to JSON format.
     pub fn export_json(&self, id: &str) -> Result<String, Error> {
         let conversation = self.load(id)?;
-        serde_json::to_string_pretty(&conversation)
-            .map_err(|e| Error::Serialization(e.to_string()))
+        serde_json::to_string_pretty(&conversation).map_err(|e| Error::Serialization(e.to_string()))
     }
 
     /// Load only the metadata from a session (without full conversation).
@@ -165,8 +172,8 @@ impl SessionStore {
         let json = std::fs::read_to_string(&path)
             .map_err(|e| Error::Io(format!("Failed to read session: {}", e)))?;
 
-        let conv: Conversation = serde_json::from_str(&json)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let conv: Conversation =
+            serde_json::from_str(&json).map_err(|e| Error::Serialization(e.to_string()))?;
 
         Ok(conv.metadata)
     }
@@ -199,7 +206,17 @@ impl SessionInfo {
     pub fn summary(&self) -> String {
         let created = self.metadata.created_at.format("%Y-%m-%d %H:%M");
         let model = self.metadata.model.as_deref().unwrap_or("?");
-        let tokens = self.metadata.total_tokens.map(|t| t.to_string()).unwrap_or_else(|| "?".to_string());
-        format!("{} | {} | model: {} | tokens: {}", &self.id[..8], created, model, tokens)
+        let tokens = self
+            .metadata
+            .total_tokens
+            .map(|t| t.to_string())
+            .unwrap_or_else(|| "?".to_string());
+        format!(
+            "{} | {} | model: {} | tokens: {}",
+            &self.id[..8],
+            created,
+            model,
+            tokens
+        )
     }
 }

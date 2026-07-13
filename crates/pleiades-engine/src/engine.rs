@@ -4,9 +4,9 @@ use std::sync::Arc;
 use pleiades_core::conversation::{Conversation, Message, MessageRole};
 use pleiades_core::error::Error;
 use pleiades_core::event::Event;
+use pleiades_core::model::ModelRegistry;
 use pleiades_core::provider::{ChatRequest, Provider, StreamEvent};
 use pleiades_core::tool::{Tool, ToolContext};
-use pleiades_core::model::ModelRegistry;
 
 use pleiades_config::types::Config;
 
@@ -79,7 +79,9 @@ impl Engine {
         self.providers
             .get(name)
             .map(|p| p.as_ref())
-            .ok_or_else(|| Error::ProviderNotFound { provider: name.to_string() })
+            .ok_or_else(|| Error::ProviderNotFound {
+                provider: name.to_string(),
+            })
     }
 
     /// Get the model registry.
@@ -98,11 +100,19 @@ impl Engine {
     }
 
     /// Process a chat message through the engine.
-    pub async fn chat(&self, conversation: &mut Conversation, provider_name: &str) -> Result<Message, Error> {
+    pub async fn chat(
+        &self,
+        conversation: &mut Conversation,
+        provider_name: &str,
+    ) -> Result<Message, Error> {
         self.inject_memory_context(conversation);
         self.prepare_conversation(conversation).await;
         let provider = self.get_provider(provider_name)?;
-        let model = self.config.core.default_model.clone()
+        let model = self
+            .config
+            .core
+            .default_model
+            .clone()
             .unwrap_or_else(|| provider.default_model().to_string());
 
         let request = ChatRequest {
@@ -121,7 +131,9 @@ impl Engine {
 
         if let Some(usage) = response.usage {
             conversation.metadata.total_tokens = Some(
-                conversation.metadata.total_tokens.unwrap_or(0) + usage.input_tokens + usage.output_tokens
+                conversation.metadata.total_tokens.unwrap_or(0)
+                    + usage.input_tokens
+                    + usage.output_tokens,
             );
         }
 
@@ -141,7 +153,11 @@ impl Engine {
         self.inject_memory_context(conversation);
         self.prepare_conversation(conversation).await;
         let provider = self.get_provider(provider_name)?;
-        let model = self.config.core.default_model.clone()
+        let model = self
+            .config
+            .core
+            .default_model
+            .clone()
             .unwrap_or_else(|| provider.default_model().to_string());
 
         let request = ChatRequest {
@@ -166,9 +182,13 @@ impl Engine {
         name: &str,
         input: serde_json::Value,
     ) -> Result<pleiades_core::tool::ToolResult, Error> {
-        let tool = self.tools.iter()
+        let tool = self
+            .tools
+            .iter()
             .find(|t| t.name() == name)
-            .ok_or_else(|| Error::ToolNotFound { name: name.to_string() })?;
+            .ok_or_else(|| Error::ToolNotFound {
+                name: name.to_string(),
+            })?;
 
         let ctx = ToolContext {
             cwd: std::env::current_dir().map_err(|e| Error::Io(e.to_string()))?,
@@ -192,9 +212,8 @@ impl Engine {
 
         let start = std::time::Instant::now();
 
-        let timeout_dur = std::time::Duration::from_secs(
-            self.config.session.context_size.max(120) as u64
-        );
+        let timeout_dur =
+            std::time::Duration::from_secs(self.config.session.context_size.max(120) as u64);
 
         let result = tokio::time::timeout(timeout_dur, tool.execute(input.clone(), &ctx)).await;
         let duration = start.elapsed().as_millis() as u64;
@@ -224,11 +243,15 @@ impl Engine {
     ///
     /// Roughly 4 characters per token for English text, plus overhead per message.
     pub fn estimate_tokens(conversation: &Conversation) -> usize {
-        conversation.messages.iter().map(|m| {
-            let text_len = m.text_content().len();
-            let role_overhead = 4; // role tag
-            text_len / 4 + role_overhead
-        }).sum()
+        conversation
+            .messages
+            .iter()
+            .map(|m| {
+                let text_len = m.text_content().len();
+                let role_overhead = 4; // role tag
+                text_len / 4 + role_overhead
+            })
+            .sum()
     }
 
     /// Check if a conversation exceeds the configured context window.
@@ -258,7 +281,9 @@ impl Engine {
             }
         }
 
-        let remove_count = non_system.len().saturating_sub(max_messages.saturating_sub(system_msgs.len()));
+        let remove_count = non_system
+            .len()
+            .saturating_sub(max_messages.saturating_sub(system_msgs.len()));
         let truncated: Vec<Message> = non_system.into_iter().skip(remove_count).collect();
 
         let mut result = system_msgs;
@@ -277,12 +302,21 @@ impl Engine {
             return String::new();
         }
 
-        let provider_name = self.config.core.default_provider.clone()
+        let provider_name = self
+            .config
+            .core
+            .default_provider
+            .clone()
             .unwrap_or_else(|| "openai".to_string());
-        let model = self.config.core.default_model.clone()
+        let model = self
+            .config
+            .core
+            .default_model
+            .clone()
             .unwrap_or_else(|| "gpt-4o".to_string());
 
-        let conversation_text: String = messages.iter()
+        let conversation_text: String = messages
+            .iter()
             .map(|m| {
                 let role = format!("{:?}", m.role).to_lowercase();
                 format!("<{}>\n{}\n</{}>", role, m.text_content(), role)
@@ -299,7 +333,9 @@ impl Engine {
         let request = ChatRequest {
             model,
             messages: vec![Message::user(prompt)],
-            system_prompt: Some("You are a precise summarizer. Output ONLY the summary, no preamble.".to_string()),
+            system_prompt: Some(
+                "You are a precise summarizer. Output ONLY the summary, no preamble.".to_string(),
+            ),
             temperature: Some(0.3),
             top_p: None,
             max_tokens: Some(256),
@@ -366,14 +402,16 @@ impl Engine {
 
         self.memory.store_summary(&summary_text).ok();
 
-        let summary_msg = Message::system(format!(
-            "[Conversation History Summary]\n{}",
-            summary_text,
-        ));
+        let summary_msg =
+            Message::system(format!("[Conversation History Summary]\n{}", summary_text,));
 
         conversation.messages.insert(0, summary_msg);
 
-        tracing::info!("Compressed {} messages. Summary: {}", removed.len(), summary_text);
+        tracing::info!(
+            "Compressed {} messages. Summary: {}",
+            removed.len(),
+            summary_text
+        );
         Some(summary_text)
     }
 
@@ -382,10 +420,8 @@ impl Engine {
         if let Ok(summaries) = self.memory.recent_summaries(3) {
             if !summaries.is_empty() {
                 let context = summaries.join("\n---\n");
-                let memory_msg = Message::system(format!(
-                    "[Previous Session Context]\n{}",
-                    context,
-                ));
+                let memory_msg =
+                    Message::system(format!("[Previous Session Context]\n{}", context,));
                 conversation.messages.insert(0, memory_msg);
             }
         }

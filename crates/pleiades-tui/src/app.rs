@@ -4,8 +4,8 @@ use pleiades_config::Config;
 use pleiades_core::conversation::Conversation;
 use pleiades_core::error::Error;
 use pleiades_core::provider::StreamEvent;
-use pleiades_engine::session::SessionStore;
 use pleiades_engine::Engine;
+use pleiades_engine::session::SessionStore;
 
 use crate::input::{LineEditor, ReadOutcome};
 use crate::render::{Spinner, TerminalRenderer};
@@ -22,9 +22,15 @@ pub struct TuiApp {
 
 impl TuiApp {
     pub fn new(config: Config) -> Result<Self, Error> {
-        let provider_name = config.core.default_provider.clone()
+        let provider_name = config
+            .core
+            .default_provider
+            .clone()
             .unwrap_or_else(|| "openai".to_string());
-        let model_name = config.core.default_model.clone()
+        let model_name = config
+            .core
+            .default_model
+            .clone()
             .unwrap_or_else(|| "gpt-4o".to_string());
 
         let session_store = SessionStore::from_config(&config);
@@ -99,7 +105,8 @@ impl TuiApp {
                     rl.push_history(trimmed);
 
                     if trimmed.starts_with('/') {
-                        let should_continue = self.handle_command(&mut engine, trimmed, &mut rl).await;
+                        let should_continue =
+                            self.handle_command(&mut engine, trimmed, &mut rl).await;
                         if !should_continue {
                             break;
                         }
@@ -137,27 +144,41 @@ impl TuiApp {
             let provider: Box<dyn pleiades_core::Provider> = match name.as_str() {
                 "anthropic" => {
                     if base_url.is_empty() {
-                        Box::new(pleiades_providers::anthropic::AnthropicProvider::new(api_key.to_string()))
-                    } else {
-                        Box::new(pleiades_providers::anthropic::AnthropicProvider::with_base_url(
-                            api_key.to_string(), base_url.to_string(),
+                        Box::new(pleiades_providers::anthropic::AnthropicProvider::new(
+                            api_key.to_string(),
                         ))
+                    } else {
+                        Box::new(
+                            pleiades_providers::anthropic::AnthropicProvider::with_base_url(
+                                api_key.to_string(),
+                                base_url.to_string(),
+                            ),
+                        )
                     }
                 }
                 "openai" => {
                     if base_url.is_empty() {
-                        Box::new(pleiades_providers::openai::OpenAIProvider::new(api_key.to_string()))
+                        Box::new(pleiades_providers::openai::OpenAIProvider::new(
+                            api_key.to_string(),
+                        ))
                     } else {
                         Box::new(pleiades_providers::openai::OpenAIProvider::with_base_url(
-                            api_key.to_string(), base_url.to_string(),
+                            api_key.to_string(),
+                            base_url.to_string(),
                         ))
                     }
                 }
                 _ => {
                     let model = self.model_name.clone();
-                    Box::new(pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
-                        name, name, api_key.to_string(), base_url.to_string(), model,
-                    ))
+                    Box::new(
+                        pleiades_providers::openai_compat::OpenAICompatibleProvider::new(
+                            name,
+                            name,
+                            api_key.to_string(),
+                            base_url.to_string(),
+                            model,
+                        ),
+                    )
                 }
             };
             engine.register_provider(provider);
@@ -184,13 +205,37 @@ impl TuiApp {
     fn print_welcome(&self) {
         let stdout = io::stdout();
         let mut out = stdout.lock();
-        let _ = writeln!(out, "\x1b[1;36m╭──────────────────────────────────────────╮\x1b[0m");
-        let _ = writeln!(out, "\x1b[1;36m│\x1b[0m  \x1b[1;33mPleiades\x1b[0m - Terminal AI Assistant      \x1b[1;36m│\x1b[0m");
-        let _ = writeln!(out, "\x1b[1;36m│\x1b[0m  Model: {:<31} \x1b[1;36m│\x1b[0m", self.model_name);
-        let _ = writeln!(out, "\x1b[1;36m│\x1b[0m  Provider: {:<28} \x1b[1;36m│\x1b[0m", self.provider_name);
-        let _ = writeln!(out, "\x1b[1;36m│\x1b[0m  Messages: {:<26} \x1b[1;36m│\x1b[0m", self.conversation.len());
-        let _ = writeln!(out, "\x1b[1;36m│\x1b[0m  Type \x1b[1;32m/help\x1b[0m for commands              \x1b[1;36m│\x1b[0m");
-        let _ = writeln!(out, "\x1b[1;36m╰──────────────────────────────────────────╯\x1b[0m");
+        let _ = writeln!(
+            out,
+            "\x1b[1;36m╭──────────────────────────────────────────╮\x1b[0m"
+        );
+        let _ = writeln!(
+            out,
+            "\x1b[1;36m│\x1b[0m  \x1b[1;33mPleiades\x1b[0m - Terminal AI Assistant      \x1b[1;36m│\x1b[0m"
+        );
+        let _ = writeln!(
+            out,
+            "\x1b[1;36m│\x1b[0m  Model: {:<31} \x1b[1;36m│\x1b[0m",
+            self.model_name
+        );
+        let _ = writeln!(
+            out,
+            "\x1b[1;36m│\x1b[0m  Provider: {:<28} \x1b[1;36m│\x1b[0m",
+            self.provider_name
+        );
+        let _ = writeln!(
+            out,
+            "\x1b[1;36m│\x1b[0m  Messages: {:<26} \x1b[1;36m│\x1b[0m",
+            self.conversation.len()
+        );
+        let _ = writeln!(
+            out,
+            "\x1b[1;36m│\x1b[0m  Type \x1b[1;32m/help\x1b[0m for commands              \x1b[1;36m│\x1b[0m"
+        );
+        let _ = writeln!(
+            out,
+            "\x1b[1;36m╰──────────────────────────────────────────╯\x1b[0m"
+        );
         let _ = writeln!(out);
     }
 
@@ -224,11 +269,18 @@ impl TuiApp {
             }
             "/save" => {
                 let title = if arg.is_empty() {
-                    let first = self.conversation.messages.first()
+                    let first = self
+                        .conversation
+                        .messages
+                        .first()
                         .map(|m| m.text_content())
                         .unwrap_or_default();
                     let preview: String = first.chars().take(40).collect();
-                    if preview.is_empty() { "Untitled".to_string() } else { preview }
+                    if preview.is_empty() {
+                        "Untitled".to_string()
+                    } else {
+                        preview
+                    }
                 } else {
                     arg.to_string()
                 };
@@ -246,7 +298,10 @@ impl TuiApp {
                 match self.session_store.load(arg) {
                     Ok(conv) => {
                         self.conversation = conv;
-                        println!("\x1b[1;32m✓\x1b[0m Session '{arg}' loaded ({} messages)", self.conversation.len());
+                        println!(
+                            "\x1b[1;32m✓\x1b[0m Session '{arg}' loaded ({} messages)",
+                            self.conversation.len()
+                        );
                         self.print_welcome();
                     }
                     Err(e) => eprintln!("\x1b[1;31m✗\x1b[0m Load failed: {e}"),
@@ -257,7 +312,10 @@ impl TuiApp {
                     println!("Current model: \x1b[1;33m{}\x1b[0m", self.model_name);
                 } else {
                     self.model_name = arg.to_string();
-                    println!("\x1b[1;32m✓\x1b[0m Switched to model: \x1b[1;33m{}\x1b[0m", self.model_name);
+                    println!(
+                        "\x1b[1;32m✓\x1b[0m Switched to model: \x1b[1;33m{}\x1b[0m",
+                        self.model_name
+                    );
                     *engine = match self.build_engine() {
                         Ok(e) => e,
                         Err(e) => {
@@ -272,7 +330,10 @@ impl TuiApp {
                     println!("Current provider: \x1b[1;33m{}\x1b[0m", self.provider_name);
                 } else {
                     self.provider_name = arg.to_string();
-                    println!("\x1b[1;32m✓\x1b[0m Switched to provider: \x1b[1;33m{}\x1b[0m", self.provider_name);
+                    println!(
+                        "\x1b[1;32m✓\x1b[0m Switched to provider: \x1b[1;33m{}\x1b[0m",
+                        self.provider_name
+                    );
                     *engine = match self.build_engine() {
                         Ok(e) => e,
                         Err(e) => {
@@ -337,7 +398,8 @@ impl TuiApp {
 
             if tool_calls.is_empty() {
                 if !text_response.is_empty() {
-                    let assistant_msg = pleiades_core::conversation::Message::assistant(text_response);
+                    let assistant_msg =
+                        pleiades_core::conversation::Message::assistant(text_response);
                     self.conversation.add_message(assistant_msg);
                 }
                 break;
@@ -345,16 +407,16 @@ impl TuiApp {
 
             let mut content_blocks = Vec::new();
             if !text_response.is_empty() {
-                content_blocks
-                    .push(pleiades_core::conversation::ContentBlock::Text(text_response));
+                content_blocks.push(pleiades_core::conversation::ContentBlock::Text(
+                    text_response,
+                ));
             }
             for tc in &tool_calls {
-                content_blocks
-                    .push(pleiades_core::conversation::ContentBlock::ToolUse {
-                        id: tc.id.clone(),
-                        name: tc.name.clone(),
-                        input: tc.input.clone(),
-                    });
+                content_blocks.push(pleiades_core::conversation::ContentBlock::ToolUse {
+                    id: tc.id.clone(),
+                    name: tc.name.clone(),
+                    input: tc.input.clone(),
+                });
             }
 
             let assistant_msg = pleiades_core::conversation::Message {
@@ -365,60 +427,82 @@ impl TuiApp {
             };
             self.conversation.add_message(assistant_msg);
 
-            println!("\n\x1b[1;33m─── executing {} tool(s) ───\x1b[0m", tool_calls.len());
+            println!(
+                "\n\x1b[1;33m─── executing {} tool(s) ───\x1b[0m",
+                tool_calls.len()
+            );
 
             for tc in &tool_calls {
                 let allowed = self.check_permission(tc).await;
                 if !allowed {
-                    self.conversation.add_message(pleiades_core::conversation::Message {
-                        role: pleiades_core::conversation::MessageRole::Tool,
-                        content: vec![pleiades_core::conversation::ContentBlock::ToolResult {
-                            id: tc.id.clone(),
-                            content: "Tool use blocked by user".to_string(),
-                            is_error: true,
-                        }],
-                        reasoning: None,
-                        metadata: None,
-                    });
-                    println!("\x1b[1;33m  ⛔ {} blocked\x1b[0m", tc.name);
-                    continue;
-                }
-
-                println!("\x1b[1;32m  🔧 {} ({})...\x1b[0m", tc.name, &tc.id[..tc.id.len().min(8)]);
-                match engine.execute_tool(&tc.name, tc.input.clone()).await {
-                    Ok(result) => {
-                        let content = if result.content.len() > 2000 {
-                            format!("{}...(truncated, {} chars)", &result.content[..2000], result.content.len())
-                        } else {
-                            result.content.clone()
-                        };
-                        self.conversation.add_message(pleiades_core::conversation::Message {
+                    self.conversation
+                        .add_message(pleiades_core::conversation::Message {
                             role: pleiades_core::conversation::MessageRole::Tool,
                             content: vec![pleiades_core::conversation::ContentBlock::ToolResult {
                                 id: tc.id.clone(),
-                                content,
-                                is_error: !result.success,
-                            }],
-                            reasoning: None,
-                            metadata: None,
-                        });
-                        if result.success {
-                            println!("\x1b[1;32m  ✓ {} completed\x1b[0m", tc.name);
-                        } else {
-                            println!("\x1b[1;31m  ✗ {} failed: {}\x1b[0m", tc.name, result.error.unwrap_or_default());
-                        }
-                    }
-                    Err(e) => {
-                        self.conversation.add_message(pleiades_core::conversation::Message {
-                            role: pleiades_core::conversation::MessageRole::Tool,
-                            content: vec![pleiades_core::conversation::ContentBlock::ToolResult {
-                                id: tc.id.clone(),
-                                content: format!("Error: {e}"),
+                                content: "Tool use blocked by user".to_string(),
                                 is_error: true,
                             }],
                             reasoning: None,
                             metadata: None,
                         });
+                    println!("\x1b[1;33m  ⛔ {} blocked\x1b[0m", tc.name);
+                    continue;
+                }
+
+                println!(
+                    "\x1b[1;32m  🔧 {} ({})...\x1b[0m",
+                    tc.name,
+                    &tc.id[..tc.id.len().min(8)]
+                );
+                match engine.execute_tool(&tc.name, tc.input.clone()).await {
+                    Ok(result) => {
+                        let content = if result.content.len() > 2000 {
+                            format!(
+                                "{}...(truncated, {} chars)",
+                                &result.content[..2000],
+                                result.content.len()
+                            )
+                        } else {
+                            result.content.clone()
+                        };
+                        self.conversation
+                            .add_message(pleiades_core::conversation::Message {
+                                role: pleiades_core::conversation::MessageRole::Tool,
+                                content: vec![
+                                    pleiades_core::conversation::ContentBlock::ToolResult {
+                                        id: tc.id.clone(),
+                                        content,
+                                        is_error: !result.success,
+                                    },
+                                ],
+                                reasoning: None,
+                                metadata: None,
+                            });
+                        if result.success {
+                            println!("\x1b[1;32m  ✓ {} completed\x1b[0m", tc.name);
+                        } else {
+                            println!(
+                                "\x1b[1;31m  ✗ {} failed: {}\x1b[0m",
+                                tc.name,
+                                result.error.unwrap_or_default()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        self.conversation
+                            .add_message(pleiades_core::conversation::Message {
+                                role: pleiades_core::conversation::MessageRole::Tool,
+                                content: vec![
+                                    pleiades_core::conversation::ContentBlock::ToolResult {
+                                        id: tc.id.clone(),
+                                        content: format!("Error: {e}"),
+                                        is_error: true,
+                                    },
+                                ],
+                                reasoning: None,
+                                metadata: None,
+                            });
                         println!("\x1b[1;31m  ✗ {} error: {e}\x1b[0m", tc.name);
                     }
                 }
@@ -449,7 +533,10 @@ impl TuiApp {
         let theme = *self.renderer.color_theme();
         let mut stdout = io::stdout();
 
-        match engine.chat_stream(&mut self.conversation, &self.provider_name).await {
+        match engine
+            .chat_stream(&mut self.conversation, &self.provider_name)
+            .await
+        {
             Ok(mut rx) => {
                 while let Some(event) = rx.recv().await {
                     match event {
@@ -476,7 +563,10 @@ impl TuiApp {
                         }
                         StreamEvent::Error { message, code } => {
                             let _ = spinner.fail(&message, &theme, &mut stdout);
-                            eprintln!("\x1b[1;31mError\x1b[0m: {message} ({})", code.as_deref().unwrap_or("unknown"));
+                            eprintln!(
+                                "\x1b[1;31mError\x1b[0m: {message} ({})",
+                                code.as_deref().unwrap_or("unknown")
+                            );
                             return Ok((String::new(), Vec::new(), true));
                         }
                         _ => {}
@@ -498,7 +588,11 @@ impl TuiApp {
         if config_permissions.always_deny.iter().any(|p| p == &tc.name) {
             return false;
         }
-        if config_permissions.always_allow.iter().any(|p| p == &tc.name) {
+        if config_permissions
+            .always_allow
+            .iter()
+            .any(|p| p == &tc.name)
+        {
             return true;
         }
         if !config_permissions.ask_always {
@@ -513,8 +607,12 @@ impl TuiApp {
         if input_str.len() < 200 {
             eprintln!("\x1b[1;33m│\x1b[0m Input: {input_str}");
         }
-        eprintln!("\x1b[1;33m│\x1b[0m                                           \x1b[1;33m│\x1b[0m");
-        eprintln!("\x1b[1;33m│\x1b[0m \x1b[1;36mAllow?\x1b[0m  \x1b[1;32m(y)es\x1b[0m / \x1b[1;31m(n)o\x1b[0m / \x1b[1;34m(a)lways\x1b[0m / \x1b[1;33m(n)ever\x1b[0m  \x1b[1;33m│\x1b[0m");
+        eprintln!(
+            "\x1b[1;33m│\x1b[0m                                           \x1b[1;33m│\x1b[0m"
+        );
+        eprintln!(
+            "\x1b[1;33m│\x1b[0m \x1b[1;36mAllow?\x1b[0m  \x1b[1;32m(y)es\x1b[0m / \x1b[1;31m(n)o\x1b[0m / \x1b[1;34m(a)lways\x1b[0m / \x1b[1;33m(n)ever\x1b[0m  \x1b[1;33m│\x1b[0m"
+        );
         eprintln!("\x1b[1;33m└────────────────────────────────────────────────┘\x1b[0m");
         eprint!("> ");
 
@@ -528,7 +626,10 @@ impl TuiApp {
     fn save_on_exit(&mut self, _engine: &mut Engine) {
         if !self.conversation.is_empty() {
             self.session_store.save(&self.conversation).ok();
-            println!("\n\x1b[1;32m✓\x1b[0m Session saved: {}", self.conversation.id);
+            println!(
+                "\n\x1b[1;32m✓\x1b[0m Session saved: {}",
+                self.conversation.id
+            );
         }
         println!("\x1b[1;33mGoodbye!\x1b[0m");
     }

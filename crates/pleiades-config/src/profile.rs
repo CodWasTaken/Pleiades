@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::types::Config;
 use crate::loader::format_for_path;
+use crate::types::Config;
 
 /// Manages named configuration profiles.
 ///
@@ -55,16 +55,16 @@ impl ProfileManager {
             return Err(format!("Profile '{}' not found", name));
         }
 
-        let format = format_for_path(&path).ok_or_else(|| {
-            format!("Unsupported profile format for '{}'", path.display())
-        })?;
+        let format = format_for_path(&path)
+            .ok_or_else(|| format!("Unsupported profile format for '{}'", path.display()))?;
 
         let content = std::fs::read_to_string(&path)
             .map_err(|e| format!("Failed to read profile '{}': {}", name, e))?;
 
         match format {
-            "toml" => toml::from_str(&content)
-                .map_err(|e| format!("Failed to parse profile TOML: {}", e)),
+            "toml" => {
+                toml::from_str(&content).map_err(|e| format!("Failed to parse profile TOML: {}", e))
+            }
             "json" => serde_json::from_str(&content)
                 .map_err(|e| format!("Failed to parse profile JSON: {}", e)),
             "yaml" => serde_yaml::from_str(&content)

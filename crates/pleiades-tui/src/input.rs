@@ -219,11 +219,11 @@ fn normalize_completions(completions: Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{slash_command_prefix, LineEditor, SlashCommandHelper};
+    use super::{LineEditor, SlashCommandHelper, slash_command_prefix};
+    use rustyline::Context;
     use rustyline::completion::Completer;
     use rustyline::highlight::Highlighter;
     use rustyline::history::{DefaultHistory, History};
-    use rustyline::Context;
 
     #[test]
     fn extracts_terminal_slash_command_prefixes_with_arguments() {

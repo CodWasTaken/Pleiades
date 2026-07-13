@@ -9,9 +9,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Event {
     /// A message was added to the conversation.
-    MessageAdded {
-        conversation_id: String,
-    },
+    MessageAdded { conversation_id: String },
 
     /// A tool was called.
     ToolCalled {
@@ -34,41 +32,25 @@ pub enum Event {
     },
 
     /// A reasoning token was streamed.
-    ReasoningToken {
-        token: String,
-    },
+    ReasoningToken { token: String },
 
     /// An error occurred.
-    Error {
-        error: String,
-        source: String,
-    },
+    Error { error: String, source: String },
 
     /// Configuration was changed.
-    ConfigChanged {
-        key: String,
-    },
+    ConfigChanged { key: String },
 
     /// A plugin was loaded.
-    PluginLoaded {
-        name: String,
-        version: String,
-    },
+    PluginLoaded { name: String, version: String },
 
     /// A plugin was unloaded.
-    PluginUnloaded {
-        name: String,
-    },
+    PluginUnloaded { name: String },
 
     /// Session started.
-    SessionStarted {
-        id: String,
-    },
+    SessionStarted { id: String },
 
     /// Session ended.
-    SessionEnded {
-        id: String,
-    },
+    SessionEnded { id: String },
 
     /// Provider rate limited.
     RateLimited {
@@ -77,8 +59,5 @@ pub enum Event {
     },
 
     /// Generic event for extensions.
-    Custom {
-        name: String,
-        data: Value,
-    },
+    Custom { name: String, data: Value },
 }

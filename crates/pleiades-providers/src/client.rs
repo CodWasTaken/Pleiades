@@ -68,7 +68,11 @@ pub async fn send_request(
 /// Parse a retry-after value from the response body or headers.
 fn parse_retry_after(body: &str) -> Option<u64> {
     if let Ok(val) = serde_json::from_str::<serde_json::Value>(body) {
-        if let Some(seconds) = val.get("error").and_then(|e| e.get("retry_after")).and_then(|v| v.as_u64()) {
+        if let Some(seconds) = val
+            .get("error")
+            .and_then(|e| e.get("retry_after"))
+            .and_then(|v| v.as_u64())
+        {
             return Some(seconds);
         }
     }
@@ -110,7 +114,11 @@ pub fn map_api_error(status: u16, body: &str, provider_name: &str) -> Error {
 /// Extract error message from common API error response formats.
 fn extract_error_message(body: &str) -> Option<String> {
     if let Ok(val) = serde_json::from_str::<serde_json::Value>(body) {
-        if let Some(msg) = val.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str()) {
+        if let Some(msg) = val
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|v| v.as_str())
+        {
             return Some(msg.to_string());
         }
         if let Some(msg) = val.get("error").and_then(|e| e.as_str()) {
@@ -150,10 +158,12 @@ pub fn parse_sse_stream(
 
                         if line.is_empty() {
                             if !current_data.is_empty() {
-                                let _ = tx.send(Ok(SseEvent {
-                                    event: current_event.clone(),
-                                    data: current_data.clone(),
-                                })).await;
+                                let _ = tx
+                                    .send(Ok(SseEvent {
+                                        event: current_event.clone(),
+                                        data: current_data.clone(),
+                                    }))
+                                    .await;
                             }
                             current_event.clear();
                             current_data.clear();
@@ -168,17 +178,21 @@ pub fn parse_sse_stream(
                     }
                 }
                 Err(e) => {
-                    let _ = tx.send(Err(Error::Network(format!("SSE stream error: {}", e)))).await;
+                    let _ = tx
+                        .send(Err(Error::Network(format!("SSE stream error: {}", e))))
+                        .await;
                     return;
                 }
             }
         }
 
         if !current_data.is_empty() {
-            let _ = tx.send(Ok(SseEvent {
-                event: current_event.clone(),
-                data: current_data.clone(),
-            })).await;
+            let _ = tx
+                .send(Ok(SseEvent {
+                    event: current_event.clone(),
+                    data: current_data.clone(),
+                }))
+                .await;
         }
     });
 
@@ -195,9 +209,8 @@ pub struct SseEvent {
 impl SseEvent {
     /// Parse the data field as JSON.
     pub fn parse_json<T: serde::de::DeserializeOwned>(&self) -> Result<T, Error> {
-        serde_json::from_str(&self.data).map_err(|e| {
-            Error::Serialization(format!("Failed to parse SSE data as JSON: {}", e))
-        })
+        serde_json::from_str(&self.data)
+            .map_err(|e| Error::Serialization(format!("Failed to parse SSE data as JSON: {}", e)))
     }
 }
 

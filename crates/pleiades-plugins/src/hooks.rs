@@ -125,7 +125,13 @@ impl HookRunner {
 
         for command in commands {
             match run_single_command(
-                command, event, tool_name, tool_input, tool_output, is_error, &payload,
+                command,
+                event,
+                tool_name,
+                tool_input,
+                tool_output,
+                is_error,
+                &payload,
             ) {
                 HookCommandOutcome::Allow { message } => {
                     if let Some(msg) = message {
@@ -351,10 +357,7 @@ mod tests {
     #[test]
     fn pre_tool_use_first_failure_stops_later_hooks() {
         let runner = HookRunner::new(PluginHooks {
-            pre_tool_use: vec![
-                "exit 2".to_string(),
-                "printf 'should not run'".to_string(),
-            ],
+            pre_tool_use: vec!["exit 2".to_string(), "printf 'should not run'".to_string()],
             post_tool_use: Vec::new(),
             post_tool_use_failure: Vec::new(),
         });
@@ -362,7 +365,12 @@ mod tests {
         let result = runner.pre_tool_use("Read", "{}");
 
         assert!(result.is_denied());
-        assert!(!result.messages().iter().any(|m| m.contains("should not run")));
+        assert!(
+            !result
+                .messages()
+                .iter()
+                .any(|m| m.contains("should not run"))
+        );
     }
 
     #[test]
@@ -376,7 +384,12 @@ mod tests {
         let result = runner.post_tool_use("Write", r#"{"path":"f"}"#, "wrote 1 file", false);
 
         assert!(!result.is_denied());
-        assert!(result.messages().iter().any(|m| m.contains("tool completed")));
+        assert!(
+            result
+                .messages()
+                .iter()
+                .any(|m| m.contains("tool completed"))
+        );
     }
 
     #[test]

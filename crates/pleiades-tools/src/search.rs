@@ -74,11 +74,13 @@ impl Tool for SearchTool {
     }
 
     async fn execute(&self, input: Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let query = input.get("query")
+        let query = input
+            .get("query")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required field 'query'"))?;
 
-        let max_results = input.get("max_results")
+        let max_results = input
+            .get("max_results")
             .and_then(|v| v.as_i64())
             .unwrap_or(5) as usize;
 
@@ -89,7 +91,8 @@ impl Tool for SearchTool {
             urlencoding(query)
         );
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(&url)
             .header("Accept", "application/json")
             .send()
@@ -100,7 +103,11 @@ impl Tool for SearchTool {
         let body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(Error::ApiError { status: status.as_u16(), message: "Search API error".to_string(), provider: "search".to_string() });
+            return Err(Error::ApiError {
+                status: status.as_u16(),
+                message: "Search API error".to_string(),
+                provider: "search".to_string(),
+            });
         }
 
         let result = self.parse_duckduckgo_response(&body, max_results)?;
@@ -109,7 +116,11 @@ impl Tool for SearchTool {
 }
 
 impl SearchTool {
-    fn parse_duckduckgo_response(&self, body: &str, max_results: usize) -> Result<ToolResult, Error> {
+    fn parse_duckduckgo_response(
+        &self,
+        body: &str,
+        max_results: usize,
+    ) -> Result<ToolResult, Error> {
         let parsed: serde_json::Value = serde_json::from_str(body)
             .map_err(|e| Error::Serialization(format!("Failed to parse search response: {}", e)))?;
 
@@ -122,7 +133,10 @@ impl SearchTool {
                 if let Some(source) = parsed.get("AbstractSource").and_then(|v| v.as_str()) {
                     if !source.is_empty() {
                         if let Some(url) = parsed.get("AbstractURL").and_then(|v| v.as_str()) {
-                            results.push(format!("**{}**\n{}\nSource: {}", source, abstract_text, url));
+                            results.push(format!(
+                                "**{}**\n{}\nSource: {}",
+                                source, abstract_text, url
+                            ));
                             sources.push(source.to_string());
                         }
                     }
@@ -133,7 +147,10 @@ impl SearchTool {
         // Answer (e.g., for calculations)
         if let Some(answer) = parsed.get("Answer").and_then(|v| v.as_str()) {
             if !answer.is_empty() && results.len() < max_results {
-                let answer_type = parsed.get("AnswerType").and_then(|v| v.as_str()).unwrap_or("");
+                let answer_type = parsed
+                    .get("AnswerType")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 results.push(format!("**{}**\nAnswer: {}", answer_type, answer));
             }
         }

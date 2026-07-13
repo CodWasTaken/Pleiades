@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Top-level application configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

@@ -110,12 +110,10 @@ pub trait Provider: Send + Sync {
     ) -> Result<tokio::sync::mpsc::Receiver<StreamEvent>, Error>;
 
     /// Generate embeddings for input texts.
-    async fn embed(
-        &self,
-        input: Vec<String>,
-        model: &str,
-    ) -> Result<EmbeddingResponse, Error> {
+    async fn embed(&self, input: Vec<String>, model: &str) -> Result<EmbeddingResponse, Error> {
         let _ = (input, model);
-        Err(Error::unsupported("Embeddings not supported by this provider"))
+        Err(Error::unsupported(
+            "Embeddings not supported by this provider",
+        ))
     }
 }

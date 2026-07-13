@@ -434,7 +434,9 @@ mod tests {
         let plugin_id = "remove-me-external";
         assert!(manager.plugin_registry().unwrap().contains(plugin_id));
 
-        manager.uninstall(plugin_id).expect("uninstall should succeed");
+        manager
+            .uninstall(plugin_id)
+            .expect("uninstall should succeed");
         assert!(!manager.plugin_registry().unwrap().contains(plugin_id));
     }
 

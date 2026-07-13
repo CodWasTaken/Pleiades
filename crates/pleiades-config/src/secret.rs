@@ -89,7 +89,9 @@ impl SecretManager {
         if let Some(env_var) = self.provider_env_map.get(provider) {
             if !env_var.is_empty() {
                 #[allow(unused_unsafe)]
-                unsafe { std::env::remove_var(env_var); }
+                unsafe {
+                    std::env::remove_var(env_var);
+                }
             }
         }
     }
@@ -106,11 +108,15 @@ mod tests {
     use super::*;
 
     fn set_env(key: &str, val: &str) {
-        unsafe { std::env::set_var(key, val); }
+        unsafe {
+            std::env::set_var(key, val);
+        }
     }
 
     fn remove_env(key: &str) {
-        unsafe { std::env::remove_var(key); }
+        unsafe {
+            std::env::remove_var(key);
+        }
     }
 
     #[test]

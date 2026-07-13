@@ -85,7 +85,10 @@ fn validate_providers(
             if !url.starts_with("http://") && !url.starts_with("https://") {
                 errors.push(FieldError {
                     field: format!("providers.{}.base_url", name),
-                    message: format!("Invalid base URL for provider '{}': must start with http:// or https://", name),
+                    message: format!(
+                        "Invalid base URL for provider '{}': must start with http:// or https://",
+                        name
+                    ),
                 });
             }
         }
@@ -147,7 +150,10 @@ fn validate_plugins(_plugins: &crate::types::PluginConfig, _errors: &mut Vec<Fie
     // Plugin path existence is validated at runtime.
 }
 
-fn validate_permissions(permissions: &crate::types::PermissionConfig, errors: &mut Vec<FieldError>) {
+fn validate_permissions(
+    permissions: &crate::types::PermissionConfig,
+    errors: &mut Vec<FieldError>,
+) {
     if permissions.grant_duration_minutes == 0 {
         errors.push(FieldError {
             field: "permissions.grant_duration_minutes".to_string(),
@@ -170,7 +176,9 @@ fn validate_permissions(permissions: &crate::types::PermissionConfig, errors: &m
 pub fn validate_field(key: &str, value: &str) -> Result<(), String> {
     match key {
         "core.max_tokens" => {
-            let n: u32 = value.parse().map_err(|_| "max_tokens must be a positive integer".to_string())?;
+            let n: u32 = value
+                .parse()
+                .map_err(|_| "max_tokens must be a positive integer".to_string())?;
             if n == 0 {
                 return Err("max_tokens must be greater than 0".to_string());
             }
@@ -179,7 +187,9 @@ pub fn validate_field(key: &str, value: &str) -> Result<(), String> {
             }
         }
         "core.temperature" => {
-            let f: f32 = value.parse().map_err(|_| "temperature must be a number".to_string())?;
+            let f: f32 = value
+                .parse()
+                .map_err(|_| "temperature must be a number".to_string())?;
             if !(0.0..=2.0).contains(&f) {
                 return Err("temperature must be between 0.0 and 2.0".to_string());
             }
@@ -191,7 +201,9 @@ pub fn validate_field(key: &str, value: &str) -> Result<(), String> {
             }
         }
         "session.context_size" => {
-            let n: usize = value.parse().map_err(|_| "context_size must be a positive integer".to_string())?;
+            let n: usize = value
+                .parse()
+                .map_err(|_| "context_size must be a positive integer".to_string())?;
             if n == 0 {
                 return Err("context_size must be greater than 0".to_string());
             }
@@ -206,7 +218,9 @@ pub fn validate_field(key: &str, value: &str) -> Result<(), String> {
             }
         }
         "agent.max_tool_iterations" => {
-            let n: u32 = value.parse().map_err(|_| "max_tool_iterations must be a positive integer".to_string())?;
+            let n: u32 = value
+                .parse()
+                .map_err(|_| "max_tool_iterations must be a positive integer".to_string())?;
             if n == 0 {
                 return Err("max_tool_iterations must be greater than 0".to_string());
             }
@@ -215,8 +229,11 @@ pub fn validate_field(key: &str, value: &str) -> Result<(), String> {
             }
         }
         _ => {
-            if key.starts_with("providers.") && key.ends_with(".base_url")
-                && !value.starts_with("http://") && !value.starts_with("https://") {
+            if key.starts_with("providers.")
+                && key.ends_with(".base_url")
+                && !value.starts_with("http://")
+                && !value.starts_with("https://")
+            {
                 return Err("base_url must start with http:// or https://".to_string());
             }
         }

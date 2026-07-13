@@ -19,7 +19,11 @@ pub enum Error {
     ModelNotFound { model: String },
 
     #[error("API error ({status}): {message}")]
-    ApiError { status: u16, message: String, provider: String },
+    ApiError {
+        status: u16,
+        message: String,
+        provider: String,
+    },
 
     #[error("Network error: {0}")]
     Network(String),
@@ -28,7 +32,10 @@ pub enum Error {
     AuthError { provider: String, message: String },
 
     #[error("Rate limited by provider '{provider}'. Retry after {retry_after:?}")]
-    RateLimited { provider: String, retry_after: Option<u64> },
+    RateLimited {
+        provider: String,
+        retry_after: Option<u64>,
+    },
 
     #[error("Tool execution error: {0}")]
     ToolError(String),
@@ -108,7 +115,10 @@ impl Error {
             Self::RateLimited { .. }
                 | Self::Network(_)
                 | Self::Timeout(_)
-                | Self::ApiError { status: 429 | 500 | 502 | 503 | 504, .. }
+                | Self::ApiError {
+                    status: 429 | 500 | 502 | 503 | 504,
+                    ..
+                }
         )
     }
 }

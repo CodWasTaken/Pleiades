@@ -39,9 +39,7 @@ impl PluginRegistry {
     }
 
     pub fn get(&self, plugin_id: &str) -> Option<&PluginEntry> {
-        self.plugins
-            .iter()
-            .find(|p| p.metadata().id == plugin_id)
+        self.plugins.iter().find(|p| p.metadata().id == plugin_id)
     }
 
     pub fn contains(&self, plugin_id: &str) -> bool {
@@ -67,7 +65,8 @@ impl PluginRegistry {
         let mut seen_names = BTreeMap::new();
         for entry in self.enabled_plugins() {
             for tool in entry.tools() {
-                if let Some(existing) = seen_names.insert(tool.name.clone(), tool.plugin_id.clone()) {
+                if let Some(existing) = seen_names.insert(tool.name.clone(), tool.plugin_id.clone())
+                {
                     return Err(PluginError::CommandFailed(format!(
                         "tool `{}` is defined by both `{}` and `{}`",
                         tool.name, existing, tool.plugin_id

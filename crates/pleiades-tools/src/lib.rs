@@ -3,15 +3,15 @@
 //! Provides the tools that the AI can use to interact with
 //! the environment: read/write/edit files, run commands, search, etc.
 
-pub mod read;
-pub mod write;
-pub mod edit;
 pub mod bash;
+pub mod diff;
+pub mod edit;
+pub mod fetch;
 pub mod glob_tool;
 pub mod grep_tool;
-pub mod diff;
+pub mod read;
 pub mod search;
-pub mod fetch;
+pub mod write;
 
 use pleiades_core::tool::Tool;
 
@@ -46,7 +46,10 @@ impl ToolRegistry {
 
     /// Get a tool by name.
     pub fn get(&self, name: &str) -> Option<&dyn Tool> {
-        self.tools.iter().find(|t| t.name() == name).map(|t| t.as_ref())
+        self.tools
+            .iter()
+            .find(|t| t.name() == name)
+            .map(|t| t.as_ref())
     }
 
     /// List all registered tools.

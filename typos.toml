@@ -3,6 +3,11 @@ extend-ignore-re = [
     "pleiades",
 ]
 
+[default.extend-words]
+ratatui = "ratatui"
+Ratatui = "Ratatui"
+Convers = "Convers"
+
 [files]
 extend-exclude = [
     "SourceCodeCC/",

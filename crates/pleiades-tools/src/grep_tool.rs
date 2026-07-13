@@ -53,21 +53,31 @@ impl Tool for GrepTool {
         PermissionLevel::ReadOnly
     }
 
-    async fn execute(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let pattern = input.get("pattern")
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<ToolResult, Error> {
+        let pattern = input
+            .get("pattern")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'pattern' parameter"))?;
 
-        let base_path = input.get("path")
+        let base_path = input
+            .get("path")
             .and_then(|v| v.as_str())
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
         let include = input.get("include").and_then(|v| v.as_str());
-        let max_results = input.get("max_results").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+        let max_results = input
+            .get("max_results")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(50) as usize;
 
-        let regex = regex::Regex::new(pattern)
-            .map_err(|e| Error::invalid_input(format!("Invalid regex pattern '{}': {}", pattern, e)))?;
+        let regex = regex::Regex::new(pattern).map_err(|e| {
+            Error::invalid_input(format!("Invalid regex pattern '{}': {}", pattern, e))
+        })?;
 
         let mut results = Vec::new();
         let mut visit_dir = Vec::new();
@@ -91,8 +101,11 @@ impl Tool for GrepTool {
                 } else if path.is_file() {
                     // Check include filter
                     if let Some(inc) = include {
-                        let glob = glob::Pattern::new(inc).unwrap_or_else(|_| glob::Pattern::new("*").unwrap());
-                        if !glob.matches(path.file_name().unwrap_or_default().to_str().unwrap_or("")) {
+                        let glob = glob::Pattern::new(inc)
+                            .unwrap_or_else(|_| glob::Pattern::new("*").unwrap());
+                        if !glob
+                            .matches(path.file_name().unwrap_or_default().to_str().unwrap_or(""))
+                        {
                             continue;
                         }
                     }
@@ -108,7 +121,12 @@ impl Tool for GrepTool {
                         }
                         if regex.is_match(line) {
                             let relative = path.strip_prefix(&base_path).unwrap_or(&path);
-                            results.push(format!("{}:{}:{}", relative.display(), line_num + 1, line));
+                            results.push(format!(
+                                "{}:{}:{}",
+                                relative.display(),
+                                line_num + 1,
+                                line
+                            ));
                         }
                     }
                 }

@@ -70,7 +70,11 @@ pub trait Tool: Send + Sync {
     fn permission_level(&self) -> PermissionLevel;
 
     /// Execute the tool with the given input and context.
-    async fn execute(&self, input: serde_json::Value, ctx: &ToolContext) -> Result<ToolResult, Error>;
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<ToolResult, Error>;
 
     /// Convert this tool to a ToolDefinition for provider requests.
     fn definition(&self) -> ToolDefinition {

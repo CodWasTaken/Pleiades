@@ -44,21 +44,28 @@ impl Tool for GlobTool {
         PermissionLevel::ReadOnly
     }
 
-    async fn execute(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let pattern = input.get("pattern")
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<ToolResult, Error> {
+        let pattern = input
+            .get("pattern")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'pattern' parameter"))?;
 
-        let base_path = input.get("path")
+        let base_path = input
+            .get("path")
             .and_then(|v| v.as_str())
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-        let full_pattern = if pattern.starts_with('/') || pattern.starts_with("./") || pattern.starts_with("~/") {
-            pattern.to_string()
-        } else {
-            base_path.join(pattern).to_string_lossy().to_string()
-        };
+        let full_pattern =
+            if pattern.starts_with('/') || pattern.starts_with("./") || pattern.starts_with("~/") {
+                pattern.to_string()
+            } else {
+                base_path.join(pattern).to_string_lossy().to_string()
+            };
 
         let mut results = Vec::new();
 
@@ -81,7 +88,10 @@ impl Tool for GlobTool {
                 }
             }
             Err(e) => {
-                return Err(Error::invalid_input(format!("Invalid glob pattern '{}': {}", pattern, e)));
+                return Err(Error::invalid_input(format!(
+                    "Invalid glob pattern '{}': {}",
+                    pattern, e
+                )));
             }
         }
 

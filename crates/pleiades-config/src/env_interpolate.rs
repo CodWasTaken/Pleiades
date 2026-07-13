@@ -113,11 +113,15 @@ mod tests {
     use super::*;
 
     fn set_env(key: &str, val: &str) {
-        unsafe { std::env::set_var(key, val); }
+        unsafe {
+            std::env::set_var(key, val);
+        }
     }
 
     fn remove_env(key: &str) {
-        unsafe { std::env::remove_var(key); }
+        unsafe {
+            std::env::remove_var(key);
+        }
     }
 
     #[test]

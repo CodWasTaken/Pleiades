@@ -43,9 +43,7 @@ impl PromptLibrary {
 
     /// Get a template by name (custom overrides builtin).
     pub fn get(&self, name: &str) -> Option<&PromptTemplate> {
-        self.custom
-            .get(name)
-            .or_else(|| self.builtins.get(name))
+        self.custom.get(name).or_else(|| self.builtins.get(name))
     }
 
     /// Render a template by name with variables.
@@ -101,7 +99,8 @@ impl PromptLibrary {
         let dir = Self::store_dir();
         std::fs::create_dir_all(&dir).map_err(|e| PromptError::Other(e.to_string()))?;
         let path = dir.join(format!("{}.json", prompt.name));
-        let data = serde_json::to_string_pretty(prompt).map_err(|e| PromptError::Other(e.to_string()))?;
+        let data =
+            serde_json::to_string_pretty(prompt).map_err(|e| PromptError::Other(e.to_string()))?;
         std::fs::write(&path, data).map_err(|e| PromptError::Other(e.to_string()))?;
         Ok(())
     }
@@ -174,6 +173,9 @@ mod tests {
         lib.register("default-assistant", "override", "Overridden {{os}}");
         let mut vars = HashMap::new();
         vars.insert("os".to_string(), "macos".to_string());
-        assert_eq!(lib.render("default-assistant", &vars).unwrap(), "Overridden macos");
+        assert_eq!(
+            lib.render("default-assistant", &vars).unwrap(),
+            "Overridden macos"
+        );
     }
 }

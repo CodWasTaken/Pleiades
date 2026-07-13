@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
 use pleiades_core::error::Error;
+use serde::{Deserialize, Serialize};
 
 /// A memory entry with text and metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +42,8 @@ impl MemoryStore for InMemoryStore {
 
     fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
         let query_lower = query.to_lowercase();
-        let mut results: Vec<(f64, &MemoryEntry)> = self.entries
+        let mut results: Vec<(f64, &MemoryEntry)> = self
+            .entries
             .iter()
             .map(|e| {
                 let relevance = if e.content.to_lowercase().contains(&query_lower) {
@@ -63,7 +64,11 @@ impl MemoryStore for InMemoryStore {
 
         results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        Ok(results.into_iter().take(limit).map(|(_, e)| e.clone()).collect())
+        Ok(results
+            .into_iter()
+            .take(limit)
+            .map(|(_, e)| e.clone())
+            .collect())
     }
 
     fn recent(&self, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
@@ -156,7 +161,8 @@ impl MemoryStore for FileStore {
 
     fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
         let query_lower = query.to_lowercase();
-        let mut results: Vec<(f64, &MemoryEntry)> = self.entries
+        let mut results: Vec<(f64, &MemoryEntry)> = self
+            .entries
             .iter()
             .map(|e| {
                 let relevance = if e.content.to_lowercase().contains(&query_lower) {
@@ -177,7 +183,11 @@ impl MemoryStore for FileStore {
 
         results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        Ok(results.into_iter().take(limit).map(|(_, e)| e.clone()).collect())
+        Ok(results
+            .into_iter()
+            .take(limit)
+            .map(|(_, e)| e.clone())
+            .collect())
     }
 
     fn recent(&self, limit: usize) -> Result<Vec<MemoryEntry>, Error> {

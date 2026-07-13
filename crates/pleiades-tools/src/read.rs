@@ -50,13 +50,21 @@ impl Tool for ReadTool {
         PermissionLevel::ReadOnly
     }
 
-    async fn execute(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let path = input.get("path")
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<ToolResult, Error> {
+        let path = input
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'path' parameter"))?;
 
         let offset = input.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-        let limit = input.get("limit").and_then(|v| v.as_u64()).map(|v| v as usize);
+        let limit = input
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
 
         let content = std::fs::read_to_string(path)
             .map_err(|e| Error::io(format!("Failed to read '{}': {}", path, e)))?;
@@ -65,7 +73,8 @@ impl Tool for ReadTool {
             let lines: Vec<&str> = content.lines().collect();
             let start = offset.saturating_sub(1);
             let end = limit.map(|l| start + l).unwrap_or(lines.len());
-            let selected: Vec<&str> = lines.iter()
+            let selected: Vec<&str> = lines
+                .iter()
                 .skip(start)
                 .take(end - start)
                 .copied()

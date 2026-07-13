@@ -25,14 +25,18 @@ impl PluginHooks {
 
     pub fn merged_with(&self, other: &Self) -> Self {
         let mut merged = self.clone();
-        merged.pre_tool_use.extend(other.pre_tool_use.iter().cloned());
-        merged.post_tool_use.extend(other.post_tool_use.iter().cloned());
-        merged.post_tool_use_failure.extend(other.post_tool_use_failure.iter().cloned());
+        merged
+            .pre_tool_use
+            .extend(other.pre_tool_use.iter().cloned());
+        merged
+            .post_tool_use
+            .extend(other.post_tool_use.iter().cloned());
+        merged
+            .post_tool_use_failure
+            .extend(other.post_tool_use_failure.iter().cloned());
         merged
     }
 }
-
-
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginLifecycle {
@@ -138,7 +142,9 @@ impl PluginManifest {
             errors.push(PluginErrorKind::EmptyField { field: "version" });
         }
         if self.description.trim().is_empty() {
-            errors.push(PluginErrorKind::EmptyField { field: "description" });
+            errors.push(PluginErrorKind::EmptyField {
+                field: "description",
+            });
         }
 
         let mut seen_perms = BTreeSet::new();
@@ -168,7 +174,12 @@ impl PluginManifest {
         Ok(())
     }
 
-    fn validate_paths(root: &Path, paths: &[String], kind: &str, errors: &mut Vec<PluginErrorKind>) {
+    fn validate_paths(
+        root: &Path,
+        paths: &[String],
+        kind: &str,
+        errors: &mut Vec<PluginErrorKind>,
+    ) {
         for path in paths {
             let full_path = if Path::new(path).is_absolute() {
                 PathBuf::from(path)
@@ -189,7 +200,10 @@ impl PluginManifest {
         let content = std::fs::read_to_string(&manifest_path).map_err(|e| {
             PluginError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("plugin manifest not found at {}: {e}", manifest_path.display()),
+                format!(
+                    "plugin manifest not found at {}: {e}",
+                    manifest_path.display()
+                ),
             ))
         })?;
 
@@ -273,7 +287,10 @@ impl std::fmt::Display for PluginErrorKind {
         match self {
             Self::EmptyField { field } => write!(f, "plugin manifest {field} cannot be empty"),
             Self::InvalidPermission { permission } => {
-                write!(f, "invalid permission `{permission}`, must be read/write/execute")
+                write!(
+                    f,
+                    "invalid permission `{permission}`, must be read/write/execute"
+                )
             }
             Self::DuplicatePermission { permission } => {
                 write!(f, "duplicate permission `{permission}`")

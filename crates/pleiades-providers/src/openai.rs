@@ -3,7 +3,8 @@ use pleiades_core::conversation::{ContentBlock, Message, MessageRole};
 use pleiades_core::error::Error;
 use pleiades_core::model::{ModelCapabilities, ModelInfo};
 use pleiades_core::provider::{
-    ChatRequest, ChatResponse, EmbeddingResponse, Provider, ProviderCapabilities, StreamEvent, Usage,
+    ChatRequest, ChatResponse, EmbeddingResponse, Provider, ProviderCapabilities, StreamEvent,
+    Usage,
 };
 use pleiades_core::tool::ToolDefinition;
 use serde::{Deserialize, Serialize};
@@ -49,7 +50,11 @@ impl OpenAIProvider {
         headers
     }
 
-    fn convert_messages(&self, messages: &[Message], system_prompt: Option<&str>) -> Vec<OpenAIMessage> {
+    fn convert_messages(
+        &self,
+        messages: &[Message],
+        system_prompt: Option<&str>,
+    ) -> Vec<OpenAIMessage> {
         let mut result = Vec::new();
 
         if let Some(system) = system_prompt {
@@ -108,8 +113,16 @@ impl OpenAIProvider {
 
                     OpenAIMessage {
                         role: "assistant".to_string(),
-                        content: if text_content.is_empty() { None } else { Some(text_content) },
-                        tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
+                        content: if text_content.is_empty() {
+                            None
+                        } else {
+                            Some(text_content)
+                        },
+                        tool_calls: if tool_calls.is_empty() {
+                            None
+                        } else {
+                            Some(tool_calls)
+                        },
                         tool_call_id: None,
                         name: None,
                     }
@@ -120,7 +133,11 @@ impl OpenAIProvider {
 
                     for block in &msg.content {
                         match block {
-                            ContentBlock::ToolResult { id, content: c, is_error: _ } => {
+                            ContentBlock::ToolResult {
+                                id,
+                                content: c,
+                                is_error: _,
+                            } => {
                                 tool_call_id = id.clone();
                                 content = c.clone();
                             }
@@ -159,9 +176,10 @@ impl OpenAIProvider {
     }
 
     fn convert_response(&self, response: &OpenAIChatResponse) -> Result<ChatResponse, Error> {
-        let choice = response.choices.first().ok_or_else(|| {
-            Error::provider("OpenAI returned no choices")
-        })?;
+        let choice = response
+            .choices
+            .first()
+            .ok_or_else(|| Error::provider("OpenAI returned no choices"))?;
 
         let mut content_blocks = Vec::new();
 
@@ -196,7 +214,10 @@ impl OpenAIProvider {
             usage: response.usage.as_ref().map(|u| Usage {
                 input_tokens: u.prompt_tokens as u64,
                 output_tokens: u.completion_tokens as u64,
-                cache_read_tokens: u.prompt_tokens_details.as_ref().and_then(|d| d.cached_tokens),
+                cache_read_tokens: u
+                    .prompt_tokens_details
+                    .as_ref()
+                    .and_then(|d| d.cached_tokens),
                 cache_write_tokens: None,
             }),
             finish_reason,
@@ -293,14 +314,22 @@ impl Provider for OpenAIProvider {
         let body = serde_json::to_value(&api_request)?;
 
         let url = format!("{}/chat/completions", self.base_url);
-        let req = self.http_client.post(&url).headers(self.build_headers()).json(&body);
+        let req = self
+            .http_client
+            .post(&url)
+            .headers(self.build_headers())
+            .json(&body);
 
         let response = client::send_request(&self.http_client, req, "openai").await?;
         let status = response.status();
         let response_body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(client::map_api_error(status.as_u16(), &response_body, "openai"));
+            return Err(client::map_api_error(
+                status.as_u16(),
+                &response_body,
+                "openai",
+            ));
         }
 
         let openai_response: OpenAIChatResponse = serde_json::from_str(&response_body)?;
@@ -335,7 +364,11 @@ impl Provider for OpenAIProvider {
         let body = serde_json::to_value(&api_request)?;
 
         let url = format!("{}/chat/completions", self.base_url);
-        let req = self.http_client.post(&url).headers(self.build_headers()).json(&body);
+        let req = self
+            .http_client
+            .post(&url)
+            .headers(self.build_headers())
+            .json(&body);
 
         let response = client::send_request(&self.http_client, req, "openai").await?;
         let status = response.status();
@@ -359,15 +392,19 @@ impl Provider for OpenAIProvider {
                 match event_result {
                     Ok(event) => {
                         if event.data == "[DONE]" {
-                            let _ = tx.send(StreamEvent::Done {
-                                finish_reason: finish_reason.clone().unwrap_or_else(|| "stop".to_string()),
-                                usage: Some(Usage {
-                                    input_tokens,
-                                    output_tokens,
-                                    cache_read_tokens: None,
-                                    cache_write_tokens: None,
-                                }),
-                            }).await;
+                            let _ = tx
+                                .send(StreamEvent::Done {
+                                    finish_reason: finish_reason
+                                        .clone()
+                                        .unwrap_or_else(|| "stop".to_string()),
+                                    usage: Some(Usage {
+                                        input_tokens,
+                                        output_tokens,
+                                        cache_read_tokens: None,
+                                        cache_write_tokens: None,
+                                    }),
+                                })
+                                .await;
                             continue;
                         }
 
@@ -383,14 +420,16 @@ impl Provider for OpenAIProvider {
                                 if let Some(ref delta) = choice.delta {
                                     if let Some(ref content) = delta.content {
                                         if !content.is_empty() {
-                                            let _ = tx.send(StreamEvent::Token(content.clone())).await;
+                                            let _ =
+                                                tx.send(StreamEvent::Token(content.clone())).await;
                                         }
                                     }
 
                                     if let Some(ref tool_calls) = delta.tool_calls {
                                         for tc in tool_calls {
                                             let index = tc.index;
-                                            let entry = current_tool_calls.entry(index.to_string())
+                                            let entry = current_tool_calls
+                                                .entry(index.to_string())
                                                 .or_insert_with(|| OpenAIToolCallPartial {
                                                     id: String::new(),
                                                     name: String::new(),
@@ -415,24 +454,29 @@ impl Provider for OpenAIProvider {
                                 if choice.finish_reason.is_some() {
                                     for (_idx, tc) in current_tool_calls.drain() {
                                         let input: serde_json::Value =
-                                            serde_json::from_str(&tc.arguments)
-                                                .unwrap_or_else(|_| serde_json::Value::String(tc.arguments.clone()));
+                                            serde_json::from_str(&tc.arguments).unwrap_or_else(
+                                                |_| serde_json::Value::String(tc.arguments.clone()),
+                                            );
 
-                                        let _ = tx.send(StreamEvent::ToolCall {
-                                            id: tc.id,
-                                            name: tc.name,
-                                            input,
-                                        }).await;
+                                        let _ = tx
+                                            .send(StreamEvent::ToolCall {
+                                                id: tc.id,
+                                                name: tc.name,
+                                                input,
+                                            })
+                                            .await;
                                     }
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        let _ = tx.send(StreamEvent::Error {
-                            message: e.to_string(),
-                            code: None,
-                        }).await;
+                        let _ = tx
+                            .send(StreamEvent::Error {
+                                message: e.to_string(),
+                                code: None,
+                            })
+                            .await;
                     }
                 }
             }
@@ -449,20 +493,32 @@ impl Provider for OpenAIProvider {
 
         let body = serde_json::to_value(&request)?;
         let url = format!("{}/embeddings", self.base_url);
-        let req = self.http_client.post(&url).headers(self.build_headers()).json(&body);
+        let req = self
+            .http_client
+            .post(&url)
+            .headers(self.build_headers())
+            .json(&body);
 
         let response = client::send_request(&self.http_client, req, "openai").await?;
         let status = response.status();
         let response_body = response.text().await.unwrap_or_default();
 
         if !status.is_success() {
-            return Err(client::map_api_error(status.as_u16(), &response_body, "openai"));
+            return Err(client::map_api_error(
+                status.as_u16(),
+                &response_body,
+                "openai",
+            ));
         }
 
         let embedding_response: OpenAIEmbeddingResponse = serde_json::from_str(&response_body)?;
 
         Ok(EmbeddingResponse {
-            embeddings: embedding_response.data.into_iter().map(|d| d.embedding).collect(),
+            embeddings: embedding_response
+                .data
+                .into_iter()
+                .map(|d| d.embedding)
+                .collect(),
             model: embedding_response.model,
             usage: embedding_response.usage.map(|u| Usage {
                 input_tokens: u.prompt_tokens as u64,

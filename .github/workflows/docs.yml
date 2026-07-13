@@ -12,6 +12,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   build-docs:
     name: Build Documentation
@@ -29,7 +32,7 @@ jobs:
         with:
           mdbook-version: 'latest'
       - name: Build user guide
-        run: mdbook build docs/book -d ../../target/docs
+        run: mdbook build docs/book -d "$GITHUB_WORKSPACE/target/docs"
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:

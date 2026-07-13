@@ -9,7 +9,7 @@ use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
-use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+use syntect::util::{LinesWithEndings, as_24_bit_terminal_escaped};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorTheme {
@@ -56,7 +56,12 @@ impl Spinner {
         Self::default()
     }
 
-    pub fn tick(&mut self, label: &str, theme: &ColorTheme, out: &mut impl Write) -> io::Result<()> {
+    pub fn tick(
+        &mut self,
+        label: &str,
+        theme: &ColorTheme,
+        out: &mut impl Write,
+    ) -> io::Result<()> {
         let frame = Self::FRAMES[self.frame_index % Self::FRAMES.len()];
         self.frame_index += 1;
         queue!(
@@ -72,7 +77,12 @@ impl Spinner {
         out.flush()
     }
 
-    pub fn finish(&mut self, label: &str, theme: &ColorTheme, out: &mut impl Write) -> io::Result<()> {
+    pub fn finish(
+        &mut self,
+        label: &str,
+        theme: &ColorTheme,
+        out: &mut impl Write,
+    ) -> io::Result<()> {
         self.frame_index = 0;
         execute!(
             out,
@@ -85,7 +95,12 @@ impl Spinner {
         out.flush()
     }
 
-    pub fn fail(&mut self, label: &str, theme: &ColorTheme, out: &mut impl Write) -> io::Result<()> {
+    pub fn fail(
+        &mut self,
+        label: &str,
+        theme: &ColorTheme,
+        out: &mut impl Write,
+    ) -> io::Result<()> {
         self.frame_index = 0;
         execute!(
             out,
@@ -671,12 +686,13 @@ pub fn strip_ansi(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{strip_ansi, MarkdownStreamState, Spinner, TerminalRenderer};
+    use super::{MarkdownStreamState, Spinner, TerminalRenderer, strip_ansi};
 
     #[test]
     fn renders_markdown_with_styling_and_lists() {
         let renderer = TerminalRenderer::new();
-        let output = renderer.render_markdown("# Heading\n\nThis is **bold** and *italic*.\n\n- item\n\n`code`");
+        let output = renderer
+            .render_markdown("# Heading\n\nThis is **bold** and *italic*.\n\n- item\n\n`code`");
 
         assert!(output.contains("Heading"));
         assert!(output.contains("• item"));
@@ -721,8 +737,8 @@ mod tests {
     #[test]
     fn renders_tables_with_alignment() {
         let renderer = TerminalRenderer::new();
-        let output =
-            renderer.render_markdown("| Name | Value |\n| ---- | ----- |\n| alpha | 1 |\n| beta | 22 |");
+        let output = renderer
+            .render_markdown("| Name | Value |\n| ---- | ----- |\n| alpha | 1 |\n| beta | 22 |");
         let plain = strip_ansi(&output);
         let lines: Vec<&str> = plain.lines().collect();
 

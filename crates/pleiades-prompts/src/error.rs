@@ -5,7 +5,9 @@ pub enum PromptError {
     #[error("Prompt template '{template}' has an unterminated variable")]
     Unterminated { template: String },
 
-    #[error("Prompt template '{template}' is missing variable '{name}' and no default was supplied")]
+    #[error(
+        "Prompt template '{template}' is missing variable '{name}' and no default was supplied"
+    )]
     MissingVariable { name: String, template: String },
 
     #[error("Prompt '{0}' not found in library")]

@@ -59,7 +59,10 @@ impl ConfigLoader {
         self.apply_env(&mut config);
 
         if let Err(errors) = validate::validate(&config) {
-            return Err(format!("Configuration validation failed:\n{}", format_errors(&errors)));
+            return Err(format!(
+                "Configuration validation failed:\n{}",
+                format_errors(&errors)
+            ));
         }
 
         Ok(config)
@@ -101,8 +104,7 @@ impl ConfigLoader {
         let content = toml::to_string_pretty(config)
             .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-        std::fs::write(&path, &content)
-            .map_err(|e| format!("Failed to write config: {}", e))?;
+        std::fs::write(&path, &content).map_err(|e| format!("Failed to write config: {}", e))?;
 
         Ok(())
     }
@@ -142,12 +144,13 @@ impl ConfigLoader {
             .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
 
         match format {
-            "toml" => toml::from_str(&content)
-                .map_err(|e| format!("Failed to parse TOML: {}", e)),
-            "json" => serde_json::from_str(&content)
-                .map_err(|e| format!("Failed to parse JSON: {}", e)),
-            "yaml" => serde_yaml::from_str(&content)
-                .map_err(|e| format!("Failed to parse YAML: {}", e)),
+            "toml" => toml::from_str(&content).map_err(|e| format!("Failed to parse TOML: {}", e)),
+            "json" => {
+                serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))
+            }
+            "yaml" => {
+                serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))
+            }
             _ => Err(format!("Unsupported config format: {}", format)),
         }
     }
@@ -178,7 +181,10 @@ impl ConfigLoader {
         merged.models.aliases.extend(override_config.models.aliases);
         merged.models.default = override_config.models.default.or(merged.models.default);
 
-        merged.plugins.enabled.extend(override_config.plugins.enabled);
+        merged
+            .plugins
+            .enabled
+            .extend(override_config.plugins.enabled);
         merged.plugins.paths.extend(override_config.plugins.paths);
 
         if !override_config.permissions.always_allow.is_empty() {
@@ -286,20 +292,32 @@ mod tests {
     #[test]
     fn test_merge_providers() {
         let mut base = Config::default();
-        base.providers.insert("anthropic".to_string(), crate::types::ProviderConfig {
-            api_key: Some("key1".to_string()),
-            ..Default::default()
-        });
+        base.providers.insert(
+            "anthropic".to_string(),
+            crate::types::ProviderConfig {
+                api_key: Some("key1".to_string()),
+                ..Default::default()
+            },
+        );
 
         let mut override_cfg = Config::default();
-        override_cfg.providers.insert("openai".to_string(), crate::types::ProviderConfig {
-            api_key: Some("key2".to_string()),
-            ..Default::default()
-        });
+        override_cfg.providers.insert(
+            "openai".to_string(),
+            crate::types::ProviderConfig {
+                api_key: Some("key2".to_string()),
+                ..Default::default()
+            },
+        );
 
         let merged = ConfigLoader::merge(base, override_cfg);
         assert_eq!(merged.providers.len(), 2);
-        assert_eq!(merged.providers.get("anthropic").unwrap().api_key, Some("key1".to_string()));
-        assert_eq!(merged.providers.get("openai").unwrap().api_key, Some("key2".to_string()));
+        assert_eq!(
+            merged.providers.get("anthropic").unwrap().api_key,
+            Some("key1".to_string())
+        );
+        assert_eq!(
+            merged.providers.get("openai").unwrap().api_key,
+            Some("key2".to_string())
+        );
     }
 }

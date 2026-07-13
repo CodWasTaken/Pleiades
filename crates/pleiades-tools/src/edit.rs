@@ -48,16 +48,23 @@ impl Tool for EditTool {
         PermissionLevel::WorkspaceWrite
     }
 
-    async fn execute(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let path = input.get("path")
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<ToolResult, Error> {
+        let path = input
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'path' parameter"))?;
 
-        let old_string = input.get("old_string")
+        let old_string = input
+            .get("old_string")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'old_string' parameter"))?;
 
-        let new_string = input.get("new_string")
+        let new_string = input
+            .get("new_string")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'new_string' parameter"))?;
 

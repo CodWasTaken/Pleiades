@@ -51,13 +51,12 @@ impl Tool for DiffTool {
     }
 
     async fn execute(&self, input: Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let path1 = input.get("path1")
+        let path1 = input
+            .get("path1")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required field 'path1'"))?;
 
-        let context = input.get("context")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(3);
+        let context = input.get("context").and_then(|v| v.as_i64()).unwrap_or(3);
 
         let context_arg = format!("-U{}", context);
 

@@ -4,7 +4,9 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::manifest::{PluginError, PluginHooks, PluginLifecycle, PluginManifest, PluginToolPermission};
+use crate::manifest::{
+    PluginError, PluginHooks, PluginLifecycle, PluginManifest, PluginToolPermission,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginKind {
@@ -72,7 +74,8 @@ impl PluginTool {
             .env("PLEIADES_TOOL_INPUT", &input_json);
 
         if let Some(root) = &self.root {
-            cmd.current_dir(root).env("PLEIADES_PLUGIN_ROOT", root.display().to_string());
+            cmd.current_dir(root)
+                .env("PLEIADES_PLUGIN_ROOT", root.display().to_string());
         }
 
         let mut child = cmd.spawn()?;
@@ -116,10 +119,18 @@ pub struct BuiltinPlugin {
 }
 
 impl Plugin for BuiltinPlugin {
-    fn metadata(&self) -> &PluginMetadata { &self.metadata }
-    fn hooks(&self) -> &PluginHooks { &self.hooks }
-    fn lifecycle(&self) -> &PluginLifecycle { &self.lifecycle }
-    fn tools(&self) -> &[PluginTool] { &self.tools }
+    fn metadata(&self) -> &PluginMetadata {
+        &self.metadata
+    }
+    fn hooks(&self) -> &PluginHooks {
+        &self.hooks
+    }
+    fn lifecycle(&self) -> &PluginLifecycle {
+        &self.lifecycle
+    }
+    fn tools(&self) -> &[PluginTool] {
+        &self.tools
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -131,10 +142,18 @@ pub struct BundledPlugin {
 }
 
 impl Plugin for BundledPlugin {
-    fn metadata(&self) -> &PluginMetadata { &self.metadata }
-    fn hooks(&self) -> &PluginHooks { &self.hooks }
-    fn lifecycle(&self) -> &PluginLifecycle { &self.lifecycle }
-    fn tools(&self) -> &[PluginTool] { &self.tools }
+    fn metadata(&self) -> &PluginMetadata {
+        &self.metadata
+    }
+    fn hooks(&self) -> &PluginHooks {
+        &self.hooks
+    }
+    fn lifecycle(&self) -> &PluginLifecycle {
+        &self.lifecycle
+    }
+    fn tools(&self) -> &[PluginTool] {
+        &self.tools
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -146,10 +165,18 @@ pub struct ExternalPlugin {
 }
 
 impl Plugin for ExternalPlugin {
-    fn metadata(&self) -> &PluginMetadata { &self.metadata }
-    fn hooks(&self) -> &PluginHooks { &self.hooks }
-    fn lifecycle(&self) -> &PluginLifecycle { &self.lifecycle }
-    fn tools(&self) -> &[PluginTool] { &self.tools }
+    fn metadata(&self) -> &PluginMetadata {
+        &self.metadata
+    }
+    fn hooks(&self) -> &PluginHooks {
+        &self.hooks
+    }
+    fn lifecycle(&self) -> &PluginLifecycle {
+        &self.lifecycle
+    }
+    fn tools(&self) -> &[PluginTool] {
+        &self.tools
+    }
 }
 
 #[derive(Debug, Clone)]

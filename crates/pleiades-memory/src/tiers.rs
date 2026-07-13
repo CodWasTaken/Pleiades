@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use pleiades_core::error::Error;
 use pleiades_core::conversation::Message;
+use pleiades_core::error::Error;
 
 use crate::store::{FileStore, InMemoryStore, MemoryEntry, MemoryStore};
 
@@ -25,7 +25,10 @@ impl WorkingMemory {
     }
 
     pub fn estimated_tokens(&self) -> usize {
-        self.messages.iter().map(|m| m.text_content().len() / 4).sum()
+        self.messages
+            .iter()
+            .map(|m| m.text_content().len() / 4)
+            .sum()
     }
 
     pub fn needs_compression(&self) -> bool {

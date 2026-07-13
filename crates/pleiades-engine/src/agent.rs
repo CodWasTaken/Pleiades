@@ -22,6 +22,8 @@ impl Agent {
     /// Execute a task with planning and tool use.
     pub async fn execute(&self, _task: &str) -> Result<String, Error> {
         // Placeholder for agent implementation
-        Err(Error::NotImplemented("Agent execution not yet implemented".to_string()))
+        Err(Error::NotImplemented(
+            "Agent execution not yet implemented".to_string(),
+        ))
     }
 }

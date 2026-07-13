@@ -22,7 +22,11 @@ struct Variable {
 
 impl PromptTemplate {
     /// Create a new template from raw text.
-    pub fn new(name: impl Into<String>, description: impl Into<String>, raw: impl Into<String>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        raw: impl Into<String>,
+    ) -> Self {
         let raw = raw.into();
         let variables = extract_variables(&raw);
         Self {
@@ -63,7 +67,9 @@ impl PromptTemplate {
             let after_open = &rest[open + 2..];
             let close = after_open
                 .find("}}")
-                .ok_or_else(|| PromptError::Unterminated { template: self.name.clone() })?;
+                .ok_or_else(|| PromptError::Unterminated {
+                    template: self.name.clone(),
+                })?;
             let token = after_open[..close].trim();
             let (name, default) = match token.split_once('|') {
                 Some((name, default)) => (name.trim(), Some(default.trim().to_string())),
@@ -164,7 +170,10 @@ mod tests {
         );
         let mut vars = HashMap::new();
         vars.insert("role".to_string(), "helper".to_string());
-        assert_eq!(tpl.render(&vars).unwrap(), "You are helper named Assistant.");
+        assert_eq!(
+            tpl.render(&vars).unwrap(),
+            "You are helper named Assistant."
+        );
     }
 
     #[test]

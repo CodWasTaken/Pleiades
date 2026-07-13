@@ -44,19 +44,30 @@ impl Tool for WriteTool {
         PermissionLevel::WorkspaceWrite
     }
 
-    async fn execute(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let path = input.get("path")
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<ToolResult, Error> {
+        let path = input
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'path' parameter"))?;
 
-        let content = input.get("content")
+        let content = input
+            .get("content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'content' parameter"))?;
 
         // Ensure parent directory exists
         if let Some(parent) = std::path::Path::new(path).parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| Error::io(format!("Failed to create directory '{}': {}", parent.display(), e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::io(format!(
+                    "Failed to create directory '{}': {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
         }
 
         std::fs::write(path, content)

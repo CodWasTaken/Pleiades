@@ -84,7 +84,11 @@ impl ModelRegistry {
     }
 
     /// Add an alias for a model.
-    pub fn add_alias(&mut self, alias: impl Into<String>, model_id: impl Into<String>) -> Result<(), String> {
+    pub fn add_alias(
+        &mut self,
+        alias: impl Into<String>,
+        model_id: impl Into<String>,
+    ) -> Result<(), String> {
         let alias = alias.into();
         let model_id = model_id.into();
         if !self.models.contains_key(&model_id) {
@@ -115,7 +119,8 @@ impl ModelRegistry {
 
     /// List models for a specific provider.
     pub fn list_by_provider(&self, provider: &str) -> Vec<&ModelInfo> {
-        let mut models: Vec<&ModelInfo> = self.models
+        let mut models: Vec<&ModelInfo> = self
+            .models
             .values()
             .filter(|m| m.provider == provider)
             .collect();
@@ -135,9 +140,17 @@ impl ModelRegistry {
             .values()
             .filter(|m| {
                 m.id.to_lowercase().contains(&q)
-                    || m.display_name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                    || m.display_name
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&q)
                     || m.provider.to_lowercase().contains(&q)
-                    || m.description.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                    || m.description
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&q)
             })
             .collect()
     }

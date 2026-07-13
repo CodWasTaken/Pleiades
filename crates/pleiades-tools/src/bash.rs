@@ -13,7 +13,7 @@ impl BashTool {
         let dangerous_patterns = [
             "rm -rf /",
             "rm -rf --no-preserve-root",
-            ":(){ :|:& };:",  // Fork bomb
+            ":(){ :|:& };:", // Fork bomb
             "> /dev/sda",
             "mkfs",
             "dd if=/dev/zero",
@@ -24,7 +24,10 @@ impl BashTool {
 
         for pattern in &dangerous_patterns {
             if cmd_lower.contains(pattern) {
-                return Err(Error::tool(format!("Command blocked: potentially dangerous pattern '{}'", pattern)));
+                return Err(Error::tool(format!(
+                    "Command blocked: potentially dangerous pattern '{}'",
+                    pattern
+                )));
             }
         }
 
@@ -76,8 +79,13 @@ impl Tool for BashTool {
         PermissionLevel::Dangerous
     }
 
-    async fn execute(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult, Error> {
-        let command = input.get("command")
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<ToolResult, Error> {
+        let command = input
+            .get("command")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::invalid_input("Missing required 'command' parameter"))?;
 
@@ -102,7 +110,12 @@ impl Tool for BashTool {
         let content = if output.status.success() {
             stdout
         } else {
-            format!("Exit code: {}\n{}\n{}", output.status.code().unwrap_or(-1), stdout, stderr)
+            format!(
+                "Exit code: {}\n{}\n{}",
+                output.status.code().unwrap_or(-1),
+                stdout,
+                stderr
+            )
         };
 
         let metadata = serde_json::json!({
@@ -113,7 +126,11 @@ impl Tool for BashTool {
         Ok(ToolResult {
             success: output.status.success(),
             content,
-            error: if output.status.success() { None } else { Some(stderr) },
+            error: if output.status.success() {
+                None
+            } else {
+                Some(stderr)
+            },
             metadata: Some(metadata),
         })
     }

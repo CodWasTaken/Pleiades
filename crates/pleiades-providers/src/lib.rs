@@ -8,8 +8,8 @@ pub mod client;
 pub mod openai;
 pub mod openai_compat;
 
-use pleiades_core::provider::Provider;
 use pleiades_config::Config;
+use pleiades_core::provider::Provider;
 
 /// Registry of available providers.
 pub struct ProviderRegistry {
@@ -30,7 +30,10 @@ impl ProviderRegistry {
 
     /// Get a provider by name.
     pub fn get(&self, name: &str) -> Option<&dyn Provider> {
-        self.providers.iter().find(|p| p.name() == name).map(|p| p.as_ref())
+        self.providers
+            .iter()
+            .find(|p| p.name() == name)
+            .map(|p| p.as_ref())
     }
 
     /// List all registered providers.
@@ -56,7 +59,9 @@ impl ProviderRegistry {
                 }
             } else {
                 match name {
-                    "anthropic" => Box::new(anthropic::AnthropicProvider::with_base_url(api_key, base_url)),
+                    "anthropic" => Box::new(anthropic::AnthropicProvider::with_base_url(
+                        api_key, base_url,
+                    )),
                     "openai" => Box::new(openai::OpenAIProvider::with_base_url(api_key, base_url)),
                     _ => return,
                 }
@@ -82,8 +87,17 @@ impl ProviderRegistry {
         };
 
         let compat_providers = [
-            "openrouter", "groq", "deepseek", "together", "xai",
-            "perplexity", "mistral", "cohere", "lmstudio", "ollama", "azure",
+            "openrouter",
+            "groq",
+            "deepseek",
+            "together",
+            "xai",
+            "perplexity",
+            "mistral",
+            "cohere",
+            "lmstudio",
+            "ollama",
+            "azure",
         ];
 
         // Register native providers (Anthropic, OpenAI)
