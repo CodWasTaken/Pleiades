@@ -6,7 +6,7 @@ use pleiades_agent_core::error::Error;
 use pleiades_agent_core::event::Event;
 use pleiades_agent_core::model::ModelRegistry;
 use pleiades_agent_core::provider::{ChatRequest, Provider, StreamEvent};
-use pleiades_agent_core::tool::{Tool, ToolContext};
+use pleiades_agent_core::tool::{PermissionLevel, Tool, ToolContext};
 
 use pleiades_agent_config::types::Config;
 
@@ -40,6 +40,31 @@ impl Engine {
             event_sender: None,
             memory: MemoryManager::persisted(mem_dir),
         }
+    }
+
+    /// Build a fully configured engine from application configuration.
+    ///
+    /// Provider and tool construction belongs to the engine layer so terminal
+    /// frontends only exchange commands and events with the runtime.
+    pub fn configured(config: Config, sandbox_mode: &str) -> Self {
+        let mut engine = Self::new(config.clone());
+        let providers = pleiades_agent_providers::ProviderRegistry::from_config(&config);
+        for provider in providers.into_providers() {
+            engine.register_provider(provider);
+        }
+        if config.providers.contains_key("openai-subscription") {
+            engine.register_provider(Box::new(
+                pleiades_agent_providers::codex::CodexCliProvider::new()
+                    .with_sandbox_mode(sandbox_mode),
+            ));
+        }
+
+        let mut tools = pleiades_agent_tools::ToolRegistry::new();
+        tools.register_defaults();
+        for tool in tools.into_tools() {
+            engine.register_tool(tool);
+        }
+        engine
     }
 
     /// Create a new engine with a custom memory manager.
@@ -97,6 +122,28 @@ impl Engine {
     /// Get available tools as definitions for provider requests.
     pub fn tool_definitions(&self) -> Vec<pleiades_agent_core::tool::ToolDefinition> {
         self.tools.iter().map(|t| t.definition()).collect()
+    }
+
+    /// Return the permission level declared by a registered tool.
+    pub fn tool_permission_level(&self, name: &str) -> Result<PermissionLevel, Error> {
+        self.tools
+            .iter()
+            .find(|tool| tool.name() == name)
+            .map(|tool| tool.permission_level())
+            .ok_or_else(|| Error::ToolNotFound {
+                name: name.to_string(),
+            })
+    }
+
+    /// Return the human-readable description declared by a registered tool.
+    pub fn tool_description(&self, name: &str) -> Result<&str, Error> {
+        self.tools
+            .iter()
+            .find(|tool| tool.name() == name)
+            .map(|tool| tool.description())
+            .ok_or_else(|| Error::ToolNotFound {
+                name: name.to_string(),
+            })
     }
 
     /// Process a chat message through the engine.

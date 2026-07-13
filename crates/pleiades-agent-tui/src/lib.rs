@@ -5,8 +5,12 @@
 
 pub mod app;
 pub mod input;
+pub mod markdown;
 pub mod render;
+pub mod state;
+pub mod terminal;
 pub mod theme;
+pub mod ui;
 
 pub use app::TuiApp;
 pub use render::TerminalRenderer;

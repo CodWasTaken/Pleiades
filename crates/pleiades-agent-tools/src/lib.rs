@@ -56,6 +56,11 @@ impl ToolRegistry {
     pub fn list(&self) -> Vec<&dyn Tool> {
         self.tools.iter().map(|t| t.as_ref()).collect()
     }
+
+    /// Consume the registry and return its tools.
+    pub fn into_tools(self) -> Vec<Box<dyn Tool>> {
+        self.tools
+    }
 }
 
 impl Default for ToolRegistry {

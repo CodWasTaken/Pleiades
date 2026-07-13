@@ -42,6 +42,11 @@ impl ProviderRegistry {
         self.providers.iter().map(|p| p.as_ref()).collect()
     }
 
+    /// Consume the registry and return its providers.
+    pub fn into_providers(self) -> Vec<Box<dyn Provider>> {
+        self.providers
+    }
+
     /// Build a registry from Pleiades configuration.
     ///
     /// Automatically creates providers for all configured API keys.

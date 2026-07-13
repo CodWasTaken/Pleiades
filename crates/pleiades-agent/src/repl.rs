@@ -541,9 +541,16 @@ impl Repl {
                             status,
                             ..
                         } => {
-                            let symbol = if status == "running" { "◌" } else { "✓" };
+                            let symbol = if status
+                                == pleiades_agent_core::provider::AgentActivityStatus::Running
+                            {
+                                "◌"
+                            } else {
+                                "✓"
+                            };
                             println!("  {symbol} {kind}  {title}");
-                            if status != "running" {
+                            if status != pleiades_agent_core::provider::AgentActivityStatus::Running
+                            {
                                 if let Some(detail) = detail {
                                     for line in detail.lines().take(6) {
                                         println!("    {line}");

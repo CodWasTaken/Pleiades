@@ -5,6 +5,66 @@ use crate::conversation::Message;
 use crate::error::Error;
 use crate::model::ModelInfo;
 
+/// Provider-independent category for autonomous agent activity.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentActivityKind {
+    Inspecting,
+    Searching,
+    Reading,
+    Planning,
+    Editing,
+    Writing,
+    Executing,
+    Testing,
+    Reviewing,
+    Tool,
+}
+
+/// Lifecycle state for an autonomous agent activity.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentActivityStatus {
+    Queued,
+    Running,
+    WaitingForApproval,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl std::fmt::Display for AgentActivityKind {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            Self::Inspecting => "inspecting",
+            Self::Searching => "searching",
+            Self::Reading => "reading",
+            Self::Planning => "planning",
+            Self::Editing => "editing",
+            Self::Writing => "writing",
+            Self::Executing => "executing",
+            Self::Testing => "testing",
+            Self::Reviewing => "reviewing",
+            Self::Tool => "tool",
+        };
+        formatter.write_str(value)
+    }
+}
+
+impl std::fmt::Display for AgentActivityStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::WaitingForApproval => "waiting_for_approval",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        };
+        formatter.write_str(value)
+    }
+}
+
 /// Stream event emitted during chat streaming.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamEvent {
@@ -22,10 +82,10 @@ pub enum StreamEvent {
     /// Progress emitted by a provider-managed autonomous agent.
     AgentActivity {
         id: String,
-        kind: String,
+        kind: AgentActivityKind,
         title: String,
         detail: Option<String>,
-        status: String,
+        status: AgentActivityStatus,
     },
     Done {
         finish_reason: String,

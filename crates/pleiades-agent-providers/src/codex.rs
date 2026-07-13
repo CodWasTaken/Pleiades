@@ -10,7 +10,8 @@ use pleiades_agent_core::conversation::{Message, MessageRole};
 use pleiades_agent_core::error::Error;
 use pleiades_agent_core::model::{ModelCapabilities, ModelInfo};
 use pleiades_agent_core::provider::{
-    ChatRequest, ChatResponse, Provider, ProviderCapabilities, StreamEvent, Usage,
+    AgentActivityKind, AgentActivityStatus, ChatRequest, ChatResponse, Provider,
+    ProviderCapabilities, StreamEvent, Usage,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
@@ -337,19 +338,27 @@ fn codex_stream_events(event: &serde_json::Value) -> Vec<StreamEvent> {
             .unwrap_or_default(),
         (Some("item.started"), Some("command_execution")) => vec![StreamEvent::AgentActivity {
             id,
-            kind: "command".to_string(),
+            kind: activity_kind_for_command(
+                item.get("command")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default(),
+            ),
             title: item
                 .get("command")
                 .and_then(|value| value.as_str())
                 .unwrap_or("command")
                 .to_string(),
             detail: None,
-            status: "running".to_string(),
+            status: AgentActivityStatus::Running,
         }],
         (Some("item.completed"), Some("command_execution")) => {
             vec![StreamEvent::AgentActivity {
                 id,
-                kind: "command".to_string(),
+                kind: activity_kind_for_command(
+                    item.get("command")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or_default(),
+                ),
                 title: item
                     .get("command")
                     .and_then(|value| value.as_str())
@@ -361,9 +370,9 @@ fn codex_stream_events(event: &serde_json::Value) -> Vec<StreamEvent> {
                     .filter(|value| !value.trim().is_empty())
                     .map(truncate_activity_detail),
                 status: if item.get("exit_code").and_then(|value| value.as_i64()) == Some(0) {
-                    "completed".to_string()
+                    AgentActivityStatus::Completed
                 } else {
-                    "failed".to_string()
+                    AgentActivityStatus::Failed
                 },
             }]
         }
@@ -391,16 +400,20 @@ fn codex_stream_events(event: &serde_json::Value) -> Vec<StreamEvent> {
                 .unwrap_or_else(|| "workspace files".to_string());
             vec![StreamEvent::AgentActivity {
                 id,
-                kind: "file".to_string(),
+                kind: AgentActivityKind::Editing,
                 title: changes,
                 detail: None,
-                status: "completed".to_string(),
+                status: AgentActivityStatus::Completed,
             }]
         }
         (Some("item.completed"), Some(kind @ ("web_search" | "mcp_tool_call"))) => {
             vec![StreamEvent::AgentActivity {
                 id,
-                kind: kind.to_string(),
+                kind: if kind == "web_search" {
+                    AgentActivityKind::Searching
+                } else {
+                    AgentActivityKind::Tool
+                },
                 title: item
                     .get("query")
                     .or_else(|| item.get("tool"))
@@ -408,7 +421,7 @@ fn codex_stream_events(event: &serde_json::Value) -> Vec<StreamEvent> {
                     .unwrap_or(kind)
                     .to_string(),
                 detail: None,
-                status: "completed".to_string(),
+                status: AgentActivityStatus::Completed,
             }]
         }
         (Some("turn.completed"), _) => vec![StreamEvent::Done {
@@ -425,6 +438,22 @@ fn codex_stream_events(event: &serde_json::Value) -> Vec<StreamEvent> {
             code: Some("codex_agent_error".to_string()),
         }],
         _ => Vec::new(),
+    }
+}
+
+fn activity_kind_for_command(command: &str) -> AgentActivityKind {
+    let command = command.to_ascii_lowercase();
+    if ["test", "nextest", "pytest", "vitest", "jest", "cargo test"]
+        .iter()
+        .any(|needle| command.contains(needle))
+    {
+        AgentActivityKind::Testing
+    } else if command.contains("git diff") || command.contains("git status") {
+        AgentActivityKind::Reviewing
+    } else if command.contains("rg ") || command.contains("grep ") || command.contains("find ") {
+        AgentActivityKind::Searching
+    } else {
+        AgentActivityKind::Executing
     }
 }
 
@@ -544,11 +573,19 @@ mod tests {
             "type": "item.completed",
             "item": {"id":"2", "type":"file_change", "changes":[{"path":"src/main.rs", "kind":"update"}]}
         });
-        assert!(
-            matches!(codex_stream_events(&command)[0], StreamEvent::AgentActivity { ref status, .. } if status == "completed")
-        );
-        assert!(
-            matches!(codex_stream_events(&file)[0], StreamEvent::AgentActivity { ref kind, .. } if kind == "file")
-        );
+        assert!(matches!(
+            codex_stream_events(&command)[0],
+            StreamEvent::AgentActivity {
+                status: AgentActivityStatus::Completed,
+                ..
+            }
+        ));
+        assert!(matches!(
+            codex_stream_events(&file)[0],
+            StreamEvent::AgentActivity {
+                kind: AgentActivityKind::Editing,
+                ..
+            }
+        ));
     }
 }

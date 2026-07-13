@@ -1,82 +1,193 @@
-use std::collections::HashMap;
+//! Typed visual design system for the Pleiades terminal workspace.
 
-/// Terminal color scheme definition.
-#[derive(Debug, Clone)]
-pub struct Theme {
-    pub name: String,
-    pub colors: HashMap<String, String>,
+use ratatui::style::{Color, Modifier, Style};
+
+#[derive(Debug, Clone, Copy)]
+pub struct Symbols {
+    pub agent: &'static str,
+    pub suggestion: &'static str,
+    pub context: &'static str,
+    pub running: &'static str,
+    pub success: &'static str,
+    pub failure: &'static str,
+    pub paused: &'static str,
+    pub tool: &'static str,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct Theme {
+    pub name: &'static str,
+    pub background: Color,
+    pub surface: Color,
+    pub surface_alt: Color,
+    pub foreground: Color,
+    pub muted: Color,
+    pub primary: Color,
+    pub info: Color,
+    pub starlight: Color,
+    pub success: Color,
+    pub warning: Color,
+    pub error: Color,
+    pub diff_add: Color,
+    pub diff_remove: Color,
+    pub border: Color,
+    pub symbols: Symbols,
+}
+
+const UNICODE_SYMBOLS: Symbols = Symbols {
+    agent: "✦",
+    suggestion: "✧",
+    context: "⋆",
+    running: "◌",
+    success: "✓",
+    failure: "×",
+    paused: "◇",
+    tool: "⊹",
+};
+
+const ASCII_SYMBOLS: Symbols = Symbols {
+    agent: "*",
+    suggestion: "+",
+    context: ".",
+    running: "o",
+    success: "+",
+    failure: "x",
+    paused: "-",
+    tool: ">",
+};
 
 impl Theme {
-    /// Load a theme by name from built-in themes.
+    /// Load a built-in theme. Previous theme names remain compatible.
     pub fn load(name: &str) -> Option<Self> {
-        BUILTIN_THEMES.get(name).cloned()
+        match name.to_ascii_lowercase().as_str() {
+            "seven-sisters" | "catppuccin-mocha" => Some(Self::seven_sisters()),
+            "andromeda" | "dracula" => Some(Self::andromeda()),
+            "orion" | "tokyo-night" => Some(Self::orion()),
+            "event-horizon" => Some(Self::event_horizon()),
+            "solar-wind" => Some(Self::solar_wind()),
+            "high-contrast" => Some(Self::high_contrast(false)),
+            "ascii" => Some(Self::high_contrast(true)),
+            _ => None,
+        }
     }
 
-    /// Get a color value by key.
-    pub fn color(&self, key: &str) -> Option<&String> {
-        self.colors.get(key)
+    pub fn seven_sisters() -> Self {
+        Self {
+            name: "seven-sisters",
+            background: Color::Rgb(7, 10, 24),
+            surface: Color::Rgb(15, 20, 42),
+            surface_alt: Color::Rgb(23, 29, 57),
+            foreground: Color::Rgb(226, 232, 255),
+            muted: Color::Rgb(119, 131, 166),
+            primary: Color::Rgb(142, 132, 255),
+            info: Color::Rgb(91, 210, 238),
+            starlight: Color::Rgb(255, 221, 160),
+            success: Color::Rgb(116, 224, 174),
+            warning: Color::Rgb(246, 190, 102),
+            error: Color::Rgb(255, 112, 132),
+            diff_add: Color::Rgb(96, 200, 144),
+            diff_remove: Color::Rgb(239, 103, 125),
+            border: Color::Rgb(63, 73, 112),
+            symbols: UNICODE_SYMBOLS,
+        }
+    }
+
+    fn andromeda() -> Self {
+        Self {
+            primary: Color::Rgb(203, 135, 255),
+            info: Color::Rgb(119, 221, 255),
+            ..Self::seven_sisters()
+        }
+    }
+
+    fn orion() -> Self {
+        Self {
+            primary: Color::Rgb(104, 158, 255),
+            starlight: Color::Rgb(255, 184, 120),
+            ..Self::seven_sisters()
+        }
+    }
+
+    fn event_horizon() -> Self {
+        Self {
+            background: Color::Black,
+            surface: Color::Rgb(20, 20, 20),
+            primary: Color::Rgb(190, 120, 255),
+            ..Self::seven_sisters()
+        }
+    }
+
+    fn solar_wind() -> Self {
+        Self {
+            primary: Color::Rgb(255, 176, 74),
+            info: Color::Rgb(96, 220, 205),
+            starlight: Color::Rgb(255, 231, 150),
+            ..Self::seven_sisters()
+        }
+    }
+
+    fn high_contrast(ascii: bool) -> Self {
+        Self {
+            name: if ascii { "ascii" } else { "high-contrast" },
+            background: Color::Black,
+            surface: Color::Black,
+            surface_alt: Color::DarkGray,
+            foreground: Color::White,
+            muted: Color::Gray,
+            primary: Color::Cyan,
+            info: Color::LightCyan,
+            starlight: Color::Yellow,
+            success: Color::LightGreen,
+            warning: Color::LightYellow,
+            error: Color::LightRed,
+            diff_add: Color::Green,
+            diff_remove: Color::Red,
+            border: Color::Gray,
+            symbols: if ascii {
+                ASCII_SYMBOLS
+            } else {
+                UNICODE_SYMBOLS
+            },
+        }
+    }
+
+    pub fn base(self) -> Style {
+        Style::default().fg(self.foreground).bg(self.background)
+    }
+    pub fn title(self) -> Style {
+        Style::default()
+            .fg(self.primary)
+            .add_modifier(Modifier::BOLD)
+    }
+    pub fn muted(self) -> Style {
+        Style::default().fg(self.muted)
+    }
+    pub fn focused_border(self) -> Style {
+        Style::default().fg(self.primary)
+    }
+    pub fn border(self) -> Style {
+        Style::default().fg(self.border)
     }
 }
 
-/// Built-in themes collection.
-pub static BUILTIN_THEMES: once_cell::sync::Lazy<HashMap<String, Theme>> =
-    once_cell::sync::Lazy::new(|| {
-        let mut themes = HashMap::new();
+impl Default for Theme {
+    fn default() -> Self {
+        Self::seven_sisters()
+    }
+}
 
-        themes.insert(
-            "catppuccin-mocha".to_string(),
-            Theme {
-                name: "Catppuccin Mocha".to_string(),
-                colors: HashMap::from([
-                    ("background".to_string(), "#1e1e2e".to_string()),
-                    ("foreground".to_string(), "#cdd6f4".to_string()),
-                    ("accent".to_string(), "#89b4fa".to_string()),
-                    ("success".to_string(), "#a6e3a1".to_string()),
-                    ("warning".to_string(), "#f9e2af".to_string()),
-                    ("error".to_string(), "#f38ba8".to_string()),
-                    ("info".to_string(), "#89dceb".to_string()),
-                    ("muted".to_string(), "#585b70".to_string()),
-                    ("surface".to_string(), "#313244".to_string()),
-                ]),
-            },
-        );
+#[cfg(test)]
+mod tests {
+    use super::Theme;
 
-        themes.insert(
-            "dracula".to_string(),
-            Theme {
-                name: "Dracula".to_string(),
-                colors: HashMap::from([
-                    ("background".to_string(), "#282a36".to_string()),
-                    ("foreground".to_string(), "#f8f8f2".to_string()),
-                    ("accent".to_string(), "#bd93f9".to_string()),
-                    ("success".to_string(), "#50fa7b".to_string()),
-                    ("warning".to_string(), "#ffb86c".to_string()),
-                    ("error".to_string(), "#ff5555".to_string()),
-                    ("info".to_string(), "#8be9fd".to_string()),
-                    ("muted".to_string(), "#6272a4".to_string()),
-                    ("surface".to_string(), "#44475a".to_string()),
-                ]),
-            },
-        );
+    #[test]
+    fn default_is_seven_sisters() {
+        assert_eq!(Theme::default().name, "seven-sisters");
+    }
 
-        themes.insert(
-            "tokyo-night".to_string(),
-            Theme {
-                name: "Tokyo Night".to_string(),
-                colors: HashMap::from([
-                    ("background".to_string(), "#1a1b26".to_string()),
-                    ("foreground".to_string(), "#a9b1d6".to_string()),
-                    ("accent".to_string(), "#7aa2f7".to_string()),
-                    ("success".to_string(), "#9ece6a".to_string()),
-                    ("warning".to_string(), "#e0af68".to_string()),
-                    ("error".to_string(), "#f7768e".to_string()),
-                    ("info".to_string(), "#7dcfff".to_string()),
-                    ("muted".to_string(), "#565f89".to_string()),
-                    ("surface".to_string(), "#24283b".to_string()),
-                ]),
-            },
-        );
-
-        themes
-    });
+    #[test]
+    fn legacy_theme_names_still_load() {
+        assert!(Theme::load("dracula").is_some());
+        assert!(Theme::load("tokyo-night").is_some());
+    }
+}

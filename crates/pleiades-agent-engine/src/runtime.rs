@@ -1,0 +1,1068 @@
+//! Event-driven autonomous agent runtime.
+//!
+//! The runtime owns providers, tools, conversations, permissions, and task
+//! lifecycle. Frontends communicate exclusively through bounded command and
+//! event channels and never execute tools or write agent output directly.
+
+use std::collections::{HashSet, VecDeque};
+use std::time::{Duration, Instant};
+
+use pleiades_agent_config::Config;
+use pleiades_agent_core::conversation::{ContentBlock, Conversation, Message, MessageRole};
+use pleiades_agent_core::provider::{AgentActivityKind, AgentActivityStatus, StreamEvent, Usage};
+use pleiades_agent_core::tool::PermissionLevel;
+use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+
+use crate::{Engine, SessionStore};
+
+const COMMAND_CAPACITY: usize = 64;
+const EVENT_CAPACITY: usize = 512;
+const MAX_TOOL_OUTPUT: usize = 256 * 1024;
+const MAX_DIFF_OUTPUT: usize = 512 * 1024;
+
+/// Access boundary applied to autonomous work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentMode {
+    Plan,
+    Agent,
+    Unrestricted,
+}
+
+impl AgentMode {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "plan" | "read-only" | "readonly" => Self::Plan,
+            "unrestricted" | "danger-full-access" => Self::Unrestricted,
+            _ => Self::Agent,
+        }
+    }
+
+    pub fn sandbox(self) -> &'static str {
+        match self {
+            Self::Plan => "read-only",
+            Self::Agent => "workspace-write",
+            Self::Unrestricted => "danger-full-access",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::Agent => "agent",
+            Self::Unrestricted => "unrestricted",
+        }
+    }
+}
+
+/// A normalized activity item rendered by terminal and future graphical UIs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Activity {
+    pub id: String,
+    pub kind: AgentActivityKind,
+    pub title: String,
+    pub detail: Option<String>,
+    pub status: AgentActivityStatus,
+    pub started_at_ms: u128,
+    pub duration_ms: Option<u64>,
+}
+
+impl Activity {
+    fn new(
+        id: impl Into<String>,
+        kind: AgentActivityKind,
+        title: impl Into<String>,
+        status: AgentActivityStatus,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            kind,
+            title: title.into(),
+            detail: None,
+            status,
+            started_at_ms: now_ms(),
+            duration_ms: None,
+        }
+    }
+}
+
+/// Decision returned from an in-interface permission prompt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionDecision {
+    AllowOnce,
+    AllowSession,
+    DenyOnce,
+    DenySession,
+}
+
+/// Structured permission request presented by the frontend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermissionRequest {
+    pub id: String,
+    pub tool: String,
+    pub operation: String,
+    pub target: String,
+    pub reason: String,
+    pub risk: String,
+    pub input: serde_json::Value,
+}
+
+/// Commands accepted by the autonomous runtime.
+#[derive(Debug, Clone)]
+pub enum AgentCommand {
+    Submit(String),
+    Cancel,
+    Permission {
+        request_id: String,
+        decision: PermissionDecision,
+    },
+    SetMode(AgentMode),
+    SetProvider(String),
+    SetModel(String),
+    ClearConversation,
+    SaveSession,
+    Shutdown,
+}
+
+/// Events emitted by the autonomous runtime.
+#[derive(Debug, Clone)]
+pub enum AgentEvent {
+    SessionReady {
+        id: String,
+        history: Vec<Message>,
+    },
+    UserMessage(String),
+    TaskStarted {
+        task: String,
+        started_at_ms: u128,
+    },
+    TextDelta(String),
+    ReasoningDelta(String),
+    AssistantMessageCompleted(String),
+    Activity(Activity),
+    PermissionRequested(PermissionRequest),
+    ToolOutput {
+        activity_id: String,
+        output: String,
+        truncated: bool,
+    },
+    Usage(Usage),
+    DiffUpdated(String),
+    GitState {
+        branch: Option<String>,
+        dirty: bool,
+    },
+    QueueChanged(usize),
+    ModeChanged(AgentMode),
+    ProviderChanged(String),
+    ModelChanged(String),
+    ConversationCleared,
+    SessionSaved(String),
+    TaskCompleted {
+        elapsed_ms: u64,
+    },
+    TaskFailed {
+        message: String,
+    },
+    TaskCancelled,
+    Error(String),
+}
+
+/// Frontend side of the runtime channels.
+pub struct AgentHandle {
+    pub commands: mpsc::Sender<AgentCommand>,
+    pub events: mpsc::Receiver<AgentEvent>,
+}
+
+/// Owns the long-lived conversation and starts cancellable task executions.
+pub struct AgentRuntime {
+    config: Config,
+    conversation: Conversation,
+    provider_name: String,
+    model_name: String,
+    mode: AgentMode,
+    session_store: SessionStore,
+}
+
+impl AgentRuntime {
+    pub fn new(
+        config: Config,
+        conversation: Conversation,
+        provider_name: impl Into<String>,
+        model_name: impl Into<String>,
+        mode: AgentMode,
+    ) -> Self {
+        let session_store = SessionStore::from_config(&config);
+        Self {
+            config,
+            conversation,
+            provider_name: provider_name.into(),
+            model_name: model_name.into(),
+            mode,
+            session_store,
+        }
+    }
+
+    /// Spawn the runtime actor and return bounded frontend channels.
+    pub fn spawn(self) -> AgentHandle {
+        let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
+        let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
+        tokio::spawn(self.run(command_rx, event_tx));
+        AgentHandle {
+            commands: command_tx,
+            events: event_rx,
+        }
+    }
+
+    async fn run(
+        self,
+        mut commands: mpsc::Receiver<AgentCommand>,
+        events: mpsc::Sender<AgentEvent>,
+    ) {
+        let Self {
+            mut config,
+            conversation,
+            mut provider_name,
+            model_name,
+            mut mode,
+            session_store,
+        } = self;
+        config.core.default_provider = Some(provider_name.clone());
+        config.core.default_model = Some(model_name.clone());
+
+        let mut context = Some(RuntimeContext::new(
+            config.clone(),
+            conversation,
+            mode,
+            session_store,
+        ));
+        let (outcome_tx, mut outcome_rx) = mpsc::channel::<TaskOutcome>(2);
+        let mut active: Option<ActiveTask> = None;
+        let mut queued = VecDeque::<String>::new();
+
+        if let Some(ctx) = context.as_ref() {
+            send_event(
+                &events,
+                AgentEvent::SessionReady {
+                    id: ctx.conversation.id.clone(),
+                    history: ctx.conversation.messages.clone(),
+                },
+            )
+            .await;
+        }
+        emit_git_state(&events).await;
+
+        loop {
+            tokio::select! {
+                Some(command) = commands.recv() => {
+                    match command {
+                        AgentCommand::Submit(task) if !task.trim().is_empty() => {
+                            if active.is_some() {
+                                queued.push_back(task);
+                                send_event(&events, AgentEvent::QueueChanged(queued.len())).await;
+                            } else if let Some(ctx) = context.take() {
+                                active = Some(launch_task(
+                                    ctx,
+                                    task,
+                                    provider_name.clone(),
+                                    events.clone(),
+                                    outcome_tx.clone(),
+                                ));
+                            }
+                        }
+                        AgentCommand::Cancel => {
+                            if let Some(task) = &active {
+                                task.cancellation.cancel();
+                            }
+                        }
+                        AgentCommand::Permission { request_id, decision } => {
+                            if let Some(task) = &active {
+                                let _ = task.permissions.send(PermissionResponse {
+                                    request_id,
+                                    decision,
+                                }).await;
+                            }
+                        }
+                        AgentCommand::SetMode(next) => {
+                            mode = next;
+                            if let Some(ctx) = context.as_mut() {
+                                ctx.set_mode(next);
+                            }
+                            send_event(&events, AgentEvent::ModeChanged(next)).await;
+                        }
+                        AgentCommand::SetProvider(provider) => {
+                            provider_name = provider.clone();
+                            config.core.default_provider = Some(provider.clone());
+                            if let Some(ctx) = context.as_mut() {
+                                ctx.set_config(config.clone(), mode);
+                            }
+                            send_event(&events, AgentEvent::ProviderChanged(provider)).await;
+                        }
+                        AgentCommand::SetModel(model) => {
+                            config.core.default_model = Some(model.clone());
+                            if let Some(ctx) = context.as_mut() {
+                                ctx.set_config(config.clone(), mode);
+                            }
+                            send_event(&events, AgentEvent::ModelChanged(model)).await;
+                        }
+                        AgentCommand::ClearConversation if active.is_none() => {
+                            if let Some(ctx) = context.as_mut() {
+                                ctx.conversation.clear();
+                                send_event(&events, AgentEvent::ConversationCleared).await;
+                            }
+                        }
+                        AgentCommand::SaveSession => {
+                            if let Some(ctx) = context.as_ref() {
+                                match ctx.session_store.save(&ctx.conversation) {
+                                    Ok(()) => send_event(
+                                        &events,
+                                        AgentEvent::SessionSaved(ctx.conversation.id.clone()),
+                                    ).await,
+                                    Err(error) => send_event(&events, AgentEvent::Error(error.to_string())).await,
+                                }
+                            }
+                        }
+                        AgentCommand::Shutdown => {
+                            if let Some(task) = &active {
+                                task.cancellation.cancel();
+                            }
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                Some(mut outcome) = outcome_rx.recv(), if active.is_some() => {
+                    active = None;
+                    if outcome.context.mode != mode || outcome.context.config != config {
+                        outcome.context.set_config(config.clone(), mode);
+                    }
+                    context = Some(outcome.context);
+                    emit_git_state(&events).await;
+                    send_event(&events, AgentEvent::QueueChanged(queued.len())).await;
+                    if let Some(next) = queued.pop_front() {
+                        send_event(&events, AgentEvent::QueueChanged(queued.len())).await;
+                        let ctx = context.take().expect("runtime context must be available");
+                        active = Some(launch_task(
+                            ctx,
+                            next,
+                            provider_name.clone(),
+                            events.clone(),
+                            outcome_tx.clone(),
+                        ));
+                    }
+                }
+                else => break,
+            }
+        }
+
+        if let Some(ctx) = context.as_ref() {
+            let _ = ctx.session_store.save(&ctx.conversation);
+        }
+    }
+}
+
+struct RuntimeContext {
+    engine: Engine,
+    config: Config,
+    conversation: Conversation,
+    mode: AgentMode,
+    session_store: SessionStore,
+    allowed_session: HashSet<String>,
+    denied_session: HashSet<String>,
+}
+
+impl RuntimeContext {
+    fn new(
+        config: Config,
+        conversation: Conversation,
+        mode: AgentMode,
+        session_store: SessionStore,
+    ) -> Self {
+        let engine = Engine::configured(config.clone(), mode.sandbox());
+        Self {
+            engine,
+            config,
+            conversation,
+            mode,
+            session_store,
+            allowed_session: HashSet::new(),
+            denied_session: HashSet::new(),
+        }
+    }
+
+    fn set_mode(&mut self, mode: AgentMode) {
+        self.set_config(self.config.clone(), mode);
+    }
+
+    fn set_config(&mut self, config: Config, mode: AgentMode) {
+        self.engine = Engine::configured(config.clone(), mode.sandbox());
+        self.config = config;
+        self.mode = mode;
+    }
+}
+
+struct ActiveTask {
+    cancellation: CancellationToken,
+    permissions: mpsc::Sender<PermissionResponse>,
+}
+
+struct PermissionResponse {
+    request_id: String,
+    decision: PermissionDecision,
+}
+
+struct TaskOutcome {
+    context: RuntimeContext,
+}
+
+fn launch_task(
+    context: RuntimeContext,
+    task: String,
+    provider_name: String,
+    events: mpsc::Sender<AgentEvent>,
+    outcomes: mpsc::Sender<TaskOutcome>,
+) -> ActiveTask {
+    let cancellation = CancellationToken::new();
+    let task_cancellation = cancellation.clone();
+    let (permission_tx, permission_rx) = mpsc::channel(8);
+    tokio::spawn(async move {
+        let context = execute_task(
+            context,
+            task,
+            provider_name,
+            events,
+            permission_rx,
+            task_cancellation,
+        )
+        .await;
+        let _ = outcomes.send(TaskOutcome { context }).await;
+    });
+    ActiveTask {
+        cancellation,
+        permissions: permission_tx,
+    }
+}
+
+async fn execute_task(
+    mut context: RuntimeContext,
+    task: String,
+    provider_name: String,
+    events: mpsc::Sender<AgentEvent>,
+    mut permissions: mpsc::Receiver<PermissionResponse>,
+    cancellation: CancellationToken,
+) -> RuntimeContext {
+    let started = Instant::now();
+    context.conversation.add_message(Message::user(&task));
+    send_event(&events, AgentEvent::UserMessage(task.clone())).await;
+    send_event(
+        &events,
+        AgentEvent::TaskStarted {
+            task,
+            started_at_ms: now_ms(),
+        },
+    )
+    .await;
+    send_event(
+        &events,
+        AgentEvent::Activity(Activity::new(
+            "understand-task",
+            AgentActivityKind::Planning,
+            "Understanding task and repository context",
+            AgentActivityStatus::Completed,
+        )),
+    )
+    .await;
+
+    let max_iterations = context.config.agent.max_tool_iterations;
+    for iteration in 0..max_iterations {
+        let planning_id = format!("planning-{iteration}");
+        send_event(
+            &events,
+            AgentEvent::Activity(Activity::new(
+                &planning_id,
+                AgentActivityKind::Planning,
+                if iteration == 0 {
+                    "Formulating an execution plan"
+                } else {
+                    "Evaluating tool results and next steps"
+                },
+                AgentActivityStatus::Running,
+            )),
+        )
+        .await;
+
+        let mut stream = match context
+            .engine
+            .chat_stream(&mut context.conversation, &provider_name)
+            .await
+        {
+            Ok(stream) => stream,
+            Err(error) => {
+                fail_activity(&events, &planning_id, error.to_string()).await;
+                send_event(
+                    &events,
+                    AgentEvent::TaskFailed {
+                        message: error.to_string(),
+                    },
+                )
+                .await;
+                return context;
+            }
+        };
+
+        let mut response = String::new();
+        let mut tool_calls = Vec::new();
+        let mut planning_completed = false;
+        let mut stream_failed = None;
+
+        loop {
+            let event = tokio::select! {
+                _ = cancellation.cancelled() => {
+                    drop(stream);
+                    cancel_activity(&events, &planning_id).await;
+                    send_event(&events, AgentEvent::TaskCancelled).await;
+                    let _ = context.session_store.save(&context.conversation);
+                    return context;
+                }
+                event = stream.recv() => event,
+            };
+            let Some(event) = event else { break };
+            if !planning_completed {
+                complete_activity(
+                    &events,
+                    &planning_id,
+                    AgentActivityKind::Planning,
+                    "Execution plan ready",
+                    None,
+                )
+                .await;
+                planning_completed = true;
+            }
+            match event {
+                StreamEvent::Token(delta) => {
+                    response.push_str(&delta);
+                    send_event(&events, AgentEvent::TextDelta(delta)).await;
+                }
+                StreamEvent::ReasoningToken(delta) => {
+                    send_event(&events, AgentEvent::ReasoningDelta(delta)).await;
+                }
+                StreamEvent::ToolCall { id, name, input } => {
+                    tool_calls.push(ToolCall { id, name, input });
+                }
+                StreamEvent::AgentActivity {
+                    id,
+                    kind,
+                    title,
+                    detail,
+                    status,
+                } => {
+                    send_event(
+                        &events,
+                        AgentEvent::Activity(Activity {
+                            id,
+                            kind,
+                            title,
+                            detail,
+                            status,
+                            started_at_ms: now_ms(),
+                            duration_ms: None,
+                        }),
+                    )
+                    .await;
+                }
+                StreamEvent::ToolResult { id, content } => {
+                    let (output, truncated) = truncate_owned(content, MAX_TOOL_OUTPUT);
+                    send_event(
+                        &events,
+                        AgentEvent::ToolOutput {
+                            activity_id: id,
+                            output,
+                            truncated,
+                        },
+                    )
+                    .await;
+                }
+                StreamEvent::Done { usage, .. } => {
+                    if let Some(usage) = usage {
+                        send_event(&events, AgentEvent::Usage(usage)).await;
+                    }
+                    break;
+                }
+                StreamEvent::Error { message, code } => {
+                    stream_failed = Some(match code {
+                        Some(code) => format!("{message} ({code})"),
+                        None => message,
+                    });
+                    break;
+                }
+            }
+        }
+
+        if !planning_completed {
+            complete_activity(
+                &events,
+                &planning_id,
+                AgentActivityKind::Planning,
+                "Execution plan ready",
+                None,
+            )
+            .await;
+        }
+        if let Some(message) = stream_failed {
+            send_event(&events, AgentEvent::TaskFailed { message }).await;
+            return context;
+        }
+
+        if tool_calls.is_empty() {
+            if !response.is_empty() {
+                context
+                    .conversation
+                    .add_message(Message::assistant(response.clone()));
+                send_event(&events, AgentEvent::AssistantMessageCompleted(response)).await;
+            }
+            let review_id = "review-final-diff";
+            send_event(
+                &events,
+                AgentEvent::Activity(Activity::new(
+                    review_id,
+                    AgentActivityKind::Reviewing,
+                    "Reviewing final workspace diff",
+                    AgentActivityStatus::Running,
+                )),
+            )
+            .await;
+            let diff = workspace_diff().await;
+            complete_activity(
+                &events,
+                review_id,
+                AgentActivityKind::Reviewing,
+                "Reviewed final workspace diff",
+                None,
+            )
+            .await;
+            send_event(&events, AgentEvent::DiffUpdated(diff)).await;
+            let _ = context.session_store.save(&context.conversation);
+            send_event(
+                &events,
+                AgentEvent::TaskCompleted {
+                    elapsed_ms: started.elapsed().as_millis() as u64,
+                },
+            )
+            .await;
+            return context;
+        }
+
+        let mut blocks = Vec::new();
+        if !response.is_empty() {
+            blocks.push(ContentBlock::Text(response));
+        }
+        for call in &tool_calls {
+            blocks.push(ContentBlock::ToolUse {
+                id: call.id.clone(),
+                name: call.name.clone(),
+                input: call.input.clone(),
+            });
+        }
+        context.conversation.add_message(Message {
+            role: MessageRole::Assistant,
+            content: blocks,
+            reasoning: None,
+            metadata: None,
+        });
+
+        for call in tool_calls {
+            let kind = activity_kind_for_tool(&call.name);
+            let target = permission_target(&call.input);
+            send_event(
+                &events,
+                AgentEvent::Activity(Activity::new(
+                    &call.id,
+                    kind,
+                    format!("{} {target}", call.name),
+                    AgentActivityStatus::Queued,
+                )),
+            )
+            .await;
+
+            let allowed = match request_permission_if_needed(
+                &mut context,
+                &call,
+                &events,
+                &mut permissions,
+                &cancellation,
+            )
+            .await
+            {
+                PermissionOutcome::Allowed => true,
+                PermissionOutcome::Denied => false,
+                PermissionOutcome::Cancelled => {
+                    cancel_activity(&events, &call.id).await;
+                    send_event(&events, AgentEvent::TaskCancelled).await;
+                    return context;
+                }
+            };
+
+            if !allowed {
+                fail_activity(&events, &call.id, "Denied by permission policy").await;
+                add_tool_result(
+                    &mut context.conversation,
+                    &call.id,
+                    "Tool use denied by permission policy".to_string(),
+                    true,
+                );
+                continue;
+            }
+
+            send_event(
+                &events,
+                AgentEvent::Activity(Activity::new(
+                    &call.id,
+                    kind,
+                    format!("{} {target}", call.name),
+                    AgentActivityStatus::Running,
+                )),
+            )
+            .await;
+            let tool_started = Instant::now();
+            let result = tokio::select! {
+                _ = cancellation.cancelled() => {
+                    cancel_activity(&events, &call.id).await;
+                    send_event(&events, AgentEvent::TaskCancelled).await;
+                    return context;
+                }
+                result = context.engine.execute_tool(&call.name, call.input.clone()) => result,
+            };
+
+            match result {
+                Ok(result) => {
+                    let raw = if result.success {
+                        result.content
+                    } else {
+                        result.error.unwrap_or(result.content)
+                    };
+                    let (output, truncated) = truncate_owned(raw.clone(), MAX_TOOL_OUTPUT);
+                    send_event(
+                        &events,
+                        AgentEvent::ToolOutput {
+                            activity_id: call.id.clone(),
+                            output: output.clone(),
+                            truncated,
+                        },
+                    )
+                    .await;
+                    if result.success {
+                        let mut activity = Activity::new(
+                            &call.id,
+                            kind,
+                            format!("{} {target}", call.name),
+                            AgentActivityStatus::Completed,
+                        );
+                        activity.detail = Some(output);
+                        activity.duration_ms = Some(tool_started.elapsed().as_millis() as u64);
+                        send_event(&events, AgentEvent::Activity(activity)).await;
+                    } else {
+                        fail_activity(&events, &call.id, raw.clone()).await;
+                    }
+                    add_tool_result(&mut context.conversation, &call.id, raw, !result.success);
+                }
+                Err(error) => {
+                    fail_activity(&events, &call.id, error.to_string()).await;
+                    add_tool_result(
+                        &mut context.conversation,
+                        &call.id,
+                        format!("Error: {error}"),
+                        true,
+                    );
+                }
+            }
+        }
+        let _ = context.session_store.save(&context.conversation);
+    }
+
+    send_event(
+        &events,
+        AgentEvent::TaskFailed {
+            message: format!("Agent stopped after {max_iterations} tool iterations"),
+        },
+    )
+    .await;
+    context
+}
+
+struct ToolCall {
+    id: String,
+    name: String,
+    input: serde_json::Value,
+}
+
+enum PermissionOutcome {
+    Allowed,
+    Denied,
+    Cancelled,
+}
+
+async fn request_permission_if_needed(
+    context: &mut RuntimeContext,
+    call: &ToolCall,
+    events: &mpsc::Sender<AgentEvent>,
+    permissions: &mut mpsc::Receiver<PermissionResponse>,
+    cancellation: &CancellationToken,
+) -> PermissionOutcome {
+    if context
+        .config
+        .permissions
+        .always_deny
+        .iter()
+        .any(|name| name == &call.name)
+        || context.denied_session.contains(&call.name)
+    {
+        return PermissionOutcome::Denied;
+    }
+    let level = match context.engine.tool_permission_level(&call.name) {
+        Ok(level) => level,
+        Err(_) => return PermissionOutcome::Denied,
+    };
+    if context.mode == AgentMode::Plan && level != PermissionLevel::ReadOnly {
+        return PermissionOutcome::Denied;
+    }
+    if context.mode == AgentMode::Unrestricted
+        || level == PermissionLevel::ReadOnly
+        || context.allowed_session.contains(&call.name)
+        || context
+            .config
+            .permissions
+            .always_allow
+            .iter()
+            .any(|name| name == &call.name)
+        || (!context.config.permissions.ask_always && level == PermissionLevel::WorkspaceWrite)
+    {
+        return PermissionOutcome::Allowed;
+    }
+
+    let target = permission_target(&call.input);
+    let description = context
+        .engine
+        .tool_description(&call.name)
+        .unwrap_or("perform the requested operation");
+    let request = PermissionRequest {
+        id: call.id.clone(),
+        tool: call.name.clone(),
+        operation: description.to_string(),
+        target,
+        reason: "The model requested this operation to continue the current task.".to_string(),
+        risk: match level {
+            PermissionLevel::ReadOnly => "Reads project or network data".to_string(),
+            PermissionLevel::WorkspaceWrite => {
+                "May create or modify files inside the workspace".to_string()
+            }
+            PermissionLevel::Dangerous => {
+                "May execute commands or perform operations with side effects".to_string()
+            }
+        },
+        input: call.input.clone(),
+    };
+    let mut waiting = Activity::new(
+        &call.id,
+        activity_kind_for_tool(&call.name),
+        format!("{} {}", call.name, request.target),
+        AgentActivityStatus::WaitingForApproval,
+    );
+    waiting.detail = Some(request.risk.clone());
+    send_event(events, AgentEvent::Activity(waiting)).await;
+    send_event(events, AgentEvent::PermissionRequested(request)).await;
+
+    loop {
+        let response = tokio::select! {
+            _ = cancellation.cancelled() => return PermissionOutcome::Cancelled,
+            response = permissions.recv() => response,
+        };
+        let Some(response) = response else {
+            return PermissionOutcome::Denied;
+        };
+        if response.request_id != call.id {
+            continue;
+        }
+        return match response.decision {
+            PermissionDecision::AllowOnce => PermissionOutcome::Allowed,
+            PermissionDecision::AllowSession => {
+                context.allowed_session.insert(call.name.clone());
+                PermissionOutcome::Allowed
+            }
+            PermissionDecision::DenyOnce => PermissionOutcome::Denied,
+            PermissionDecision::DenySession => {
+                context.denied_session.insert(call.name.clone());
+                PermissionOutcome::Denied
+            }
+        };
+    }
+}
+
+fn activity_kind_for_tool(name: &str) -> AgentActivityKind {
+    match name {
+        "read" | "fetch" => AgentActivityKind::Reading,
+        "glob" | "grep" | "search" => AgentActivityKind::Searching,
+        "write" => AgentActivityKind::Writing,
+        "edit" => AgentActivityKind::Editing,
+        "diff" => AgentActivityKind::Reviewing,
+        "bash" => AgentActivityKind::Executing,
+        _ => AgentActivityKind::Tool,
+    }
+}
+
+fn permission_target(input: &serde_json::Value) -> String {
+    ["path", "command", "url", "pattern", "query", "workdir"]
+        .iter()
+        .find_map(|key| input.get(key).and_then(|value| value.as_str()))
+        .unwrap_or("workspace")
+        .chars()
+        .take(240)
+        .collect()
+}
+
+fn add_tool_result(conversation: &mut Conversation, id: &str, content: String, is_error: bool) {
+    conversation.add_message(Message {
+        role: MessageRole::Tool,
+        content: vec![ContentBlock::ToolResult {
+            id: id.to_string(),
+            content,
+            is_error,
+        }],
+        reasoning: None,
+        metadata: None,
+    });
+}
+
+async fn complete_activity(
+    events: &mpsc::Sender<AgentEvent>,
+    id: &str,
+    kind: AgentActivityKind,
+    title: &str,
+    detail: Option<String>,
+) {
+    let mut activity = Activity::new(id, kind, title, AgentActivityStatus::Completed);
+    activity.detail = detail;
+    send_event(events, AgentEvent::Activity(activity)).await;
+}
+
+async fn fail_activity(events: &mpsc::Sender<AgentEvent>, id: &str, detail: impl Into<String>) {
+    let mut activity = Activity::new(
+        id,
+        AgentActivityKind::Tool,
+        "Operation failed",
+        AgentActivityStatus::Failed,
+    );
+    activity.detail = Some(detail.into());
+    send_event(events, AgentEvent::Activity(activity)).await;
+}
+
+async fn cancel_activity(events: &mpsc::Sender<AgentEvent>, id: &str) {
+    send_event(
+        events,
+        AgentEvent::Activity(Activity::new(
+            id,
+            AgentActivityKind::Tool,
+            "Operation cancelled",
+            AgentActivityStatus::Cancelled,
+        )),
+    )
+    .await;
+}
+
+async fn workspace_diff() -> String {
+    let output = tokio::process::Command::new("git")
+        .args(["diff", "--no-ext-diff", "--"])
+        .output()
+        .await;
+    match output {
+        Ok(output) if output.status.success() => {
+            truncate_owned(
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                MAX_DIFF_OUTPUT,
+            )
+            .0
+        }
+        _ => String::new(),
+    }
+}
+
+async fn emit_git_state(events: &mpsc::Sender<AgentEvent>) {
+    let branch = tokio::process::Command::new("git")
+        .args(["branch", "--show-current"])
+        .output()
+        .await
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|branch| !branch.is_empty());
+    let dirty = tokio::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()
+        .await
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| !output.stdout.is_empty())
+        .unwrap_or(false);
+    send_event(events, AgentEvent::GitState { branch, dirty }).await;
+}
+
+fn truncate_owned(value: String, limit: usize) -> (String, bool) {
+    if value.len() <= limit {
+        return (value, false);
+    }
+    let boundary = value
+        .char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= limit)
+        .last()
+        .unwrap_or(0);
+    (
+        format!(
+            "{}\n… output truncated at {} KiB …",
+            &value[..boundary],
+            limit / 1024
+        ),
+        true,
+    )
+}
+
+async fn send_event(events: &mpsc::Sender<AgentEvent>, event: AgentEvent) {
+    let _ = events.send(event).await;
+}
+
+fn now_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .as_millis()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_modes_and_maps_sandboxes() {
+        assert_eq!(AgentMode::parse("plan"), AgentMode::Plan);
+        assert_eq!(AgentMode::parse("workspace-write"), AgentMode::Agent);
+        assert_eq!(AgentMode::parse("unrestricted"), AgentMode::Unrestricted);
+        assert_eq!(AgentMode::Plan.sandbox(), "read-only");
+        assert_eq!(AgentMode::Agent.sandbox(), "workspace-write");
+    }
+
+    #[test]
+    fn extracts_a_compact_permission_target() {
+        let input = serde_json::json!({"command": "cargo test --workspace"});
+        assert_eq!(permission_target(&input), "cargo test --workspace");
+    }
+
+    #[test]
+    fn truncates_large_utf8_output_on_a_character_boundary() {
+        let (output, truncated) = truncate_owned("✦".repeat(100), 17);
+        assert!(truncated);
+        assert!(output.starts_with("✦"));
+        assert!(output.contains("truncated"));
+    }
+}
