@@ -2,7 +2,7 @@
 set -eu
 
 repo="CodWasTaken/Pleiades"
-version="${PLEIADES_VERSION:-v1.0.0}"
+version="${PLEIADES_VERSION:-latest}"
 install_dir="${PLEIADES_INSTALL_DIR:-$HOME/.local/bin}"
 
 case "$(uname -s)-$(uname -m)" in
@@ -14,7 +14,11 @@ case "$(uname -s)-$(uname -m)" in
 esac
 
 archive="$artifact.tar.gz"
-base="https://github.com/$repo/releases/download/$version"
+if [ "$version" = latest ]; then
+  base="https://github.com/$repo/releases/latest/download"
+else
+  base="https://github.com/$repo/releases/download/$version"
+fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 

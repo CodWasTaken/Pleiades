@@ -4,9 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
+| 1.0.x   | ✅ |
 | < 1.0   | ❌ (Development) |
-
-Once a stable release is published, security updates will be provided for the latest minor version.
 
 ## Reporting a Vulnerability
 
@@ -39,13 +38,12 @@ We take security seriously. If you discover a security vulnerability in Pleiades
 ### API Keys
 - Use environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
 - Never commit API keys to version control
-- Consider using your OS keychain for credential storage
-- Pleiades filters API keys from all logs and output
+- Prefer environment-variable references such as `${OPENAI_API_KEY}` in configuration
+- `config show` masks API keys unless the explicit `--raw` flag is used
 
 ### Plugin Security
-- Plugins run in WASM sandboxes with no direct system access
-- Plugins must declare all required permissions
-- Review plugin permissions before installation
+- Plugin hooks run as local shell commands with the current user's permissions
+- Review every plugin manifest and hook command before installation
 - Only install plugins from trusted sources
 
 ### Telemetry
@@ -58,5 +56,5 @@ We take security seriously. If you discover a security vulnerability in Pleiades
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md#security-architecture) for detailed security design including:
 - Permission levels (ReadOnly, WorkspaceWrite, Dangerous)
 - Approval modes (Auto, Ask, Deny, Plan)
-- Credential storage and encryption
-- Sandboxed process execution
+- Environment-variable secret interpolation and masked configuration output
+- Tool permission checks and timeouts

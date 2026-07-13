@@ -149,11 +149,12 @@ Multi-tier memory architecture:
 4. **User Memory**: Long-term user preferences and patterns
 
 #### Plugin Manager
-WASM-based plugin system:
+Manifest and shell-hook plugin system:
 - Plugin manifest with versioning and dependencies
-- Permission declarations
-- Hook system for extension points
-- Lifecycle management (install, update, remove, enable, disable)
+- PreToolUse, PostToolUse, and PostToolUseFailure hooks
+- Lifecycle management (install, remove, enable, disable)
+
+Hooks are normal child processes and are not sandboxed. WASM execution remains a possible future extension, not a current security boundary.
 
 ### Infrastructure Layer
 
@@ -173,11 +174,11 @@ Safe file operations with:
 - Encoding detection
 
 #### Process Execution
-Sandboxed process execution:
-- Configurable timeout
-- Resource limits
-- Working directory isolation
-- Environment variable filtering
+Tool and hook process execution:
+- Configurable tool timeout
+- Explicit working directory
+- Permission checks for built-in tools
+- Structured JSON hook input
 
 ## Data Flow
 
@@ -216,11 +217,9 @@ LLM decides to call tool
 ### Plugin Loading Flow
 ```
 Plugin directory scan
-  → Read manifest (pleiades.toml)
+  → Read manifest (plugin.json)
   → Validate version compatibility
-  → Check permissions
-  → Load WASM module
-  → Register hooks and tools
+  → Register configured shell hooks
   → Plugin is active
 ```
 

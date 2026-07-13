@@ -23,7 +23,7 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `plugins.enabled` | string list | empty |
 | `plugins.paths` | string list | `~/.pleiades/plugins` |
 | `plugins.settings` | nested string map | empty |
-| `plugins.sandbox` | boolean | `true` |
+| `plugins.sandbox` | boolean | `false` (reserved for a future sandbox runtime) |
 | `permissions.always_allow` | string list | empty |
 | `permissions.always_deny` | string list | empty |
 | `permissions.ask_always` | boolean | `true` |
@@ -44,4 +44,4 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `agent.max_tool_iterations` | integer | `25` |
 | `agent.auto_edit` | boolean | `false` |
 
-Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environment references.
+Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.

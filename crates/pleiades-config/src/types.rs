@@ -157,7 +157,9 @@ impl Default for PluginConfig {
             enabled: Vec::new(),
             paths: vec!["~/.pleiades/plugins".to_string()],
             settings: HashMap::new(),
-            sandbox: true,
+            // Shell-hook plugins execute as normal child processes. This must remain false
+            // until a real sandbox runtime is implemented.
+            sandbox: false,
         }
     }
 }
@@ -342,7 +344,7 @@ mod tests {
         assert_eq!(config.core.log_level, "info");
         assert_eq!(config.display.style, "rich");
         assert_eq!(config.session.context_size, 100);
-        assert!(config.plugins.sandbox);
+        assert!(!config.plugins.sandbox);
     }
 
     #[test]

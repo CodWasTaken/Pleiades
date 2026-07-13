@@ -5,6 +5,17 @@ All notable changes to Pleiades will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-07-13
+
+### Fixed
+
+- Route one-shot prompts through the real streaming agent/tool loop.
+- Exit the REPL cleanly instead of sending `/exit` to the configured provider.
+- Make the release installer follow the latest GitHub release by default.
+- Replace the incorrect crates.io install command with verified GitHub release and source-install instructions.
+- Describe shell-hook plugins accurately and disable the reserved sandbox flag by default.
+- Remove the crates.io release job that could not publish through occupied package names.
+
 ## [1.0.0] - 2026-07-13
 
 ### Added

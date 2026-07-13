@@ -75,7 +75,10 @@ impl Repl {
                     let _ = rl.add_history_entry(trimmed);
                     rl.save_history(".pleiades_history").ok();
 
-                    if trimmed.starts_with('/') && self.handle_command(&mut engine, trimmed).await {
+                    if trimmed.starts_with('/') {
+                        if !self.handle_command(&mut engine, trimmed).await {
+                            break;
+                        }
                         continue;
                     }
 
@@ -96,6 +99,12 @@ impl Repl {
 
         self.save_on_exit(&mut engine);
         Ok(())
+    }
+
+    /// Run one prompt through the same agent and tool loop as the interactive REPL.
+    pub async fn run_once(&mut self, input: &str) -> Result<(), Error> {
+        let mut engine = self.build_engine()?;
+        self.handle_user_input(&mut engine, input).await
     }
 
     fn build_engine(&self) -> Result<Engine, Error> {
@@ -513,10 +522,7 @@ impl Repl {
                     }
                 }
             }
-            Err(e) => {
-                eprintln!("\x1b[1;31mError\x1b[0m: {}", e);
-                return Ok((String::new(), Vec::new(), true));
-            }
+            Err(e) => return Err(e),
         }
 
         Ok((text_response, tool_calls, false))

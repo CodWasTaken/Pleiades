@@ -137,3 +137,20 @@ fn repl_can_exit_cleanly() {
         .assert()
         .success();
 }
+
+#[test]
+fn one_shot_prompt_uses_the_engine() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut command = Command::cargo_bin("pleiades").unwrap();
+    command
+        .current_dir(temp.path())
+        .env("XDG_CONFIG_HOME", temp.path().join("config"))
+        .env_remove("OPENAI_API_KEY")
+        .arg("hello");
+
+    command
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Provider 'openai' not found"))
+        .stderr(predicate::str::contains("Milestone 5").not());
+}

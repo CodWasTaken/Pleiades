@@ -13,26 +13,35 @@
 
 ## Overview
 
-Pleiades is a **next-generation terminal AI assistant** that puts you in control. Unlike single-provider tools, Pleiades lets you choose from **15+ AI providers** — or connect your own. Every capability beyond core chat is a **plugin**, and the entire terminal experience is fully **customizable**.
+Pleiades is a **next-generation terminal AI assistant** that puts you in control. It has native OpenAI and Anthropic adapters plus a generic OpenAI-compatible adapter for services such as OpenRouter, Groq, DeepSeek, and self-hosted endpoints.
 
 Named after the Seven Sisters star cluster, Pleiades represents a constellation of capabilities working in harmony.
 
 ## Key Features
 
-- **Provider Agnostic** — Use any AI provider: OpenAI, Anthropic, Google, OpenRouter, Groq, Ollama, and more
-- **Plugin Architecture** — Extend with WASM-based plugins. Build tools, hooks, and integrations
+- **Provider Agnostic** — Use OpenAI, Anthropic, or an OpenAI-compatible service
+- **Plugin Architecture** — Install local plugin manifests with pre/post shell hooks
 - **Multi-Engine** — Chat, agent, workflow — choose the right interaction model for each task
 - **Beautiful Terminal** — Markdown rendering, syntax highlighting, status bar, progress indicators
 - **Memory System** — Multi-tier memory from conversation context to long-term project knowledge
 - **Permission System** — Granular control over what the AI can do. Read-only, workspace-write, or full access
-- **Customizable** — Themes, fonts, keybindings, even terminal wallpapers where supported
-- **Production Quality** — Zero crash policy, comprehensive testing, security-first design
+- **Customizable** — Select terminal themes and configure models, permissions, prompts, and workflows
+- **Production Quality** — Cross-platform CI, integration tests, release binaries, and checksummed installs
 
 ## Quick Start
 
 ```bash
-# Install (once available)
-cargo install pleiades
+# Install the latest Linux/macOS release
+curl -fsSL https://raw.githubusercontent.com/CodWasTaken/Pleiades/master/install.sh | sh
+
+# Ensure the default install directory is on PATH
+export PATH="$HOME/.local/bin:$PATH"
+
+# Create configuration
+pleiades config init
+pleiades config set core.default_provider openai
+pleiades config set core.default_model gpt-4o
+pleiades config set providers.openai.api_key '${OPENAI_API_KEY}'
 
 # Start a chat
 pleiades
@@ -43,16 +52,19 @@ pleiades "explain this codebase"
 # Use a specific model
 pleiades --model claude-sonnet-4
 
-# Initialize in a project
-pleiades init
+```
+
+Do **not** run `cargo install pleiades`: that name belongs to an unrelated machine-learning crate on crates.io. To compile this project directly, use:
+
+```bash
+cargo install --git https://github.com/CodWasTaken/Pleiades --tag v1.0.1 --locked pleiades-cli
 ```
 
 ## CLI Commands
 
 ```
-pleiades                    Start interactive session
+pleiades --chat             Start interactive session
 pleiades <prompt>           One-shot prompt
-pleiades chat               Start chat session
 pleiades repl               Start REPL session
 pleiades config             Configure settings (get, set, edit, validate, show, path, init, reset)
 pleiades profile            Manage profiles (list, save, load, delete, active)
@@ -62,13 +74,9 @@ pleiades session            Manage chat sessions (list, show, delete, export, pa
 pleiades tool               Manage tools (list, info, call)
 pleiades plugin             Manage plugins (list, install, uninstall, enable, disable)
 pleiades prompt             Manage prompts (list, show, render, save)
-pleiades memory             Search and manage memory
 pleiades workflow           Manage workflows
-pleiades git                Git integration (commit, review)
-pleiades doctor             System diagnostics
-pleiades init               Initialize project
-pleiades update             Check for updates
-pleiades version            Show version
+pleiades git                Git integration (commit, review, summary, diff)
+pleiades --version          Show version
 ```
 
 ## Supported Providers
@@ -84,7 +92,7 @@ pleiades version            Show version
 
 ## Project Status
 
-**18 of 18 milestones complete** — Pleiades 1.0 is release-ready with cross-platform artifacts and package-manager support.
+**18 of 18 milestones complete** — Pleiades 1.0 ships cross-platform artifacts, a checksummed installer, Homebrew metadata, and AUR metadata.
 
 - [x] **M0: Planning** — Vision, architecture, requirements, roadmap
 - [x] **M1: Bootstrap** — Cargo workspace (13 crates), CI, minimal executable
@@ -114,7 +122,7 @@ Pleiades follows a clean **hexagonal architecture** with event-driven communicat
 ┌─────────────┐  ┌─────────────┐  ┌──────────────┐
 │   CLI/TUI   │  │   Engine    │  │   Plugins    │
 ├─────────────┤  ├─────────────┤  ├──────────────┤
-│    clap     │  │  Provider   │  │  WASM Runtime│
+│    clap     │  │  Provider   │  │ Shell Hooks  │
 │   ratatui   │  │    Chat     │  │  Hook System │
 │   crossterm │  │    Agent    │  │  Tool API    │
 └─────────────┘  └─────────────┘  └──────────────┘
@@ -138,8 +146,8 @@ Profiles allow switching between configurations for different contexts.
 
 ```bash
 # Clone and set up
-git clone https://github.com/yourusername/pleiades.git
-cd pleiades
+git clone https://github.com/CodWasTaken/Pleiades.git
+cd Pleiades
 make setup
 
 # Build

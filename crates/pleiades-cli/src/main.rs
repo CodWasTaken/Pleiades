@@ -2167,8 +2167,25 @@ fn main() {
 
             if let Some(args) = cli.prompt {
                 let prompt = args.join(" ");
-                println!("Processing: {}", prompt);
-                println!("Prompt execution will be available in Milestone 5");
+                let mut config = match loader.load_with_interpolation() {
+                    Ok(config) => config,
+                    Err(error) => {
+                        eprintln!("Error loading config: {error}");
+                        std::process::exit(1);
+                    }
+                };
+                if let Some(model) = cli.model {
+                    config.core.default_model = Some(model);
+                }
+                if let Some(provider) = cli.provider {
+                    config.core.default_provider = Some(provider);
+                }
+
+                let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
+                if let Err(error) = runtime.block_on(repl::Repl::new(config).run_once(&prompt)) {
+                    eprintln!("Error: {error}");
+                    std::process::exit(1);
+                }
                 return;
             }
 
