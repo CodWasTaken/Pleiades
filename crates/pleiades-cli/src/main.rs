@@ -88,6 +88,10 @@ enum Commands {
     #[command(subcommand)]
     Workflow(WorkflowCommand),
 
+    /// AI-assisted Git operations
+    #[command(subcommand)]
+    Git(GitCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -379,6 +383,30 @@ enum WorkflowCommand {
         name: String,
         #[arg(short, long)]
         description: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum GitCommand {
+    /// Generate a conventional commit message from staged changes
+    Commit,
+    /// Review working-tree or staged changes
+    Review {
+        #[arg(long)]
+        staged: bool,
+    },
+    /// Generate a pull-request summary
+    Summary {
+        /// Base revision used for the comparison
+        #[arg(long, default_value = "HEAD~1")]
+        base: String,
+        #[arg(long)]
+        title: Option<String>,
+    },
+    /// Print the current diff
+    Diff {
+        #[arg(long)]
+        staged: bool,
     },
 }
 
@@ -1769,6 +1797,98 @@ fn handle_workflow_create(name: &str, description: Option<String>) {
     }
 }
 
+fn configured_git_provider(
+    loader: &ConfigLoader,
+    provider_override: Option<&str>,
+    model_override: Option<&str>,
+) -> Result<(std::sync::Arc<dyn pleiades_core::Provider>, String), String> {
+    let config = loader
+        .load_with_interpolation()
+        .map_err(|error| error.to_string())?;
+    let requested = provider_override
+        .map(str::to_string)
+        .or_else(|| config.core.default_provider.clone());
+    let mut providers = build_providers_from_config(&config);
+    let index = match requested.as_deref() {
+        Some(name) => providers
+            .iter()
+            .position(|provider| provider.name() == name)
+            .ok_or_else(|| format!("provider '{name}' is not configured"))?,
+        None => {
+            if providers.len() == 1 {
+                0
+            } else {
+                return Err("set a default provider or pass --provider".to_string());
+            }
+        }
+    };
+    let provider: std::sync::Arc<dyn pleiades_core::Provider> =
+        std::sync::Arc::from(providers.swap_remove(index));
+    let model = model_override
+        .map(str::to_string)
+        .or(config.core.default_model)
+        .unwrap_or_else(|| provider.default_model().to_string());
+    Ok((provider, model))
+}
+
+fn git_provider_or_exit(
+    loader: &ConfigLoader,
+    provider: Option<&str>,
+    model: Option<&str>,
+) -> (std::sync::Arc<dyn pleiades_core::Provider>, String) {
+    configured_git_provider(loader, provider, model).unwrap_or_else(|error| {
+        eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+        std::process::exit(1);
+    })
+}
+
+fn run_git_generation<F>(future: F)
+where
+    F: std::future::Future<Output = Result<String, pleiades_core::Error>>,
+{
+    let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
+    match runtime.block_on(future) {
+        Ok(output) => println!("{output}"),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_git_command(
+    loader: &ConfigLoader,
+    command: GitCommand,
+    provider_name: Option<&str>,
+    model_name: Option<&str>,
+) {
+    if let GitCommand::Diff { staged } = command {
+        return run_git_generation(pleiades_git::working_diff(
+            std::path::Path::new("."),
+            staged,
+        ));
+    }
+
+    let (provider, model) = git_provider_or_exit(loader, provider_name, model_name);
+    match command {
+        GitCommand::Commit => {
+            run_git_generation(pleiades_git::CommitGenerator::new(provider, model).generate())
+        }
+        GitCommand::Review { staged } => run_git_generation(
+            pleiades_git::ReviewGenerator::new(provider, model)
+                .staged(staged)
+                .generate(),
+        ),
+        GitCommand::Summary { base, title } => run_git_generation(
+            pleiades_git::PrSummaryGenerator::new(provider, model)
+                .base(base)
+                .title(title)
+                .generate(),
+        ),
+        GitCommand::Diff { .. } => unreachable!(),
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let (config_dir, project_dir) = get_config_dirs();
@@ -1844,6 +1964,9 @@ fn main() {
                 handle_workflow_create(&name, description)
             }
         },
+        Some(Commands::Git(cmd)) => {
+            handle_git_command(&loader, cmd, cli.provider.as_deref(), cli.model.as_deref())
+        }
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {
                 Ok(c) => c,
