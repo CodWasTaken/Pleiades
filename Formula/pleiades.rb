@@ -3,25 +3,25 @@ class Pleiades < Formula
   homepage "https://github.com/CodWasTaken/Pleiades"
   head "https://github.com/CodWasTaken/Pleiades.git", branch: "master"
   license "MIT"
-  version "1.1.1"
+  version "1.2.0"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.1.1/pleiades-macos-arm64.tar.gz"
-      sha256 "b6ce3c68bb67beba5704c274c17fbd142d8dbd0533103b7d6686220a8c5f590f"
+      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.2.0/pleiades-macos-arm64.tar.gz"
+      sha256 "d4551fbe8942ed1f891e264bc8a4f4e54f25796c015517b4bd523d15c03e3c0c"
     else
-      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.1.1/pleiades-macos-amd64.tar.gz"
-      sha256 "91690bd6ba20117051a015a6e3ec04dc2d00ce65368681e433af4b7030c67f35"
+      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.2.0/pleiades-macos-amd64.tar.gz"
+      sha256 "e3198c87282858b41496241f6c775f14fbd47c5986e8885449f447788f29c5ba"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.1.1/pleiades-linux-arm64.tar.gz"
-      sha256 "1ee4371803eef2b9cd74cd0ffd7af45c09921b91b10ee36677426120d6957055"
+      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.2.0/pleiades-linux-arm64.tar.gz"
+      sha256 "fca242fb48b617c5f7250e95bb74d14a82a4dc8fec9da63c3b12c069e86fb66c"
     else
-      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.1.1/pleiades-linux-amd64.tar.gz"
-      sha256 "a316ffd47d3986ea5aca577b1b7b9f5e10c711de1af614ba487558abff6263c5"
+      url "https://github.com/CodWasTaken/Pleiades/releases/download/v1.2.0/pleiades-linux-amd64.tar.gz"
+      sha256 "08cbe9a74284fa12c6ef4af202906e745135ee6abffe8c8e7aff4c90506f2b6b"
     end
   end
 
