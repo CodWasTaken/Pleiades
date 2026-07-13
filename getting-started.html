@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a9b7b0db.js";
+            window.path_to_searchindex_js = "searchindex-a28aceeb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e350ee51.js"></script>
@@ -197,15 +197,13 @@ export PATH="$HOME/.local/bin:$PATH"
 cd Pleiades
 cargo build --release --bin pleiades
 </code></pre>
-<p>The binary is written to <code>target/release/pleiades</code>. Run <code>pleiades config init</code>, then configure at least one provider API key.</p>
-<pre><code class="language-console">pleiades config init
-pleiades config set core.default_provider openai
-pleiades config set core.default_model gpt-4o
-pleiades config set providers.openai.api_key '${OPENAI_API_KEY}'
-pleiades config validate
+<p>The binary is written to <code>target/release/pleiades</code>. Run the guided setup and choose either ChatGPT subscription sign-in or usage-based OpenAI API access:</p>
+<pre><code class="language-console">pleiades setup
+pleiades doctor
 pleiades repl
 </code></pre>
-<p>Set the referenced variable in your shell, for example <code>export OPENAI_API_KEY="..."</code>. Use <code>pleiades --help</code> for the complete command tree. <code>pleiades --chat</code> starts a chat session, <code>pleiades "your prompt"</code> runs once, and <code>pleiades repl --session ID</code> resumes a saved session.</p>
+<p>For ChatGPT subscription access, install the official Codex CLI; Pleiades delegates <code>codex login</code> and never reads its token cache. For API access, setup stores <code>${OPENAI_API_KEY}</code> and asks you to export a newly created Platform API key. ChatGPT and API billing are separate.</p>
+<p>Use <code>pleiades --help</code> for the complete command tree. Running <code>pleiades</code> starts the REPL once configured, <code>pleiades "your prompt"</code> runs once, and <code>pleiades repl --session ID</code> resumes a saved session.</p>
 
                     </main>
 

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a9b7b0db.js";
+            window.path_to_searchindex_js = "searchindex-a28aceeb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e350ee51.js"></script>
@@ -209,7 +209,7 @@
 </span><span class="boring">fn main() {
 </span>use pleiades_agent_core::{Provider, Tool};
 <span class="boring">}</span></code></pre>
-<p>For end users, <code>cargo install pleiades-agent</code> installs a binary named <code>pleiades</code>. Workspace packages are versioned together and published in dependency order by the release workflow.</p>
+<p>For end users, <code>cargo install pleiades-agent</code> installs a binary named <code>pleiades</code>. Workspace packages use compatible semantic versions and are published in dependency order by the release workflow; a release only republishes packages whose contents or dependency requirements changed.</p>
 
                     </main>
 

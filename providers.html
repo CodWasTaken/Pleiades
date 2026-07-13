@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a9b7b0db.js";
+            window.path_to_searchindex_js = "searchindex-a28aceeb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e350ee51.js"></script>
@@ -182,6 +182,21 @@
                     <main>
                         <h1 id="providers-and-models"><a class="header" href="#providers-and-models">Providers and models</a></h1>
 <p>Pleiades implements native OpenAI and Anthropic adapters plus an OpenAI-compatible adapter used by OpenRouter, Groq, DeepSeek, local servers, and other compatible endpoints.</p>
+<h2 id="openai-authentication"><a class="header" href="#openai-authentication">OpenAI authentication</a></h2>
+<p>Run <code>pleiades setup</code> to choose one of two supported modes:</p>
+<ul>
+<li><strong>ChatGPT subscription</strong>: <code>pleiades auth login</code> delegates the browser or device-code flow to the official Codex CLI. Pleiades invokes <code>codex exec</code> in an ephemeral, read-only mode and does not read, copy, or refresh the Codex credential cache. This provider is named <code>openai-subscription</code>.</li>
+<li><strong>Platform API key</strong>: Pleiades calls the OpenAI API directly with <code>${OPENAI_API_KEY}</code>. API usage has separate usage-based billing and is not funded by a ChatGPT Plus, Pro, Business, or Enterprise subscription.</li>
+</ul>
+<p>See OpenAI’s official <a href="https://developers.openai.com/codex/auth/">Codex authentication guide</a> and <a href="https://help.openai.com/en/articles/9039756-billing-settings-in-chatgpt-vs-platform">ChatGPT versus Platform billing explanation</a>.</p>
+<p>Useful commands:</p>
+<pre><code class="language-console">pleiades auth login
+pleiades auth login --device
+pleiades auth status
+pleiades provider test openai-subscription
+pleiades doctor
+</code></pre>
+<p>Subscription mode intentionally does not import OAuth tokens into Pleiades. It currently returns Codex’s final response rather than token-by-token streaming and delegates model selection to Codex when <code>codex-default</code> is configured.</p>
 <p>Use <code>provider list</code>, <code>provider info NAME</code>, and <code>provider test NAME</code>. Model discovery and aliases are managed with <code>model discover</code>, <code>model list</code>, <code>model alias ALIAS MODEL</code>, and <code>model set-default MODEL</code>. Global <code>--provider</code> and <code>--model</code> flags override configuration for a command.</p>
 
                     </main>
