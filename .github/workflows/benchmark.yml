@@ -2,7 +2,7 @@ name: Benchmarks
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'crates/**/*.rs'
       - 'Cargo.toml'

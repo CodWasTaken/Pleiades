@@ -71,14 +71,25 @@ impl Message {
 
     /// Get the text content of this message.
     pub fn text_content(&self) -> String {
-        self.content
+        let capacity = self
+            .content
             .iter()
             .filter_map(|block| match block {
-                ContentBlock::Text(t) => Some(t.clone()),
+                ContentBlock::Text(text) => Some(text.len()),
                 _ => None,
             })
-            .collect::<Vec<_>>()
-            .join(" ")
+            .sum();
+        let mut output = String::with_capacity(capacity);
+        for text in self.content.iter().filter_map(|block| match block {
+            ContentBlock::Text(text) => Some(text.as_str()),
+            _ => None,
+        }) {
+            if !output.is_empty() {
+                output.push(' ');
+            }
+            output.push_str(text);
+        }
+        output
     }
 }
 

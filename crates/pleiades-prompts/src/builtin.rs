@@ -1,4 +1,5 @@
 use crate::template::PromptTemplate;
+use std::sync::OnceLock;
 
 /// Built-in prompt templates shipped with Pleiades.
 pub struct BuiltinPrompts;
@@ -6,16 +7,21 @@ pub struct BuiltinPrompts;
 impl BuiltinPrompts {
     /// All built-in templates.
     pub fn all() -> Vec<PromptTemplate> {
-        vec![
-            Self::default_assistant(),
-            Self::summarizer(),
-            Self::code_reviewer(),
-            Self::commit_message(),
-            Self::pr_summary(),
-            Self::explain_diff(),
-            Self::refactor(),
-            Self::test_generator(),
-        ]
+        static BUILTINS: OnceLock<Vec<PromptTemplate>> = OnceLock::new();
+        BUILTINS
+            .get_or_init(|| {
+                vec![
+                    Self::default_assistant(),
+                    Self::summarizer(),
+                    Self::code_reviewer(),
+                    Self::commit_message(),
+                    Self::pr_summary(),
+                    Self::explain_diff(),
+                    Self::refactor(),
+                    Self::test_generator(),
+                ]
+            })
+            .clone()
     }
 
     /// Default assistant system prompt.

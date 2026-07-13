@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -159,17 +160,23 @@ impl ModelRegistry {
         &mut self,
         providers: &[&'a dyn crate::provider::Provider],
     ) -> Vec<(&'a str, Result<usize, String>)> {
-        let mut results = Vec::new();
+        let discovered = join_all(
+            providers
+                .iter()
+                .map(|provider| async move { (provider.name(), provider.list_models().await) }),
+        )
+        .await;
+        let mut results = Vec::with_capacity(discovered.len());
 
-        for provider in providers {
-            match provider.list_models().await {
+        for (provider_name, result) in discovered {
+            match result {
                 Ok(models) => {
                     let count = models.len();
                     self.register_all(models);
-                    results.push((provider.name(), Ok(count)));
+                    results.push((provider_name, Ok(count)));
                 }
                 Err(e) => {
-                    results.push((provider.name(), Err(e.to_string())));
+                    results.push((provider_name, Err(e.to_string())));
                 }
             }
         }
