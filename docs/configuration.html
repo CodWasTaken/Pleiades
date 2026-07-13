@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ae0cccee.js";
+            window.path_to_searchindex_js = "searchindex-7d9e4f65.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d783fdbd.js"></script>
@@ -207,7 +207,7 @@
 <tr><td><code>plugins.enabled</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>plugins.paths</code></td><td>string list</td><td><code>~/.pleiades/plugins</code></td></tr>
 <tr><td><code>plugins.settings</code></td><td>nested string map</td><td>empty</td></tr>
-<tr><td><code>plugins.sandbox</code></td><td>boolean</td><td><code>true</code></td></tr>
+<tr><td><code>plugins.sandbox</code></td><td>boolean</td><td><code>false</code> (reserved for a future sandbox runtime)</td></tr>
 <tr><td><code>permissions.always_allow</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.always_deny</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.ask_always</code></td><td>boolean</td><td><code>true</code></td></tr>
@@ -230,7 +230,7 @@
 </tbody>
 </table>
 </div>
-<p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references.</p>
+<p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
 
                     </main>
 

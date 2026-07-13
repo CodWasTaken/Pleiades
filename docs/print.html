@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ae0cccee.js";
+            window.path_to_searchindex_js = "searchindex-7d9e4f65.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d783fdbd.js"></script>
@@ -183,18 +183,28 @@
 <p>The guide covers installation from source, configuration, daily commands, extension points, and the architecture contributors need to navigate the workspace.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h1>
-<h2 id="build-from-source"><a class="header" href="#build-from-source">Build from source</a></h2>
+<h2 id="install-a-release"><a class="header" href="#install-a-release">Install a release</a></h2>
+<p>On Linux and macOS, the installer downloads a release archive and verifies its SHA-256 checksum:</p>
+<pre><code class="language-console">curl -fsSL https://raw.githubusercontent.com/CodWasTaken/Pleiades/master/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+</code></pre>
+<p>The crates.io package named <code>pleiades</code> is an unrelated project. Do not use <code>cargo install pleiades</code>. A Rust source install of this repository is available with:</p>
+<pre><code class="language-console">cargo install --git https://github.com/CodWasTaken/Pleiades --tag v1.0.1 --locked pleiades-cli
+</code></pre>
+<h2 id="build-a-checkout"><a class="header" href="#build-a-checkout">Build a checkout</a></h2>
 <pre><code class="language-console">git clone https://github.com/CodWasTaken/Pleiades.git
 cd Pleiades
 cargo build --release --bin pleiades
 </code></pre>
 <p>The binary is written to <code>target/release/pleiades</code>. Run <code>pleiades config init</code>, then configure at least one provider API key.</p>
 <pre><code class="language-console">pleiades config init
+pleiades config set core.default_provider openai
+pleiades config set core.default_model gpt-4o
 pleiades config set providers.openai.api_key '${OPENAI_API_KEY}'
 pleiades config validate
 pleiades repl
 </code></pre>
-<p>Use <code>pleiades --help</code> for the complete command tree. <code>pleiades --chat</code> starts a chat session and <code>pleiades repl --session ID</code> resumes a saved session.</p>
+<p>Set the referenced variable in your shell, for example <code>export OPENAI_API_KEY="..."</code>. Use <code>pleiades --help</code> for the complete command tree. <code>pleiades --chat</code> starts a chat session, <code>pleiades "your prompt"</code> runs once, and <code>pleiades repl --session ID</code> resumes a saved session.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="configuration-reference"><a class="header" href="#configuration-reference">Configuration reference</a></h1>
 <p>Configuration is merged in this order: built-in defaults, global configuration, project configuration, environment variables, then CLI flags. Global files live under <code>~/.config/pleiades</code>; project files live under <code>.pleiades</code>. TOML, JSON, and YAML are supported. <code>${NAME}</code> interpolates an environment variable.</p>
@@ -223,7 +233,7 @@ pleiades repl
 <tr><td><code>plugins.enabled</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>plugins.paths</code></td><td>string list</td><td><code>~/.pleiades/plugins</code></td></tr>
 <tr><td><code>plugins.settings</code></td><td>nested string map</td><td>empty</td></tr>
-<tr><td><code>plugins.sandbox</code></td><td>boolean</td><td><code>true</code></td></tr>
+<tr><td><code>plugins.sandbox</code></td><td>boolean</td><td><code>false</code> (reserved for a future sandbox runtime)</td></tr>
 <tr><td><code>permissions.always_allow</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.always_deny</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.ask_always</code></td><td>boolean</td><td><code>true</code></td></tr>
@@ -246,7 +256,7 @@ pleiades repl
 </tbody>
 </table>
 </div>
-<p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references.</p>
+<p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="providers-and-models"><a class="header" href="#providers-and-models">Providers and models</a></h1>
 <p>Pleiades implements native OpenAI and Anthropic adapters plus an OpenAI-compatible adapter used by OpenRouter, Groq, DeepSeek, local servers, and other compatible endpoints.</p>
