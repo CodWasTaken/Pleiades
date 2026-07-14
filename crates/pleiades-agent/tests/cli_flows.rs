@@ -91,6 +91,31 @@ fn guided_api_setup_and_doctor_use_environment_reference() {
 }
 
 #[test]
+fn provider_service_reports_never_print_resolved_secrets() {
+    let home = tempfile::tempdir().unwrap();
+    command(home.path())
+        .args(["config", "init"])
+        .assert()
+        .success();
+    command(home.path())
+        .args([
+            "config",
+            "set",
+            "providers.openai.api_key",
+            "${OPENAI_API_KEY}",
+        ])
+        .assert()
+        .success();
+    command(home.path())
+        .env("OPENAI_API_KEY", "sk-never-print-this-secret")
+        .args(["provider", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("openai"))
+        .stdout(predicate::str::contains("sk-never-print-this-secret").not());
+}
+
+#[test]
 fn workflow_create_validate_list_and_run() {
     let workspace = tempfile::tempdir().unwrap();
     command(workspace.path())

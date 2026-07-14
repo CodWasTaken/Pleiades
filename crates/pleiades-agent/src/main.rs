@@ -755,88 +755,63 @@ fn handle_profile_active(loader: &ConfigLoader) {
 }
 
 fn handle_provider_list(loader: &ConfigLoader) {
-    let config = match loader.load_with_interpolation() {
-        Ok(c) => c,
+    let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    );
+    let providers = match services.provider().list() {
+        Ok(providers) => providers,
         Err(e) => {
-            eprintln!("Error loading config: {}", e);
+            eprintln!("Error listing providers: {}", e);
             std::process::exit(1);
         }
     };
 
-    if config.providers.is_empty() {
+    if providers.is_empty() {
         println!("No providers configured.");
         println!("Run 'pleiades setup' for guided configuration.");
         return;
     }
 
-    for (name, pc) in &config.providers {
-        let has_key = pc.api_key.is_some() && !pc.api_key.as_deref().unwrap_or("").is_empty();
-        let key_display = if has_key {
-            if let Some(ref key) = pc.api_key {
-                pleiades_agent_config::env_interpolate::mask_secrets(key)
-            } else {
-                "not set".to_string()
-            }
-        } else {
-            "not set".to_string()
-        };
-
-        let base_url = pc.base_url.as_deref().unwrap_or("(default)");
-        println!("  {}:", name);
-        if name == "openai-subscription" {
-            println!("    Authentication: ChatGPT subscription via Codex CLI");
-        } else {
-            println!("    API Key: {}", key_display);
+    for provider in providers {
+        println!("  {}:", provider.name);
+        println!("    Authentication: {}", provider.authentication);
+        if provider.name != "openai-subscription" {
+            println!("    API Key: {}", provider.api_key_display);
         }
-        println!("    Base URL: {}", base_url);
+        println!("    Base URL: {}", provider.base_url);
         println!();
     }
 }
 
 fn handle_provider_info(loader: &ConfigLoader, name: &str) {
-    let config = match loader.load_with_interpolation() {
-        Ok(c) => c,
+    let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    );
+    let provider = match services.provider().info(name) {
+        Ok(provider) => provider,
         Err(e) => {
-            eprintln!("Error loading config: {}", e);
+            eprintln!("Error reading provider: {}", e);
             std::process::exit(1);
         }
     };
 
-    let pc = match config.providers.get(name) {
-        Some(p) => p,
-        None => {
-            eprintln!("Provider '{}' not found in config", name);
-            std::process::exit(1);
-        }
-    };
-
-    let secret_manager = pleiades_agent_config::SecretManager::new();
-    let env_var = secret_manager.expected_env_var(name).unwrap_or("(none)");
-
-    println!("Provider: {}", name);
-    if name == "openai-subscription" {
-        println!("  Authentication: ChatGPT subscription via the official Codex CLI");
+    println!("Provider: {}", provider.name);
+    println!("  Authentication: {}", provider.authentication);
+    if provider.name == "openai-subscription" {
         println!("  Credentials: managed by Codex (Pleiades never reads them)");
         println!("  Status command: pleiades auth status");
         return;
     }
+    println!("  API Key: {}", provider.api_key_display);
+    println!("  Base URL: {}", provider.base_url);
     println!(
-        "  API Key: {}",
-        pc.api_key
-            .as_ref()
-            .map(|k| pleiades_agent_config::env_interpolate::mask_secrets(k))
-            .unwrap_or_else(|| "not set".to_string())
+        "  Expected Env Var: {}",
+        provider.expected_env_var.as_deref().unwrap_or("(none)")
     );
-    println!(
-        "  Base URL: {}",
-        pc.base_url.as_deref().unwrap_or("(default)")
-    );
-    println!("  Expected Env Var: {}", env_var);
-    println!("  Max Retries: {}", pc.max_retries);
-    println!("  Timeout: {}s", pc.timeout_secs);
-    if !pc.headers.is_empty() {
-        println!("  Custom Headers: {:?}", pc.headers);
-    }
+    println!("  Max Retries: {}", provider.max_retries);
+    println!("  Timeout: {}s", provider.timeout_secs);
 }
 
 fn handle_provider_remove(loader: &ConfigLoader, name: &str) {
@@ -1655,9 +1630,12 @@ fn build_plugin_manager() -> pleiades_agent_plugins::PluginManager {
     pleiades_agent_plugins::PluginManager::new(plugin_config_home())
 }
 
-fn handle_plugin_list(_loader: &ConfigLoader) {
-    let manager = build_plugin_manager();
-    match manager.list_plugins() {
+fn handle_plugin_list(loader: &ConfigLoader) {
+    let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    );
+    match services.plugin().list() {
         Ok(plugins) => {
             if plugins.is_empty() {
                 println!("No plugins found.");

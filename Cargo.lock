@@ -1472,6 +1472,7 @@ dependencies = [
  "pleiades-agent-plugins",
  "pleiades-agent-prompts",
  "pleiades-agent-providers",
+ "pleiades-agent-services",
  "pleiades-agent-tools",
  "pleiades-agent-tui",
  "pleiades-agent-workflow",
@@ -1644,6 +1645,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pleiades-agent-services"
+version = "2.0.0"
+dependencies = [
+ "pleiades-agent-config",
+ "pleiades-agent-core",
+ "pleiades-agent-plugins",
+ "pleiades-agent-providers",
+ "tempfile",
+]
+
+[[package]]
 name = "pleiades-agent-tools"
 version = "2.0.0"
 dependencies = [
@@ -1674,6 +1686,7 @@ dependencies = [
  "pleiades-agent-config",
  "pleiades-agent-core",
  "pleiades-agent-engine",
+ "pleiades-agent-services",
  "pulldown-cmark",
  "ratatui",
  "rustyline 14.0.0",

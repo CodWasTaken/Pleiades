@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Added `pleiades-agent-services`, a terminal-independent application service
+  layer with typed provider and plugin reports, canonical provider adapter
+  construction, and temporary-root tests.
 - Added `pleiades-agent-commands` crate: typed command registry, `CommandSpec`,
   `CommandResult`, `CommandHandler`, `AppEffect`, `OverlayKind`,
   `RenderableDocument`, `CommandContext`, `Suggestion`, parser, and the
@@ -21,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- CLI provider list/info, CLI plugin listing, and the live provider picker now
+  consume shared application services instead of duplicating configuration
+  traversal and presentation logic.
 - The Cargo workspace now includes `crates/pleiades-agent-commands`. Workspace
   formatting, Clippy with warnings denied, and tests remain green.
 - Slash input, command-palette selections, help, and completion now derive from

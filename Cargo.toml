@@ -4,6 +4,7 @@ members = [
     "crates/pleiades-agent",
     "crates/pleiades-agent-core",
     "crates/pleiades-agent-commands",
+    "crates/pleiades-agent-services",
     "crates/pleiades-agent-config",
     "crates/pleiades-agent-engine",
     "crates/pleiades-agent-tui",

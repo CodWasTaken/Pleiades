@@ -1,0 +1,17 @@
+[package]
+name = "pleiades-agent-services"
+version = "2.0.0"
+edition = "2024"
+description = "Shared application services for Pleiades CLI and live workspace commands"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/CodWasTaken/Pleiades"
+
+[dependencies]
+pleiades-agent-config = { path = "../pleiades-agent-config", version = "2.0.0" }
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
+pleiades-agent-plugins = { path = "../pleiades-agent-plugins", version = "2.0.0" }
+pleiades-agent-providers = { path = "../pleiades-agent-providers", version = "2.0.0" }
+
+[dev-dependencies]
+tempfile = "3"

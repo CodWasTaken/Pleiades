@@ -15,6 +15,7 @@ categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
+pleiades-agent-services = { path = "../pleiades-agent-services", version = "2.0.0" }
 pleiades-agent-config = { path = "../pleiades-agent-config", version = "2.0.0" }
 pleiades-agent-engine = { path = "../pleiades-agent-engine", version = "2.0.0" }
 pleiades-agent-tui = { path = "../pleiades-agent-tui", version = "2.0.0" }

@@ -98,12 +98,18 @@ impl TuiApp {
             self.model_name.clone(),
             self.mode,
         );
-        let mut providers = self
-            .config
-            .providers
-            .keys()
-            .cloned()
-            .collect::<BTreeSet<_>>();
+        let services = pleiades_agent_services::ApplicationServices::new();
+        let mut providers = services
+            .provider()
+            .list()
+            .map(|items| items.into_iter().map(|item| item.name).collect())
+            .unwrap_or_else(|_| {
+                self.config
+                    .providers
+                    .keys()
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+            });
         providers.insert(self.provider_name.clone());
         let mut models = self
             .config
