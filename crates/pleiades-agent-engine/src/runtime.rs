@@ -26,29 +26,71 @@ const EVENT_CAPACITY: usize = 512;
 const MAX_TOOL_OUTPUT: usize = 256 * 1024;
 const MAX_DIFF_OUTPUT: usize = 512 * 1024;
 
-/// Access boundary applied to autonomous work.
+/// When autonomous work must pause for user approval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ApprovalPolicy {
+    Always,
+    OnRisk,
+    OnFailure,
+    Never,
+}
+
+/// Filesystem and process boundary applied to autonomous work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SandboxPolicy {
+    ReadOnly,
+    WorkspaceWrite,
+    FullAccess,
+}
+
+impl SandboxPolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::WorkspaceWrite => "workspace-write",
+            Self::FullAccess => "danger-full-access",
+        }
+    }
+}
+
+/// User-facing presets combining independent approval and sandbox policies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AgentMode {
     Plan,
     Agent,
-    Unrestricted,
+    Auto,
+    Yolo,
 }
 
 impl AgentMode {
     pub fn parse(value: &str) -> Self {
         match value {
             "plan" | "read-only" | "readonly" => Self::Plan,
-            "unrestricted" | "danger-full-access" => Self::Unrestricted,
+            "auto" => Self::Auto,
+            "yolo" | "unrestricted" | "danger-full-access" => Self::Yolo,
             _ => Self::Agent,
         }
     }
 
     pub fn sandbox(self) -> &'static str {
+        self.sandbox_policy().as_str()
+    }
+
+    pub fn approval_policy(self) -> ApprovalPolicy {
         match self {
-            Self::Plan => "read-only",
-            Self::Agent => "workspace-write",
-            Self::Unrestricted => "danger-full-access",
+            Self::Plan | Self::Auto | Self::Yolo => ApprovalPolicy::Never,
+            Self::Agent => ApprovalPolicy::OnRisk,
+        }
+    }
+
+    pub fn sandbox_policy(self) -> SandboxPolicy {
+        match self {
+            Self::Plan => SandboxPolicy::ReadOnly,
+            Self::Agent | Self::Auto => SandboxPolicy::WorkspaceWrite,
+            Self::Yolo => SandboxPolicy::FullAccess,
         }
     }
 
@@ -56,7 +98,8 @@ impl AgentMode {
         match self {
             Self::Plan => "plan",
             Self::Agent => "agent",
-            Self::Unrestricted => "unrestricted",
+            Self::Auto => "auto",
+            Self::Yolo => "yolo",
         }
     }
 }
@@ -911,20 +954,24 @@ async fn request_permission_if_needed(
         Ok(level) => level,
         Err(_) => return PermissionOutcome::Denied,
     };
-    if context.mode == AgentMode::Plan && level != PermissionLevel::ReadOnly {
+    if context.mode.sandbox_policy() == SandboxPolicy::ReadOnly
+        && level != PermissionLevel::ReadOnly
+    {
         return PermissionOutcome::Denied;
     }
-    if context.mode == AgentMode::Unrestricted
-        || level == PermissionLevel::ReadOnly
-        || context.allowed_session.contains(&call.name)
+    let explicitly_allowed = context.allowed_session.contains(&call.name)
         || context
             .config
             .permissions
             .always_allow
             .iter()
-            .any(|name| name == &call.name)
-        || (!context.config.permissions.ask_always && level == PermissionLevel::WorkspaceWrite)
-    {
+            .any(|name| name == &call.name);
+    let policy_allows = match context.mode.approval_policy() {
+        ApprovalPolicy::Never | ApprovalPolicy::OnFailure => true,
+        ApprovalPolicy::OnRisk => false,
+        ApprovalPolicy::Always => false,
+    };
+    if level == PermissionLevel::ReadOnly || explicitly_allowed || policy_allows {
         return PermissionOutcome::Allowed;
     }
 
@@ -1353,9 +1400,14 @@ mod tests {
     fn parses_modes_and_maps_sandboxes() {
         assert_eq!(AgentMode::parse("plan"), AgentMode::Plan);
         assert_eq!(AgentMode::parse("workspace-write"), AgentMode::Agent);
-        assert_eq!(AgentMode::parse("unrestricted"), AgentMode::Unrestricted);
+        assert_eq!(AgentMode::parse("auto"), AgentMode::Auto);
+        assert_eq!(AgentMode::parse("unrestricted"), AgentMode::Yolo);
         assert_eq!(AgentMode::Plan.sandbox(), "read-only");
         assert_eq!(AgentMode::Agent.sandbox(), "workspace-write");
+        assert_eq!(AgentMode::Auto.sandbox(), "workspace-write");
+        assert_eq!(AgentMode::Yolo.sandbox(), "danger-full-access");
+        assert_eq!(AgentMode::Agent.approval_policy(), ApprovalPolicy::OnRisk);
+        assert_eq!(AgentMode::Auto.approval_policy(), ApprovalPolicy::Never);
     }
 
     #[test]
@@ -1644,6 +1696,32 @@ mod tests {
         }
         assert!(!prompted);
         assert_eq!(executions.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn auto_mode_executes_workspace_writes_without_prompting() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock(
+            AgentMode::Auto,
+            MockBehavior::ToolThenFinish,
+            executions.clone(),
+        );
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("make a workspace change".into()))
+            .await
+            .unwrap();
+        let mut prompted = false;
+        loop {
+            match next_event(&mut handle.events).await {
+                AgentEvent::PermissionRequested(_) => prompted = true,
+                AgentEvent::TaskCompleted { .. } => break,
+                _ => {}
+            }
+        }
+        assert!(!prompted);
+        assert_eq!(executions.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

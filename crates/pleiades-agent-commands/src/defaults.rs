@@ -1068,8 +1068,11 @@ fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
     r.register(
         CommandSpec::builder(
             vec!["mode"],
-            "Switch to a mode preset (plan, agent, unrestricted)",
+            "Switch to a mode preset (plan, agent, auto, yolo)",
             handler(|args| match args.first() {
+                Some(preset) if preset == "yolo" => {
+                    Ok(CommandResult::overlay(OverlayKind::YoloWarning))
+                }
                 Some(preset) => {
                     if is_known_preset(preset) {
                         Ok(CommandResult::Effects(vec![AppEffect::SetMode(
@@ -1077,7 +1080,7 @@ fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
                         )]))
                     } else {
                         Err(Error::invalid_input(format!(
-                            "unknown mode preset `{preset}`; valid: plan, agent, unrestricted"
+                            "unknown mode preset `{preset}`; valid: plan, agent, auto, yolo"
                         )))
                     }
                 }
@@ -1086,7 +1089,7 @@ fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
         )
         .aliases(vec!["mo"])
         .arguments(vec![
-            ArgumentSpec::optional("preset", "Mode preset (`plan`, `agent`, `unrestricted`).")
+            ArgumentSpec::optional("preset", "Mode preset (`plan`, `agent`, `auto`, `yolo`).")
                 .with_completer(CompletionSource::Mode),
         ])
         .category(CommandCategory::Configuration)
@@ -1097,7 +1100,7 @@ fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 
     // /mode <preset> — explicit subcommands for autocomplete / help.
-    for preset in ["plan", "agent", "unrestricted"] {
+    for preset in ["plan", "agent", "auto"] {
         r.register(
             CommandSpec::builder(
                 vec!["mode", preset],
@@ -1116,10 +1119,22 @@ fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
         )
         .ok();
     }
+    r.register(
+        CommandSpec::builder(
+            vec!["mode", "yolo"],
+            "Enable unapproved full-host access after confirmation",
+            handler(|_| Ok(CommandResult::overlay(OverlayKind::YoloWarning))),
+        )
+        .category(CommandCategory::Configuration)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
 }
 
 fn is_known_preset(preset: &str) -> bool {
-    matches!(preset, "plan" | "agent" | "unrestricted")
+    matches!(preset, "plan" | "agent" | "auto" | "yolo")
 }
 
 #[cfg(test)]
@@ -1176,7 +1191,8 @@ mod tests {
             "mode",
             "mode plan",
             "mode agent",
-            "mode unrestricted",
+            "mode auto",
+            "mode yolo",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -1221,6 +1237,20 @@ mod tests {
             }
             other => panic!("unexpected: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn dispatch_yolo_requires_the_warning_overlay() {
+        let registry = default_registry();
+        let context = CommandContextBuilder::default().build();
+        let result = registry
+            .dispatch("/mode yolo", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::OpenOverlay(OverlayKind::YoloWarning)
+        ));
     }
 
     #[tokio::test]

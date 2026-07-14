@@ -41,12 +41,12 @@ struct Cli {
     #[arg(short = 'P', long, global = true)]
     provider: Option<String>,
 
-    /// Agent mode: plan, agent, or unrestricted
+    /// Agent mode: plan, agent, auto, or yolo
     #[arg(
         long,
         global = true,
         hide_possible_values = true,
-        value_parser = ["plan", "agent", "unrestricted", "read-only", "workspace-write", "danger-full-access"]
+        value_parser = ["plan", "agent", "auto", "yolo", "unrestricted", "read-only", "workspace-write", "danger-full-access"]
     )]
     permission_mode: Option<String>,
 

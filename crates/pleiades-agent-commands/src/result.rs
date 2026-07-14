@@ -99,6 +99,7 @@ pub enum OverlayKind {
     ProviderPicker,
     ModelPicker,
     ModePicker,
+    YoloWarning,
     ProviderWizard,
     PluginManager,
     McpManager,

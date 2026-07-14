@@ -59,7 +59,8 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let mode_style = match app.mode {
         pleiades_agent_engine::AgentMode::Plan => Style::default().fg(theme.info),
         pleiades_agent_engine::AgentMode::Agent => Style::default().fg(theme.success),
-        pleiades_agent_engine::AgentMode::Unrestricted => Style::default().fg(theme.warning),
+        pleiades_agent_engine::AgentMode::Auto => Style::default().fg(theme.primary),
+        pleiades_agent_engine::AgentMode::Yolo => Style::default().fg(theme.error),
     };
     let status = if app.running { "working" } else { "ready" };
     let header = Line::from(vec![
@@ -215,6 +216,11 @@ fn render_composer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
 
 fn render_status(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let theme = app.theme;
+    let mode_background = if app.mode == pleiades_agent_engine::AgentMode::Yolo {
+        theme.error
+    } else {
+        theme.primary
+    };
     let branch = app.branch.as_deref().unwrap_or("no-git");
     let dirty = if app.dirty { "*" } else { "" };
     let tokens = app
@@ -232,7 +238,7 @@ fn render_status(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             format!(" {} {} ", app.mode.label(), theme.symbols.context),
             Style::default()
                 .fg(theme.background)
-                .bg(theme.primary)
+                .bg(mode_background)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
@@ -293,6 +299,24 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
                 ]),
             ];
             render_modal(frame, area, " Safe autonomy ", text, theme);
+        }
+        Overlay::YoloWarning { confirmation } => {
+            let text = vec![
+                Line::from(Span::styled(
+                    format!("{} FULL HOST ACCESS", theme.symbols.failure),
+                    Style::default()
+                        .fg(theme.error)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::default(),
+                Line::from("YOLO disables approval prompts and removes the workspace boundary."),
+                Line::from("Commands and file mutations can affect any data your user can access."),
+                Line::from("This activation lasts for the current session only."),
+                Line::default(),
+                field("Type YOLO to continue", &confirmation, theme),
+                Line::from(Span::styled("Enter confirm  ·  Esc cancel", theme.muted())),
+            ];
+            render_modal(frame, area, " YOLO warning ", text, theme);
         }
         Overlay::Help { query } => {
             let mut text = vec![field("Search", &query, theme), Line::default()];
@@ -484,7 +508,7 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
                 field("Ctrl+M", "select model", theme),
                 field("Ctrl+F", "find workspace file", theme),
                 field("Ctrl+L", "open saved session", theme),
-                field("/mode", "plan | agent | unrestricted", theme),
+                field("/mode", "plan | agent | auto | yolo", theme),
                 Line::default(),
                 Line::from(Span::styled(
                     "Persistent values can be changed with `pleiades config set`.",
@@ -676,7 +700,10 @@ fn compact(value: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::render;
-    use crate::{state::AppState, theme::Theme};
+    use crate::{
+        state::{AppState, Overlay},
+        theme::Theme,
+    };
     use pleiades_agent_engine::AgentMode;
     use ratatui::{Terminal, backend::TestBackend};
     use std::path::PathBuf;
@@ -717,6 +744,33 @@ mod tests {
             "codex-default".into(),
             AgentMode::Agent,
         );
+        terminal.draw(|frame| render(frame, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut snapshot = String::new();
+        for y in 0..buffer.area.height {
+            let row = (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>();
+            snapshot.push_str(row.trim_end());
+            snapshot.push('\n');
+        }
+        insta::assert_snapshot!(snapshot);
+    }
+
+    #[test]
+    fn yolo_warning_snapshot() {
+        let backend = TestBackend::new(80, 22);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut app = AppState::new(
+            Theme::default(),
+            PathBuf::from("/work/pleiades"),
+            "openai-subscription".into(),
+            "codex-default".into(),
+            AgentMode::Agent,
+        );
+        app.overlay = Some(Overlay::YoloWarning {
+            confirmation: "YO".into(),
+        });
         terminal.draw(|frame| render(frame, &mut app)).unwrap();
         let buffer = terminal.backend().buffer();
         let mut snapshot = String::new();

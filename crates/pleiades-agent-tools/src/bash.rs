@@ -53,7 +53,7 @@ impl BashTool {
                 .find(|path| std::path::Path::new(path).is_file())
                 .ok_or_else(|| {
                     Error::unsupported(
-                        "Agent-mode shell commands require bubblewrap on Linux; install `bwrap` or explicitly switch to unrestricted mode",
+                        "Workspace shell commands require bubblewrap on Linux; install `bwrap` or explicitly switch to YOLO mode",
                     )
                 })?;
             let workspace = ctx
@@ -105,7 +105,7 @@ impl BashTool {
 
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         Err(Error::unsupported(
-            "Agent-mode shell isolation is not available on this platform; explicitly switch to unrestricted mode to run shell commands",
+            "Workspace shell isolation is not available on this platform; explicitly switch to YOLO mode to run shell commands",
         ))
     }
 }

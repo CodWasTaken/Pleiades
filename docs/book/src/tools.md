@@ -6,13 +6,17 @@ Tools declare read-only, workspace-write, or dangerous permission levels. `permi
 
 ## Agent access modes
 
-Interactive sessions support three access modes:
+Approval behavior and sandbox boundaries are independent runtime policies,
+presented through four access-mode presets:
 
-- `plan` keeps the agent read-only.
-- `agent` allows changes inside the workspace and is the default.
-- `unrestricted` permits access outside the workspace and should be used only in a trusted environment.
+- `plan` never prompts and rejects mutations in a read-only sandbox.
+- `agent` prompts for risky operations and confines writes to the workspace.
+- `auto` never prompts, but remains confined to the workspace and honors deny rules.
+- `yolo` never prompts and permits full host access. Use it only in a trusted environment.
 
-Switch modes with `/mode plan`, `/mode agent`, or `/mode unrestricted`, or launch with `--permission-mode MODE`.
+Switch modes with `/mode plan`, `/mode agent`, `/mode auto`, or `/mode yolo`,
+or launch with `--permission-mode MODE`. The old `unrestricted` spelling is
+accepted as a compatibility alias for `yolo`.
 
 Built-in filesystem tools resolve relative paths against the selected workspace. They reject `..` traversal, absolute paths outside the workspace, and symlinks that resolve outside it. Agent-mode shell execution uses a platform sandbox to keep writes inside the workspace; if isolation is unavailable, the call is refused. Plan mode rejects every mutating tool before prompting.
 

@@ -14,8 +14,8 @@ pub use chat::ChatSession;
 pub use engine::Engine;
 pub use memory::MemoryManager;
 pub use runtime::{
-    Activity, AgentCommand, AgentEvent, AgentHandle, AgentMode, AgentRuntime, PermissionDecision,
-    PermissionRequest,
+    Activity, AgentCommand, AgentEvent, AgentHandle, AgentMode, AgentRuntime, ApprovalPolicy,
+    PermissionDecision, PermissionRequest, SandboxPolicy,
 };
 pub use session::{SessionInfo, SessionStore};
 
