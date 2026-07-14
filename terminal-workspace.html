@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-503b7222.js";
+            window.path_to_searchindex_js = "searchindex-b93bf242.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -224,8 +224,11 @@ through the runtime command channel and return structured UI events—neither pa
 executes provider or tool logic in the TUI.</p>
 <p>The currently implemented workspace commands include <code>/help</code>, <code>/status</code>,
 <code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/load</code>, <code>/diff</code>,
-<code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. Provider,
-model, and plugin management subcommands will expand during Release 2.1.</p>
+<code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. The provider
+family includes <code>list</code>, <code>use</code>, <code>info</code>, <code>add</code>, <code>remove</code>, and <code>reload</code>. Provider
+reports are obtained through the same application service used by the external
+CLI and always mask credentials. Connection/authentication commands, model
+management, and plugin management continue as separate Release 2.1 slices.</p>
 <h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
 <p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
 <p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>
