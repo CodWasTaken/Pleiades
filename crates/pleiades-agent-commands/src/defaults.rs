@@ -139,6 +139,134 @@ impl CommandHandler for ProviderRemoveHandler {
     }
 }
 
+struct ProviderTestHandler;
+
+#[async_trait]
+impl CommandHandler for ProviderTestHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let name = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /provider test <name> [model]"))?;
+        let report = context
+            .services()
+            .provider()
+            .test(name, args.get(1).map(String::as_str))
+            .await?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new("Provider connection successful")
+                .section("Provider", report.provider)
+                .section("Model", report.model)
+                .section("Response", report.response)
+                .section("Finish reason", report.finish_reason),
+        ))
+    }
+}
+
+struct ModelListHandler;
+
+#[async_trait]
+impl CommandHandler for ModelListHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let report = context
+            .services()
+            .model()
+            .list(
+                args.first().map(String::as_str),
+                args.get(1).map(String::as_str),
+            )
+            .await?;
+        let mut document = crate::result::RenderableDocument::new("Models");
+        for model in report.models {
+            document.push_section(
+                model.display_name.as_deref().unwrap_or(&model.id),
+                format!(
+                    "ID: {}\nProvider: {}\nContext: {} tokens\nTools: {} · Vision: {} · Reasoning: {}",
+                    model.id,
+                    model.provider,
+                    model.capabilities.max_context_length,
+                    model.capabilities.supports_tools,
+                    model.capabilities.supports_vision,
+                    model.capabilities.supports_thinking
+                ),
+            );
+        }
+        if document.sections.is_empty() {
+            document.push_section(
+                "No models discovered",
+                "Check provider connectivity with /provider test.",
+            );
+        }
+        Ok(CommandResult::RenderDocument(document))
+    }
+}
+
+struct ModelInfoHandler;
+
+#[async_trait]
+impl CommandHandler for ModelInfoHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let name = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /model info <name>"))?;
+        let model = context.services().model().info(name).await?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new(
+                model.display_name.as_deref().unwrap_or(&model.id),
+            )
+            .section("Identifier", model.id)
+            .section("Provider", model.provider)
+            .section(
+                "Capabilities",
+                format!(
+                    "Context: {} · Output: {}\nTools: {} · Vision: {} · Streaming: {} · Reasoning: {} · JSON: {}",
+                    model.capabilities.max_context_length,
+                    model.capabilities.max_output_tokens,
+                    model.capabilities.supports_tools,
+                    model.capabilities.supports_vision,
+                    model.capabilities.supports_streaming,
+                    model.capabilities.supports_thinking,
+                    model.capabilities.supports_json_mode
+                ),
+            ),
+        ))
+    }
+}
+
+struct ModelAliasHandler;
+
+#[async_trait]
+impl CommandHandler for ModelAliasHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let alias = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /model alias <alias> <model>"))?;
+        let model = args
+            .get(1)
+            .ok_or_else(|| Error::invalid_input("usage: /model alias <alias> <model>"))?;
+        context.services().model().alias(alias, model)?;
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!("Model alias `{alias}` now resolves to `{model}`"),
+        ))
+    }
+}
+
+struct ModelUnaliasHandler;
+
+#[async_trait]
+impl CommandHandler for ModelUnaliasHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let alias = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /model unalias <alias>"))?;
+        context.services().model().unalias(alias)?;
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!("Model alias `{alias}` removed"),
+        ))
+    }
+}
+
 /// Build and populate a fresh [`crate::CommandRegistry`] with the default live
 /// workspace commands and return it.
 ///
@@ -446,6 +574,24 @@ fn register_provider_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
     r.register(
         CommandSpec::builder(
+            vec!["provider", "test"],
+            "Test provider connectivity with a live streamed request",
+            ProviderTestHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Provider name")
+                .with_completer(CompletionSource::Provider),
+            ArgumentSpec::optional("model", "Optional model override")
+                .with_completer(CompletionSource::Model),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
             vec!["provider", "remove"],
             "Remove a provider configuration",
             ProviderRemoveHandler,
@@ -499,6 +645,99 @@ fn register_model_family(r: &mut crate::registry::CommandRegistry) {
         .availability(CommandAvailability::Both)
         .shortcut(Shortcut::Ctrl('m'))
         .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "list"],
+            "Discover and list available models",
+            ModelListHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::optional("provider", "Optional provider filter")
+                .with_completer(CompletionSource::Provider),
+            ArgumentSpec::optional("search", "Optional model search text"),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "use"],
+            "Switch the active model",
+            handler(|args| match args.first() {
+                Some(model) => Ok(CommandResult::effects([AppEffect::SetModel(model.clone())])),
+                None => Err(Error::invalid_input("usage: /model use <name>")),
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Model identifier")
+                .with_completer(CompletionSource::Model),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "info"],
+            "Show model capabilities",
+            ModelInfoHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Model identifier or alias")
+                .with_completer(CompletionSource::Model),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "discover"],
+            "Query configured providers for models",
+            ModelListHandler,
+        )
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "alias"],
+            "Create a model alias",
+            ModelAliasHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("alias", "Alias"),
+            ArgumentSpec::required("model", "Model identifier"),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "unalias"],
+            "Remove a model alias",
+            ModelUnaliasHandler,
+        )
+        .arguments(vec![ArgumentSpec::required("alias", "Alias to remove")])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
         .build(),
     )
     .ok();
@@ -595,9 +834,16 @@ mod tests {
             "provider use",
             "provider info",
             "provider add",
+            "provider test",
             "provider remove",
             "provider reload",
             "model",
+            "model list",
+            "model use",
+            "model info",
+            "model discover",
+            "model alias",
+            "model unalias",
             "mode",
             "mode plan",
             "mode agent",
@@ -700,6 +946,32 @@ mod tests {
         assert!(document.sections.iter().any(|section| {
             section.heading == "test-provider" && section.body.contains("Authentication")
         }));
+    }
+
+    #[tokio::test]
+    async fn model_alias_uses_the_injected_application_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        services
+            .loader()
+            .save_project(&pleiades_agent_config::Config::default())
+            .unwrap();
+        let ctx = CommandContextBuilder::default()
+            .services(services.clone())
+            .build();
+        let result = default_registry()
+            .dispatch("/model alias fast model-x", &ctx, true)
+            .await
+            .unwrap();
+        assert!(matches!(result, CommandResult::Notification(_)));
+        let config = services.loader().load().unwrap();
+        assert_eq!(
+            config.models.aliases.get("fast").map(String::as_str),
+            Some("model-x")
+        );
     }
 
     #[tokio::test]

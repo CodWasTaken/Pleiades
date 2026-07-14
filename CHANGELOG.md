@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `/provider add`, `/provider remove`, and `/provider reload` workspace
   commands with nested completion, structured documents, permission metadata,
   and an injectable service context for deterministic tests.
+- Added a shared streamed provider connectivity test used by both
+  `pleiades provider test` and `/provider test`, plus a provider-independent
+  model service and `/model list`, `/model use`, `/model info`,
+  `/model discover`, `/model alias`, and `/model unalias` commands.
 - Added `pleiades-agent-services`, a terminal-independent application service
   layer with typed provider and plugin reports, canonical provider adapter
   construction, and temporary-root tests.

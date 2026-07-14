@@ -30,3 +30,11 @@ Inside the live workspace, `/provider list`, `/provider info NAME`,
 shared provider service. `/provider add` opens the provider-wizard flow. The
 registry generates help and nested completion for these commands, and provider
 documents never contain resolved credential values.
+
+`/provider test NAME [MODEL]` and `pleiades provider test NAME` now execute
+the same service operation and only report success after the provider stream
+emits a completion event. Model discovery and mutations are also available in
+the workspace through `/model list [PROVIDER] [SEARCH]`, `/model info NAME`,
+`/model discover`, `/model use NAME`, `/model alias ALIAS MODEL`, and
+`/model unalias ALIAS`. Model configuration writes preserve environment
+variable references instead of persisting resolved credentials.

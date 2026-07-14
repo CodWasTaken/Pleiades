@@ -1,5 +1,9 @@
 use pleiades_agent_config::{Config, ConfigLoader, SecretManager};
-use pleiades_agent_core::{Error, Provider};
+use pleiades_agent_core::{
+    Error, Provider,
+    conversation::Message,
+    provider::{ChatRequest, StreamEvent},
+};
 
 /// Secret-safe provider information suitable for terminal or JSON rendering.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,6 +15,15 @@ pub struct ProviderReport {
     pub expected_env_var: Option<String>,
     pub max_retries: u32,
     pub timeout_secs: u64,
+}
+
+/// Observed result of a live provider connectivity test.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderTestReport {
+    pub provider: String,
+    pub model: String,
+    pub response: String,
+    pub finish_reason: String,
 }
 
 /// Shared provider management operations.
@@ -83,6 +96,69 @@ impl ProviderService {
             .map_err(Error::config)?;
         Ok(ProviderFactory::configured(&config))
     }
+
+    /// Send a minimal streamed request through a configured provider.
+    pub async fn test(&self, name: &str, model: Option<&str>) -> Result<ProviderTestReport, Error> {
+        let config = self
+            .loader
+            .load_with_interpolation()
+            .map_err(Error::config)?;
+        let provider_config =
+            config
+                .providers
+                .get(name)
+                .ok_or_else(|| Error::ProviderNotFound {
+                    provider: name.to_string(),
+                })?;
+        let api_key = provider_config.api_key.as_deref().unwrap_or("");
+        let base_url = provider_config.base_url.as_deref().unwrap_or("");
+        let provider =
+            ProviderFactory::build(name, api_key, base_url).ok_or_else(|| Error::AuthError {
+                provider: name.to_string(),
+                message: "no API credential is configured".to_string(),
+            })?;
+        test_provider(provider.as_ref(), model).await
+    }
+}
+
+async fn test_provider(
+    provider: &dyn Provider,
+    model: Option<&str>,
+) -> Result<ProviderTestReport, Error> {
+    let model = model
+        .unwrap_or_else(|| provider.default_model())
+        .to_string();
+    let mut events = provider
+        .chat_stream(ChatRequest {
+            model: model.clone(),
+            messages: vec![Message::user("Respond with exactly: Hello from Pleiades!")],
+            system_prompt: None,
+            temperature: Some(0.0),
+            top_p: None,
+            max_tokens: Some(50),
+            stop: None,
+            tools: None,
+        })
+        .await?;
+    let mut response = String::new();
+    while let Some(event) = events.recv().await {
+        match event {
+            StreamEvent::Token(token) => response.push_str(&token),
+            StreamEvent::Done { finish_reason, .. } => {
+                return Ok(ProviderTestReport {
+                    provider: provider.name().to_string(),
+                    model,
+                    response,
+                    finish_reason,
+                });
+            }
+            StreamEvent::Error { message, .. } => return Err(Error::provider(message)),
+            _ => {}
+        }
+    }
+    Err(Error::provider(
+        "provider stream ended before a completion event",
+    ))
 }
 
 /// Canonical provider adapter construction used by services, CLI commands,
@@ -194,5 +270,22 @@ mod tests {
             std::fs::read_to_string(PathBuf::from(temp.path()).join("project/config.toml"))
                 .unwrap();
         assert!(stored.contains("${PLEIADES_TEST_SECRET}"));
+    }
+
+    #[tokio::test]
+    async fn test_rejects_api_providers_without_credentials() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config
+            .providers
+            .insert("openai".into(), ProviderConfig::default());
+        let error = service(&temp, &config)
+            .test("openai", Some("gpt-test"))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            pleiades_agent_core::Error::AuthError { .. }
+        ));
     }
 }
