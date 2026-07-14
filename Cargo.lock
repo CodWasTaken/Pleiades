@@ -1683,7 +1683,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tui-textarea",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
