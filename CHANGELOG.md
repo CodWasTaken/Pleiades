@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `pleiades provider test` and `/provider test`, plus a provider-independent
   model service and `/model list`, `/model use`, `/model info`,
   `/model discover`, `/model alias`, and `/model unalias` commands.
+- Added service-backed `/plugins list`, `/plugins info`, `/plugins install`,
+  `/plugins uninstall`, `/plugins enable`, `/plugins disable`,
+  `/plugins permissions`, and `/plugins reload` commands with structured
+  executable-hook/tool permission reporting.
+
+### Fixed
+
+- Built-in plugins now honor persisted enable/disable state during discovery.
 - Added `pleiades-agent-services`, a terminal-independent application service
   layer with typed provider and plugin reports, canonical provider adapter
   construction, and temporary-root tests.

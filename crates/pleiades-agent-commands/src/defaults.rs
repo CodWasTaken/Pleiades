@@ -267,6 +267,103 @@ impl CommandHandler for ModelUnaliasHandler {
     }
 }
 
+struct PluginListHandler;
+
+#[async_trait]
+impl CommandHandler for PluginListHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        let plugins = context.services().plugin().list()?;
+        let mut document = crate::result::RenderableDocument::new("Plugins");
+        for plugin in plugins {
+            document.push_section(
+                plugin.id,
+                format!(
+                    "{} · {} · v{}\n{}\nTools: {} · Hooks: {}",
+                    plugin.kind,
+                    if plugin.enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    },
+                    plugin.version,
+                    plugin.description,
+                    plugin.tool_count,
+                    plugin.has_hooks
+                ),
+            );
+        }
+        Ok(CommandResult::RenderDocument(document))
+    }
+}
+
+struct PluginInfoHandler;
+
+#[async_trait]
+impl CommandHandler for PluginInfoHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let id = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /plugins info <id>"))?;
+        let plugin = context.services().plugin().info(id)?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new(plugin.name)
+                .section("ID", plugin.id)
+                .section("Version", plugin.version)
+                .section("Source", plugin.source)
+                .section("Description", plugin.description)
+                .section(
+                    "Permissions",
+                    if plugin.permissions.is_empty() {
+                        "No executable hooks or tools requested".to_string()
+                    } else {
+                        plugin.permissions.join("\n")
+                    },
+                ),
+        ))
+    }
+}
+
+enum PluginMutation {
+    Install,
+    Uninstall,
+    Enable,
+    Disable,
+}
+
+struct PluginMutationHandler(PluginMutation);
+
+#[async_trait]
+impl CommandHandler for PluginMutationHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let target = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("plugin path or identifier is required"))?;
+        let service = context.services().plugin();
+        let message = match self.0 {
+            PluginMutation::Install => {
+                let report = service.install(target)?;
+                format!("Installed `{}` v{}", report.id, report.version)
+            }
+            PluginMutation::Uninstall => {
+                service.uninstall(target)?;
+                format!("Uninstalled `{target}`")
+            }
+            PluginMutation::Enable => {
+                service.enable(target)?;
+                format!("Enabled `{target}`")
+            }
+            PluginMutation::Disable => {
+                service.disable(target)?;
+                format!("Disabled `{target}`")
+            }
+        };
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            message,
+        ))
+    }
+}
+
 /// Build and populate a fresh [`crate::CommandRegistry`] with the default live
 /// workspace commands and return it.
 ///
@@ -279,6 +376,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_help(&mut r);
     register_provider_family(&mut r);
     register_model_family(&mut r);
+    register_plugin_family(&mut r);
     register_mode_family(&mut r);
     r
 }
@@ -743,6 +841,110 @@ fn register_model_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 }
 
+fn register_plugin_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["plugins"],
+            "Manage installed plugins",
+            PluginListHandler,
+        )
+        .aliases(vec!["plugin"])
+        .category(CommandCategory::Extension)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["plugins", "list"],
+            "List installed plugins",
+            PluginListHandler,
+        )
+        .category(CommandCategory::Extension)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["plugins", "info"],
+            "Inspect a plugin and its requested permissions",
+            PluginInfoHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Plugin identifier")
+                .with_completer(CompletionSource::Plugin),
+        ])
+        .category(CommandCategory::Extension)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    for (name, description, mutation, argument) in [
+        (
+            "install",
+            "Install a plugin from a local directory",
+            PluginMutation::Install,
+            "path",
+        ),
+        (
+            "uninstall",
+            "Uninstall a plugin",
+            PluginMutation::Uninstall,
+            "id",
+        ),
+        ("enable", "Enable a plugin", PluginMutation::Enable, "id"),
+        ("disable", "Disable a plugin", PluginMutation::Disable, "id"),
+    ] {
+        r.register(
+            CommandSpec::builder(
+                vec!["plugins", name],
+                description,
+                PluginMutationHandler(mutation),
+            )
+            .arguments(vec![
+                ArgumentSpec::required(argument, "Plugin path or identifier")
+                    .with_completer(CompletionSource::Plugin),
+            ])
+            .category(CommandCategory::Extension)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Dangerous)
+            .build(),
+        )
+        .ok();
+    }
+    r.register(
+        CommandSpec::builder(
+            vec!["plugins", "permissions"],
+            "Inspect plugin permissions",
+            PluginInfoHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Plugin identifier")
+                .with_completer(CompletionSource::Plugin),
+        ])
+        .category(CommandCategory::Extension)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["plugins", "reload"],
+            "Reload installed plugins",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ReloadExtensions]))),
+        )
+        .category(CommandCategory::Extension)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+}
+
 fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
     // /mode [preset]
     r.register(
@@ -844,6 +1046,15 @@ mod tests {
             "model discover",
             "model alias",
             "model unalias",
+            "plugins",
+            "plugins list",
+            "plugins info",
+            "plugins install",
+            "plugins uninstall",
+            "plugins enable",
+            "plugins disable",
+            "plugins permissions",
+            "plugins reload",
             "mode",
             "mode plan",
             "mode agent",
@@ -972,6 +1183,26 @@ mod tests {
             config.models.aliases.get("fast").map(String::as_str),
             Some("model-x")
         );
+    }
+
+    #[tokio::test]
+    async fn plugin_list_uses_the_injected_application_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        let ctx = CommandContextBuilder::default().services(services).build();
+        let result = default_registry()
+            .dispatch("/plugins list", &ctx, true)
+            .await
+            .unwrap();
+        let CommandResult::RenderDocument(document) = result else {
+            panic!("plugin list should render a document");
+        };
+        assert!(document.sections.iter().any(|section| {
+            section.heading == "pleiades-agent-core-builtin" && section.body.contains("enabled")
+        }));
     }
 
     #[tokio::test]

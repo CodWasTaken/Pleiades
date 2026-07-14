@@ -177,7 +177,7 @@ impl PluginManager {
         let mut entries = Vec::new();
 
         // Discover builtin plugins
-        entries.push(Self::builtin_entry());
+        entries.push(self.builtin_entry());
 
         // Discover installed plugins
         for record in registry.plugins.values() {
@@ -209,7 +209,7 @@ impl PluginManager {
         Ok(PluginRegistry::new(entries))
     }
 
-    fn builtin_entry() -> PluginEntry {
+    fn builtin_entry(&self) -> PluginEntry {
         let metadata = crate::plugin::PluginMetadata {
             id: "pleiades-agent-core-builtin".to_string(),
             name: "pleiades-agent-core".to_string(),
@@ -220,6 +220,11 @@ impl PluginManager {
             default_enabled: true,
             root: None,
         };
+        let enabled = self
+            .enabled_plugins
+            .get(&metadata.id)
+            .copied()
+            .unwrap_or(true);
         PluginEntry {
             definition: PluginDefinition::Builtin(crate::plugin::BuiltinPlugin {
                 metadata,
@@ -227,7 +232,7 @@ impl PluginManager {
                 lifecycle: crate::manifest::PluginLifecycle::default(),
                 tools: Vec::new(),
             }),
-            enabled: true,
+            enabled,
         }
     }
 
@@ -418,6 +423,17 @@ mod tests {
         let plugins = manager.list_plugins().expect("list should succeed");
         let p = plugins.iter().find(|p| p.id == plugin_id).unwrap();
         assert!(p.enabled);
+    }
+
+    #[test]
+    fn builtin_plugin_honors_enabled_state() {
+        let tmp = TempDir::new().unwrap();
+        let mut manager = PluginManager::new(tmp.path());
+        let id = "pleiades-agent-core-builtin";
+        manager.disable(id).unwrap();
+        assert!(!manager.plugin_registry().unwrap().get(id).unwrap().enabled);
+        manager.enable(id).unwrap();
+        assert!(manager.plugin_registry().unwrap().get(id).unwrap().enabled);
     }
 
     #[test]

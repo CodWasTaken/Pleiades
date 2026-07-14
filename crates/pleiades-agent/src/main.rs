@@ -1518,22 +1518,16 @@ fn handle_session_path(loader: &ConfigLoader) {
     println!("{}", store.dir().display());
 }
 
-fn plugin_config_home() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("pleiades")
-}
-
-fn build_plugin_manager() -> pleiades_agent_plugins::PluginManager {
-    pleiades_agent_plugins::PluginManager::new(plugin_config_home())
+fn plugin_service(loader: &ConfigLoader) -> pleiades_agent_services::PluginService {
+    pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    )
+    .plugin()
 }
 
 fn handle_plugin_list(loader: &ConfigLoader) {
-    let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
-        loader.global_dir().to_path_buf(),
-        loader.project_dir().to_path_buf(),
-    );
-    match services.plugin().list() {
+    match plugin_service(loader).list() {
         Ok(plugins) => {
             if plugins.is_empty() {
                 println!("No plugins found.");
@@ -1558,13 +1552,12 @@ fn handle_plugin_list(loader: &ConfigLoader) {
     }
 }
 
-fn handle_plugin_install(_loader: &ConfigLoader, path: &str) {
-    let mut manager = build_plugin_manager();
-    match manager.install(path) {
+fn handle_plugin_install(loader: &ConfigLoader, path: &str) {
+    match plugin_service(loader).install(path) {
         Ok(outcome) => {
             println!(
                 "\x1b[1;32m✓\x1b[0m Plugin installed: {} v{}",
-                outcome.plugin_id, outcome.version
+                outcome.id, outcome.version
             );
         }
         Err(e) => {
@@ -1574,9 +1567,8 @@ fn handle_plugin_install(_loader: &ConfigLoader, path: &str) {
     }
 }
 
-fn handle_plugin_uninstall(_loader: &ConfigLoader, id: &str) {
-    let mut manager = build_plugin_manager();
-    match manager.uninstall(id) {
+fn handle_plugin_uninstall(loader: &ConfigLoader, id: &str) {
+    match plugin_service(loader).uninstall(id) {
         Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin uninstalled: {}", id),
         Err(e) => {
             eprintln!("\x1b[1;31m✗\x1b[0m Uninstall failed: {}", e);
@@ -1585,9 +1577,8 @@ fn handle_plugin_uninstall(_loader: &ConfigLoader, id: &str) {
     }
 }
 
-fn handle_plugin_enable(_loader: &ConfigLoader, id: &str) {
-    let mut manager = build_plugin_manager();
-    match manager.enable(id) {
+fn handle_plugin_enable(loader: &ConfigLoader, id: &str) {
+    match plugin_service(loader).enable(id) {
         Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin enabled: {}", id),
         Err(e) => {
             eprintln!("\x1b[1;31m✗\x1b[0m Enable failed: {}", e);
@@ -1596,9 +1587,8 @@ fn handle_plugin_enable(_loader: &ConfigLoader, id: &str) {
     }
 }
 
-fn handle_plugin_disable(_loader: &ConfigLoader, id: &str) {
-    let mut manager = build_plugin_manager();
-    match manager.disable(id) {
+fn handle_plugin_disable(loader: &ConfigLoader, id: &str) {
+    match plugin_service(loader).disable(id) {
         Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin disabled: {}", id),
         Err(e) => {
             eprintln!("\x1b[1;31m✗\x1b[0m Disable failed: {}", e);
