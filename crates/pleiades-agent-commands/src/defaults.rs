@@ -7,10 +7,10 @@
 //! one-liner: write a small handler, [`CommandSpec::builder`] it, and
 //! `register` it here.
 //!
-//! The handlers in this module are deliberately lightweight: they emit
-//! typed [`AppEffect`]s or request [`OverlayKind`]s.  No business logic,
-//! no terminal IO, no runtime calls — that all lives in application
-//! services (issue 2.1 unify-CLI-TUI) and the runtime itself.
+//! The handlers in this module are deliberately lightweight: they emit typed
+//! [`AppEffect`]s, request [`OverlayKind`]s, or call application services from
+//! the invocation context. They perform no terminal IO and make no direct
+//! runtime calls.
 
 use async_trait::async_trait;
 use pleiades_agent_core::Error;
@@ -60,6 +60,81 @@ impl CommandHandler for StatusHandler {
                 .section("Provider", context.provider())
                 .section("Model", context.model())
                 .section("Mode", context.mode()),
+        ))
+    }
+}
+
+struct ProviderListHandler;
+
+#[async_trait]
+impl CommandHandler for ProviderListHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        let providers = context.services().provider().list()?;
+        let mut document = crate::result::RenderableDocument::new("Providers");
+        if providers.is_empty() {
+            document.push_section(
+                "No providers configured",
+                "Run /provider add to configure one.",
+            );
+        }
+        for provider in providers {
+            document.push_section(
+                provider.name,
+                format!(
+                    "Authentication: {}\nAPI key: {}\nBase URL: {}\nRetries: {} · Timeout: {}s",
+                    provider.authentication,
+                    provider.api_key_display,
+                    provider.base_url,
+                    provider.max_retries,
+                    provider.timeout_secs
+                ),
+            );
+        }
+        Ok(CommandResult::RenderDocument(document))
+    }
+}
+
+struct ProviderInfoHandler;
+
+#[async_trait]
+impl CommandHandler for ProviderInfoHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let name = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /provider info <name>"))?;
+        let provider = context.services().provider().info(name)?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new(format!("Provider: {}", provider.name))
+                .section("Authentication", provider.authentication)
+                .section("API key", provider.api_key_display)
+                .section("Base URL", provider.base_url)
+                .section(
+                    "Expected environment variable",
+                    provider.expected_env_var.as_deref().unwrap_or("(none)"),
+                )
+                .section(
+                    "Request policy",
+                    format!(
+                        "{} retries · {} second timeout",
+                        provider.max_retries, provider.timeout_secs
+                    ),
+                ),
+        ))
+    }
+}
+
+struct ProviderRemoveHandler;
+
+#[async_trait]
+impl CommandHandler for ProviderRemoveHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let name = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /provider remove <name>"))?;
+        context.services().provider().remove(name)?;
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!("Provider `{name}` removed"),
         ))
     }
 }
@@ -308,6 +383,95 @@ fn register_provider_family(r: &mut crate::registry::CommandRegistry) {
         .build(),
     )
     .ok();
+
+    r.register(
+        CommandSpec::builder(
+            vec!["provider", "list"],
+            "List configured providers",
+            ProviderListHandler,
+        )
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["provider", "use"],
+            "Switch to a configured provider",
+            handler(|args| match args.first() {
+                Some(name) => Ok(CommandResult::effects([AppEffect::SetProvider(
+                    name.clone(),
+                )])),
+                None => Err(Error::invalid_input("usage: /provider use <name>")),
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Provider name")
+                .with_completer(CompletionSource::Provider),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["provider", "info"],
+            "Show provider configuration",
+            ProviderInfoHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Provider name")
+                .with_completer(CompletionSource::Provider),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["provider", "add"],
+            "Configure a provider with the secret-safe wizard",
+            handler(|_| Ok(CommandResult::overlay(OverlayKind::ProviderWizard))),
+        )
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["provider", "remove"],
+            "Remove a provider configuration",
+            ProviderRemoveHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Provider name")
+                .with_completer(CompletionSource::Provider),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["provider", "reload"],
+            "Reload provider configuration",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ReloadExtensions]))),
+        )
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
 }
 
 fn register_model_family(r: &mut crate::registry::CommandRegistry) {
@@ -427,6 +591,12 @@ mod tests {
             "load",
             "quit",
             "provider",
+            "provider list",
+            "provider use",
+            "provider info",
+            "provider add",
+            "provider remove",
+            "provider reload",
             "model",
             "mode",
             "mode plan",
@@ -503,6 +673,33 @@ mod tests {
             res,
             CommandResult::OpenOverlay(OverlayKind::ProviderPicker)
         ));
+    }
+
+    #[tokio::test]
+    async fn provider_list_uses_the_injected_application_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        let mut config = pleiades_agent_config::Config::default();
+        config.providers.insert(
+            "test-provider".to_string(),
+            pleiades_agent_config::ProviderConfig::default(),
+        );
+        services.loader().save_project(&config).unwrap();
+        let ctx = CommandContextBuilder::default().services(services).build();
+
+        let result = default_registry()
+            .dispatch("/provider list", &ctx, true)
+            .await
+            .unwrap();
+        let CommandResult::RenderDocument(document) = result else {
+            panic!("provider list should render a document");
+        };
+        assert!(document.sections.iter().any(|section| {
+            section.heading == "test-provider" && section.body.contains("Authentication")
+        }));
     }
 
     #[tokio::test]

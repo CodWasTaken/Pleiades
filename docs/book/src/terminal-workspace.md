@@ -41,8 +41,11 @@ executes provider or tool logic in the TUI.
 
 The currently implemented workspace commands include `/help`, `/status`,
 `/mode`, `/provider`, `/model`, `/files`, `/sessions`, `/load`, `/diff`,
-`/output`, `/doctor`, `/config`, `/clear`, `/save`, and `/quit`. Provider,
-model, and plugin management subcommands will expand during Release 2.1.
+`/output`, `/doctor`, `/config`, `/clear`, `/save`, and `/quit`. The provider
+family includes `list`, `use`, `info`, `add`, `remove`, and `reload`. Provider
+reports are obtained through the same application service used by the external
+CLI and always mask credentials. Connection/authentication commands, model
+management, and plugin management continue as separate Release 2.1 slices.
 
 ## Terminal compatibility
 

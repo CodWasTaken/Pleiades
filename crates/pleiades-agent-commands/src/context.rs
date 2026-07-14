@@ -8,6 +8,8 @@
 
 use std::sync::Arc;
 
+use pleiades_agent_services::ApplicationServices;
+
 /// Immutable snapshot of workspace state at command invocation time.
 #[derive(Debug, Clone)]
 pub struct CommandContext {
@@ -20,6 +22,7 @@ struct CommandContextInner {
     model: String,
     mode: String,
     interactive: bool,
+    services: ApplicationServices,
 }
 
 impl CommandContext {
@@ -35,6 +38,7 @@ impl CommandContext {
                 model: model.into(),
                 mode: mode.into(),
                 interactive: true,
+                services: ApplicationServices::new(),
             }),
         }
     }
@@ -54,6 +58,10 @@ impl CommandContext {
     pub fn is_interactive(&self) -> bool {
         self.inner.interactive
     }
+
+    pub fn services(&self) -> &ApplicationServices {
+        &self.inner.services
+    }
 }
 
 /// Builder for [`CommandContext`].  Used by the frontend when assembling the
@@ -64,6 +72,7 @@ pub struct CommandContextBuilder {
     model: Option<String>,
     mode: Option<String>,
     interactive: bool,
+    services: Option<ApplicationServices>,
 }
 
 impl CommandContextBuilder {
@@ -83,6 +92,10 @@ impl CommandContextBuilder {
         self.interactive = interactive;
         self
     }
+    pub fn services(mut self, services: ApplicationServices) -> Self {
+        self.services = Some(services);
+        self
+    }
     pub fn build(self) -> CommandContext {
         CommandContext {
             inner: Arc::new(CommandContextInner {
@@ -90,6 +103,7 @@ impl CommandContextBuilder {
                 model: self.model.unwrap_or_default(),
                 mode: self.mode.unwrap_or_else(|| "agent".to_string()),
                 interactive: self.interactive,
+                services: self.services.unwrap_or_default(),
             }),
         }
     }

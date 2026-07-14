@@ -24,3 +24,9 @@ pleiades doctor
 Subscription mode intentionally does not import OAuth tokens into Pleiades. Codex performs autonomous agent work in the launch directory and streams command and file activity back to the Pleiades interface. The default `workspace-write` sandbox permits writes only within that workspace; use `/mode plan` for read-only work. Model selection remains delegated to Codex when `codex-default` is configured.
 
 Use `provider list`, `provider info NAME`, and `provider test NAME`. Model discovery and aliases are managed with `model discover`, `model list`, `model alias ALIAS MODEL`, and `model set-default MODEL`. Global `--provider` and `--model` flags override configuration for a command.
+
+Inside the live workspace, `/provider list`, `/provider info NAME`,
+`/provider use NAME`, `/provider remove NAME`, and `/provider reload` use the
+shared provider service. `/provider add` opens the provider-wizard flow. The
+registry generates help and nested completion for these commands, and provider
+documents never contain resolved credential values.
