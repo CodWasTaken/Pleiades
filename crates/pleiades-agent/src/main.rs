@@ -838,128 +838,26 @@ fn handle_provider_remove(loader: &ConfigLoader, name: &str) {
 }
 
 fn handle_provider_test(loader: &ConfigLoader, name: &str, model: Option<String>) {
-    let config = match loader.load_with_interpolation() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error loading config: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    let pc = match config.providers.get(name) {
-        Some(p) => p,
-        None => {
-            eprintln!("Provider '{}' not found in config", name);
-            std::process::exit(1);
-        }
-    };
-
-    let api_key = if name == "openai-subscription" {
-        String::new()
-    } else {
-        match pc.api_key.as_deref() {
-            Some(k) if !k.is_empty() => k.to_string(),
-            _ => {
-                eprintln!("No API key configured for '{}'", name);
-                std::process::exit(1);
-            }
-        }
-    };
-    let base_url = pc.base_url.clone().unwrap_or_default();
-
-    let provider: Box<dyn pleiades_agent_core::Provider> = match name {
-        "openai-subscription" => Box::new(pleiades_agent_providers::codex::CodexCliProvider::new()),
-        "anthropic" => {
-            if base_url.is_empty() {
-                Box::new(pleiades_agent_providers::anthropic::AnthropicProvider::new(
-                    api_key,
-                ))
-            } else {
-                Box::new(
-                    pleiades_agent_providers::anthropic::AnthropicProvider::with_base_url(
-                        api_key, base_url,
-                    ),
-                )
-            }
-        }
-        "openai" => {
-            if base_url.is_empty() {
-                Box::new(pleiades_agent_providers::openai::OpenAIProvider::new(
-                    api_key,
-                ))
-            } else {
-                Box::new(
-                    pleiades_agent_providers::openai::OpenAIProvider::with_base_url(
-                        api_key, base_url,
-                    ),
-                )
-            }
-        }
-        _ => {
-            let display = name;
-            let model_name = model.clone().unwrap_or_else(|| "gpt-4o".to_string());
-            Box::new(
-                pleiades_agent_providers::openai_compat::OpenAICompatibleProvider::new(
-                    name, display, api_key, base_url, model_name,
-                ),
-            )
-        }
-    };
-
-    let model_name = model
-        .clone()
-        .unwrap_or_else(|| provider.default_model().to_string());
-    println!("Testing provider '{}' with model '{}'...", name, model_name);
-
-    let rt = match tokio::runtime::Runtime::new() {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Failed to create runtime: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    rt.block_on(async {
-        match provider
-            .chat_stream(pleiades_agent_core::provider::ChatRequest {
-                model: model_name,
-                messages: vec![pleiades_agent_core::conversation::Message::user(
-                    "Respond with exactly: Hello from Pleiades!",
-                )],
-                system_prompt: None,
-                temperature: Some(0.0),
-                top_p: None,
-                max_tokens: Some(50),
-                stop: None,
-                tools: None,
-            })
-            .await
-        {
-            Ok(mut rx) => {
-                println!("  Connection successful! Response:");
-                print!("  ");
-                while let Some(event) = rx.recv().await {
-                    match event {
-                        pleiades_agent_core::provider::StreamEvent::Token(t) => print!("{}", t),
-                        pleiades_agent_core::provider::StreamEvent::Done { .. } => {
-                            println!();
-                            println!("  ✓ Streaming works");
-                            break;
-                        }
-                        pleiades_agent_core::provider::StreamEvent::Error { message, .. } => {
-                            eprintln!("\n  ✗ Stream error: {}", message);
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("  ✗ Connection failed: {}", e);
-                std::process::exit(1);
-            }
-        }
+    let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    );
+    let runtime = tokio::runtime::Runtime::new().unwrap_or_else(|error| {
+        eprintln!("Failed to create runtime: {error}");
+        std::process::exit(1);
     });
+    let report = runtime
+        .block_on(services.provider().test(name, model.as_deref()))
+        .unwrap_or_else(|error| {
+            eprintln!("Connection failed: {error}");
+            std::process::exit(1);
+        });
+    println!(
+        "Provider '{}' connected with model '{}'.",
+        report.provider, report.model
+    );
+    println!("  {}", report.response);
+    println!("  ✓ Streaming completed ({})", report.finish_reason);
 }
 
 fn handle_model_list(

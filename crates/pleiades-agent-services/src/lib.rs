@@ -4,13 +4,15 @@
 //! Ratatui widgets, or parse Clap arguments. The CLI and live workspace can
 //! therefore present the same operation without duplicating business logic.
 
+mod models;
 mod plugins;
 mod providers;
 
 use std::path::PathBuf;
 
+pub use models::{ModelDiscoveryReport, ModelProviderResult, ModelService};
 pub use plugins::{PluginReport, PluginService};
-pub use providers::{ProviderFactory, ProviderReport, ProviderService};
+pub use providers::{ProviderFactory, ProviderReport, ProviderService, ProviderTestReport};
 
 /// Root service container shared by headless and interactive frontends.
 #[derive(Debug, Clone)]
@@ -45,6 +47,10 @@ impl ApplicationServices {
 
     pub fn plugin(&self) -> PluginService {
         PluginService::new(self.global_config_dir.clone())
+    }
+
+    pub fn model(&self) -> ModelService {
+        ModelService::new(self.loader())
     }
 
     pub fn loader(&self) -> pleiades_agent_config::ConfigLoader {

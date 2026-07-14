@@ -12,6 +12,8 @@ pleiades-agent-config = { path = "../pleiades-agent-config", version = "2.0.0" }
 pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
 pleiades-agent-plugins = { path = "../pleiades-agent-plugins", version = "2.0.0" }
 pleiades-agent-providers = { path = "../pleiades-agent-providers", version = "2.0.0" }
+tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
 tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt"] }
