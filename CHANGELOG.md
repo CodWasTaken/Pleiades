@@ -21,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   reasoning effort are persisted without expanding provider secrets.
 - Added service-backed `/plugins list`, `/plugins info`, `/plugins install`,
   `/plugins uninstall`, `/plugins enable`, `/plugins disable`,
-  `/plugins permissions`, and `/plugins reload` commands with structured
-  executable-hook/tool permission reporting.
+  `/plugins update`, `/plugins permissions`, and `/plugins reload` commands
+  with structured executable-hook/tool permission reporting. External plugin
+  updates validate staged content before replacing the installed copy and
+  preserve the plugin's enable state.
 
 ### Fixed
 

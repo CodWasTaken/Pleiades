@@ -373,6 +373,12 @@ enum PluginCommand {
     /// List installed and discoverable plugins
     List,
 
+    /// Show plugin details and requested permissions
+    Info {
+        /// Plugin ID
+        id: String,
+    },
+
     /// Install a plugin from a directory
     Install {
         /// Path to the plugin directory
@@ -393,6 +399,12 @@ enum PluginCommand {
 
     /// Disable a plugin
     Disable {
+        /// Plugin ID
+        id: String,
+    },
+
+    /// Update an external plugin from its original local source
+    Update {
         /// Plugin ID
         id: String,
     },
@@ -1622,6 +1634,34 @@ fn handle_plugin_list(loader: &ConfigLoader) {
     }
 }
 
+fn handle_plugin_info(loader: &ConfigLoader, id: &str) {
+    match plugin_service(loader).info(id) {
+        Ok(plugin) => {
+            println!("Plugin: {}", plugin.name);
+            println!("  ID:          {}", plugin.id);
+            println!("  Version:     {}", plugin.version);
+            println!("  Kind:        {}", plugin.kind);
+            println!("  Enabled:     {}", plugin.enabled);
+            println!("  Source:      {}", plugin.source);
+            println!("  Description: {}", plugin.description);
+            println!("  Tools:       {}", plugin.tool_count);
+            println!("  Hooks:       {}", plugin.has_hooks);
+            println!(
+                "  Permissions: {}",
+                if plugin.permissions.is_empty() {
+                    "none".to_string()
+                } else {
+                    plugin.permissions.join(", ")
+                }
+            );
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn handle_plugin_install(loader: &ConfigLoader, path: &str) {
     match plugin_service(loader).install(path) {
         Ok(outcome) => {
@@ -1662,6 +1702,19 @@ fn handle_plugin_disable(loader: &ConfigLoader, id: &str) {
         Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin disabled: {}", id),
         Err(e) => {
             eprintln!("\x1b[1;31m✗\x1b[0m Disable failed: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_plugin_update(loader: &ConfigLoader, id: &str) {
+    match plugin_service(loader).update(id) {
+        Ok(outcome) => println!(
+            "\x1b[1;32m✓\x1b[0m Plugin updated: {} v{} -> v{}",
+            outcome.id, outcome.old_version, outcome.new_version
+        ),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Update failed: {error}");
             std::process::exit(1);
         }
     }
@@ -2405,10 +2458,12 @@ fn main() {
         },
         Some(Commands::Plugin(cmd)) => match cmd {
             PluginCommand::List => handle_plugin_list(&loader),
+            PluginCommand::Info { id } => handle_plugin_info(&loader, &id),
             PluginCommand::Install { path } => handle_plugin_install(&loader, &path),
             PluginCommand::Uninstall { id } => handle_plugin_uninstall(&loader, &id),
             PluginCommand::Enable { id } => handle_plugin_enable(&loader, &id),
             PluginCommand::Disable { id } => handle_plugin_disable(&loader, &id),
+            PluginCommand::Update { id } => handle_plugin_update(&loader, &id),
         },
         Some(Commands::Prompt(cmd)) => match cmd {
             PromptCommand::List => handle_prompt_list(),

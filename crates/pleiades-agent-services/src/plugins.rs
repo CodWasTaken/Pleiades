@@ -26,6 +26,14 @@ pub struct PluginInstallReport {
     pub install_path: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginUpdateReport {
+    pub id: String,
+    pub old_version: String,
+    pub new_version: String,
+    pub install_path: PathBuf,
+}
+
 pub struct PluginService {
     config_home: PathBuf,
 }
@@ -103,6 +111,18 @@ impl PluginService {
         PluginManager::new(&self.config_home)
             .disable(id)
             .map_err(|error| Error::plugin(error.to_string()))
+    }
+
+    pub fn update(&self, id: &str) -> Result<PluginUpdateReport, Error> {
+        let outcome = PluginManager::new(&self.config_home)
+            .update(id)
+            .map_err(|error| Error::plugin(error.to_string()))?;
+        Ok(PluginUpdateReport {
+            id: outcome.plugin_id,
+            old_version: outcome.old_version,
+            new_version: outcome.new_version,
+            install_path: outcome.install_path,
+        })
     }
 }
 
