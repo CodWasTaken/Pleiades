@@ -53,7 +53,8 @@ impl Repl {
     pub fn with_permission_mode(mut self, mode: Option<&str>) -> Self {
         self.sandbox_mode = match mode {
             Some("plan" | "read-only" | "readonly") => "read-only",
-            Some("unrestricted" | "danger-full-access") => "danger-full-access",
+            Some("yolo" | "unrestricted" | "danger-full-access") => "danger-full-access",
+            Some("auto") => "workspace-write",
             _ => "workspace-write",
         }
         .to_string();

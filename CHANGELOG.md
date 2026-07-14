@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Split runtime access control into typed `ApprovalPolicy` and
+  `SandboxPolicy` values, and added `auto` and `yolo` mode presets. Auto runs
+  without prompts inside the workspace; YOLO is the explicit full-host preset.
+  See `docs/adr/0003-approval-and-sandbox-policies.md`.
+
 - Added service-backed `/provider list`, `/provider use`, `/provider info`,
   `/provider add`, `/provider remove`, and `/provider reload` workspace
   commands with nested completion, structured documents, permission metadata,

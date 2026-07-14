@@ -275,7 +275,7 @@ mod tests {
                 .unwrap()
                 .with_permission_mode("unrestricted")
                 .mode,
-            AgentMode::Unrestricted
+            AgentMode::Yolo
         );
     }
 }

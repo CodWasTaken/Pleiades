@@ -1,0 +1,26 @@
+---
+source: crates/pleiades-agent-tui/src/ui.rs
+expression: snapshot
+---
+╭ Seven Sisters ───────────────────────────────────────────────────────────────╮
+│ ✦ PLEIADES openai-subscription / codex-default   pleiades   agent   ready    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭ Convers╭ YOLO warning ──────────────────────────────────────────────╮────────╮
+│        │× FULL HOST ACCESS                                          │        │
+│  ✦ Desc│                                                            │        │
+│  Pleiad│YOLO disables approval prompts and removes the workspace    │        │
+│        │boundary.                                                   │        │
+│        │Commands and file mutations can affect any data your user   │        │
+│        │can access.                                                 │        │
+│        │This activation lasts for the current session only.         │        │
+╰────────│                                                            │────────╯
+╭ Activit│Type YOLO to continue  YO                                   │────────╮
+│ · No ac│Enter confirm  ·  Esc cancel                                │        │
+│        │                                                            │        │
+╰────────│                                                            │────────╯
+╭ Ask Ple│                                                            │────────╮
+│        │                                                            │        │
+│        ╰────────────────────────────────────────────────────────────╯        │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+ agent ⋆  no-git  — tokens  00:00  idle   Ctrl+P palette  F1 help  Ctrl+C cancel

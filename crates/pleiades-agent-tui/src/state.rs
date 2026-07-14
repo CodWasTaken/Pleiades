@@ -39,6 +39,9 @@ pub enum Overlay {
         query: String,
     },
     Permission(PermissionRequest),
+    YoloWarning {
+        confirmation: String,
+    },
     Diff,
     ToolOutput {
         activity_id: String,
@@ -446,6 +449,22 @@ impl AppState {
                     })];
                 }
             }
+            Overlay::YoloWarning { mut confirmation } => {
+                match key.code {
+                    KeyCode::Enter if confirmation == "YOLO" => {
+                        self.overlay = None;
+                        return vec![Effect::Command(AgentCommand::SetMode(AgentMode::Yolo))];
+                    }
+                    KeyCode::Backspace => {
+                        confirmation.pop();
+                    }
+                    KeyCode::Char(character) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        confirmation.push(character);
+                    }
+                    _ => {}
+                }
+                self.overlay = Some(Overlay::YoloWarning { confirmation });
+            }
             Overlay::Help { mut query } => {
                 update_query(&mut query, key);
                 self.overlay = Some(Overlay::Help { query });
@@ -735,6 +754,9 @@ impl AppState {
                 self.open_picker(PickerKind::Model);
                 return;
             }
+            OverlayKind::YoloWarning => Some(Overlay::YoloWarning {
+                confirmation: String::new(),
+            }),
             unsupported => {
                 self.status = format!("Overlay {unsupported:?} is not available in this release");
                 None
@@ -867,6 +889,7 @@ fn update_query(query: &mut String, key: KeyEvent) {
 mod tests {
     use super::{AppState, Effect, Overlay};
     use crate::theme::Theme;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use pleiades_agent_commands::{Notification, NotificationLevel, RenderableDocument};
     use pleiades_agent_engine::{AgentCommand, AgentEvent, AgentMode, OverlayKind};
     use std::path::PathBuf;
@@ -960,5 +983,41 @@ mod tests {
 
         state.apply_agent(AgentEvent::ShuttingDown);
         assert!(state.quit_requested);
+    }
+
+    #[test]
+    fn yolo_requires_exact_typed_confirmation() {
+        let mut state = state();
+        state.apply_agent(AgentEvent::OpenOverlay(OverlayKind::YoloWarning));
+        for character in "yolo".chars() {
+            let overlay = state.overlay.take().unwrap();
+            let effects = state.handle_overlay_key(
+                overlay,
+                KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+            );
+            assert!(effects.is_empty());
+        }
+        let overlay = state.overlay.take().unwrap();
+        assert!(
+            state
+                .handle_overlay_key(overlay, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),)
+                .is_empty()
+        );
+
+        state.apply_agent(AgentEvent::OpenOverlay(OverlayKind::YoloWarning));
+        for character in "YOLO".chars() {
+            let overlay = state.overlay.take().unwrap();
+            state.handle_overlay_key(
+                overlay,
+                KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+            );
+        }
+        let overlay = state.overlay.take().unwrap();
+        let effects =
+            state.handle_overlay_key(overlay, KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::Command(AgentCommand::SetMode(AgentMode::Yolo))]
+        ));
     }
 }

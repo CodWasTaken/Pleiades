@@ -68,7 +68,7 @@ Commands:
 Options:
   -m, --model <MODEL>                      Model to use
   -P, --provider <PROVIDER>                Provider to use
-      --permission-mode <PERMISSION_MODE>  Agent mode: plan, agent, or unrestricted
+      --permission-mode <PERMISSION_MODE>  Agent mode: plan, agent, auto, or yolo
   -v, --verbose                            Verbose output
   -h, --help                               Print help
 "###);
