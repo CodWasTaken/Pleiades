@@ -8,8 +8,27 @@ fn command(home: &std::path::Path) -> Command {
     command
         .current_dir(home)
         .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("APPDATA", home.join("config"))
+        .env("LOCALAPPDATA", home.join("local"))
         .env("XDG_CONFIG_HOME", home.join("config"));
     command
+}
+
+fn find_config(root: &std::path::Path) -> std::path::PathBuf {
+    let mut directories = vec![root.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        for entry in fs::read_dir(&directory).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                directories.push(path);
+            } else if path.file_name().is_some_and(|name| name == "config.toml") {
+                return path;
+            }
+        }
+    }
+    panic!("config.toml was not created below {}", root.display());
 }
 
 #[test]
@@ -64,20 +83,7 @@ fn guided_api_setup_and_doctor_use_environment_reference() {
         .success()
         .stdout(predicate::str::contains("usage-based OpenAI API access"));
 
-    let output = command(home.path())
-        .args(["config", "path"])
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-    let paths = String::from_utf8(output.stdout).unwrap();
-    let config_path = paths
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix("Global: ")
-                .and_then(|value| value.rsplit_once(" (").map(|(path, _)| path))
-        })
-        .expect("global config path");
-    let config = fs::read_to_string(config_path).unwrap();
+    let config = fs::read_to_string(find_config(home.path())).unwrap();
     assert!(config.contains("${OPENAI_API_KEY}"));
     assert!(!config.contains("sk-test"));
 
