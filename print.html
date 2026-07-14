@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6dccb53d.js";
+            window.path_to_searchindex_js = "searchindex-8a7d1718.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -400,8 +400,13 @@ the same service operation and only report success after the provider stream
 emits a completion event. Model discovery and mutations are also available in
 the workspace through <code>/model list [PROVIDER] [SEARCH]</code>, <code>/model info NAME</code>,
 <code>/model discover</code>, <code>/model use NAME</code>, <code>/model alias ALIAS MODEL</code>, and
-<code>/model unalias ALIAS</code>. Model configuration writes preserve environment
-variable references instead of persisting resolved credentials.</p>
+<code>/model unalias ALIAS</code>. Use <code>/model favorite NAME</code> to toggle a favorite,
+<code>/model favorites</code> to inspect preferences, and <code>/model reasoning LEVEL</code> to
+select <code>minimal</code>, <code>low</code>, <code>medium</code>, or <code>high</code> reasoning effort for adapters that
+support it. The same operations are available as <code>pleiades model favorite</code>,
+<code>pleiades model favorites</code>, and <code>pleiades model reasoning</code>. Model configuration
+writes preserve environment variable references instead of persisting resolved
+credentials.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tools-and-permissions"><a class="header" href="#tools-and-permissions">Tools and permissions</a></h1>
 <p>The built-in tools are read, write, edit, bash, glob, grep, diff, search, and fetch. Inspect them with <code>pleiades tool list</code> and <code>pleiades tool info NAME</code>.</p>
