@@ -1,6 +1,6 @@
 //! Command descriptor types.
 //!
-//! A [`CommandSpec`] is a pure description of a user-invokable command.  It
+//! A [`CommandSpec`] is a pure description of a user-invocable command.  It
 //! carries the human-facing metadata (path, aliases, description, usage,
 //! examples, category) and machine-facing metadata (availability,
 //! permission requirement, shortcut, argument completers), plus an

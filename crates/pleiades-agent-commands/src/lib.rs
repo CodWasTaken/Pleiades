@@ -1,6 +1,6 @@
 //! Pleiades command registry and application command surface.
 //!
-//! This crate is the single source of truth for every user-invokable command
+//! This crate is the single source of truth for every user-invocable command
 //! in Pleiades: slash commands in the live workspace, clap subcommands in the
 //! CLI, entries in the command palette, help overlays, and autocomplete
 //! suggestions.  Plugins, MCP servers, and custom user command files all

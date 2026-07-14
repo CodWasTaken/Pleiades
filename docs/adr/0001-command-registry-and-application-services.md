@@ -36,7 +36,7 @@ home; they would have to be patched into one of the above three lists.
 ## Decision
 
 Introduce a new crate, **`pleiades-agent-commands`**, as the single source of
-truth for every user-invokable command in Pleiades. The crate exports:
+truth for every user-invocable command in Pleiades. The crate exports:
 
 - `CommandSpec` — pure descriptor (path, aliases, description, usage, examples,
   category, availability, permission, arguments, shortcut, handler).
