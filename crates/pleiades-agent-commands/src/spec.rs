@@ -4,7 +4,7 @@
 //! carries the human-facing metadata (path, aliases, description, usage,
 //! examples, category) and machine-facing metadata (availability,
 //! permission requirement, shortcut, argument completers), plus an
-//! [`CommandHandler`] responsible for producing a typed [`CommandResult`].
+//! [`CommandHandler`] responsible for producing a typed [`crate::CommandResult`].
 //!
 //! Specs are intentionally owned structures rather than `&'static` constants
 //! so that plugin-provided and user-defined commands can be constructed at

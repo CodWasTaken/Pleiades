@@ -1,6 +1,6 @@
 //! Default builtin commands shipped with the live workspace.
 //!
-//! This module seeds a [`CommandRegistry`] with the slash commands the live
+//! This module seeds a [`crate::CommandRegistry`] with the slash commands the live
 //! workspace already understands today (see
 //! `crates/pleiades-agent-tui/src/state.rs`), plus a handful of CLI/twin
 //! commands described in the directive.  Adding a new builtin command is a
@@ -23,7 +23,7 @@ use crate::spec::{
     PermissionRequirement, Shortcut,
 };
 
-/// Sync function backed by an [`async_trait`] adapter, so handlers are
+/// Sync function backed by an `async_trait` adapter, so handlers are
 /// ergonomic.  `F` receives the positional `args` and returns a typed
 /// result or an [`Error`].
 struct FnHandler<F>
@@ -64,7 +64,7 @@ impl CommandHandler for StatusHandler {
     }
 }
 
-/// Build and populate a fresh [`CommandRegistry`] with the default live
+/// Build and populate a fresh [`crate::CommandRegistry`] with the default live
 /// workspace commands and return it.
 ///
 /// Every command registered here corresponds to a current behaviour in

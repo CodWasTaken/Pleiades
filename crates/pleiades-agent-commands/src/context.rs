@@ -1,4 +1,4 @@
-//! Invocation context handed to every [`CommandHandler`].
+//! Invocation context handed to every [`crate::CommandHandler`].
 //!
 //! A [`CommandContext`] is an immutable snapshot of the workspace state at
 //! the moment the command was invoked.  Handlers must never reach across
