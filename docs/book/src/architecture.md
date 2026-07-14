@@ -37,6 +37,8 @@ Provider streams normalize text, reasoning summaries, tool calls, provider-manag
 - `pleiades-agent-config` — layered configuration and environment interpolation.
 - `pleiades-agent-commands` — command specifications, parsing, discovery,
   autocomplete, help generation, and typed command results.
+- `pleiades-agent-services` — terminal-independent provider, model, plugin,
+  configuration, and extension operations shared by CLI and live commands.
 - `pleiades-agent-engine` — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.
 - `pleiades-agent-tui` — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.
 - `pleiades-agent-providers` — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.
