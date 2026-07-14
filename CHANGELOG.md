@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added a shared streamed provider connectivity test used by both
   `pleiades provider test` and `/provider test`, plus a provider-independent
   model service and `/model list`, `/model use`, `/model info`,
-  `/model discover`, `/model alias`, and `/model unalias` commands.
+  `/model discover`, `/model alias`, `/model unalias`, `/model favorite`,
+  `/model favorites`, and `/model reasoning` commands. Favorites and validated
+  reasoning effort are persisted without expanding provider secrets.
 - Added service-backed `/plugins list`, `/plugins info`, `/plugins install`,
   `/plugins uninstall`, `/plugins enable`, `/plugins disable`,
   `/plugins permissions`, and `/plugins reload` commands with structured

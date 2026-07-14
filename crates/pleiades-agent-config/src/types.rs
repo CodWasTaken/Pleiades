@@ -132,6 +132,11 @@ pub struct ModelsConfig {
     pub aliases: HashMap<String, String>,
     /// Default model override.
     pub default: Option<String>,
+    /// Models pinned by the user for quick selection.
+    #[serde(default)]
+    pub favorites: Vec<String>,
+    /// Preferred reasoning effort for providers that support it.
+    pub reasoning: Option<String>,
 }
 
 /// Plugin configuration.

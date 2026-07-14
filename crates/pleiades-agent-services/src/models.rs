@@ -18,6 +18,13 @@ pub struct ModelDiscoveryReport {
     pub providers: Vec<ModelProviderResult>,
 }
 
+/// Persisted model-selection preferences shared by every frontend.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelPreferences {
+    pub favorites: Vec<String>,
+    pub reasoning: Option<String>,
+}
+
 /// Shared model discovery and configuration operations.
 pub struct ModelService {
     loader: ConfigLoader,
@@ -125,6 +132,48 @@ impl ModelService {
         }
         self.loader.save_project(&config).map_err(Error::config)
     }
+
+    pub fn favorite(&self, model: &str) -> Result<bool, Error> {
+        if model.trim().is_empty() {
+            return Err(Error::invalid_input("model identifier cannot be empty"));
+        }
+        let mut config = self.loader.load().map_err(Error::config)?;
+        let added = if let Some(index) = config
+            .models
+            .favorites
+            .iter()
+            .position(|favorite| favorite == model)
+        {
+            config.models.favorites.remove(index);
+            false
+        } else {
+            config.models.favorites.push(model.to_string());
+            config.models.favorites.sort();
+            true
+        };
+        self.loader.save_project(&config).map_err(Error::config)?;
+        Ok(added)
+    }
+
+    pub fn preferences(&self) -> Result<ModelPreferences, Error> {
+        let config = self.loader.load().map_err(Error::config)?;
+        Ok(ModelPreferences {
+            favorites: config.models.favorites,
+            reasoning: config.models.reasoning,
+        })
+    }
+
+    pub fn set_reasoning(&self, level: &str) -> Result<(), Error> {
+        let normalized = level.trim().to_ascii_lowercase();
+        if !matches!(normalized.as_str(), "minimal" | "low" | "medium" | "high") {
+            return Err(Error::invalid_input(
+                "reasoning level must be one of: minimal, low, medium, high",
+            ));
+        }
+        let mut config = self.loader.load().map_err(Error::config)?;
+        config.models.reasoning = Some(normalized);
+        self.loader.save_project(&config).map_err(Error::config)
+    }
 }
 
 #[cfg(test)]
@@ -155,5 +204,26 @@ mod tests {
         let stored = std::fs::read_to_string(temp.path().join("project/config.toml")).unwrap();
         assert!(stored.contains("${OPENAI_API_KEY}"));
         assert!(stored.contains("gpt-test"));
+    }
+
+    #[test]
+    fn favorites_toggle_and_reasoning_is_validated() {
+        let temp = tempfile::tempdir().unwrap();
+        let loader = pleiades_agent_config::ConfigLoader::with_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        let service = ModelService::new(loader);
+
+        assert!(service.favorite("gpt-test").unwrap());
+        assert_eq!(service.preferences().unwrap().favorites, ["gpt-test"]);
+        assert!(!service.favorite("gpt-test").unwrap());
+        assert!(service.preferences().unwrap().favorites.is_empty());
+        service.set_reasoning("HIGH").unwrap();
+        assert_eq!(
+            service.preferences().unwrap().reasoning.as_deref(),
+            Some("high")
+        );
+        assert!(service.set_reasoning("unbounded").is_err());
     }
 }

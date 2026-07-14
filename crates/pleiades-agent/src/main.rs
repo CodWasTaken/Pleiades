@@ -296,6 +296,21 @@ enum ModelCommand {
         alias: String,
     },
 
+    /// Add or remove a model from favorites
+    Favorite {
+        /// Model identifier
+        name: String,
+    },
+
+    /// Show favorite models and reasoning preference
+    Favorites,
+
+    /// Set preferred reasoning effort
+    Reasoning {
+        /// One of minimal, low, medium, or high
+        level: String,
+    },
+
     /// Discover models from configured providers
     Discover,
 }
@@ -1113,6 +1128,61 @@ fn handle_model_unalias(loader: &ConfigLoader, alias: &str) {
     match loader.save_project(&config) {
         Ok(_) => println!("Alias '{}' removed", alias),
         Err(e) => eprintln!("Error saving config: {}", e),
+    }
+}
+
+fn model_service(loader: &ConfigLoader) -> pleiades_agent_services::ModelService {
+    pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    )
+    .model()
+}
+
+fn handle_model_favorite(loader: &ConfigLoader, model: &str) {
+    match model_service(loader).favorite(model) {
+        Ok(true) => println!("Model '{}' added to favorites", model),
+        Ok(false) => println!("Model '{}' removed from favorites", model),
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_model_favorites(loader: &ConfigLoader) {
+    match model_service(loader).preferences() {
+        Ok(preferences) => {
+            if preferences.favorites.is_empty() {
+                println!("No favorite models.");
+            } else {
+                println!("Favorite models:");
+                for model in preferences.favorites {
+                    println!("  {model}");
+                }
+            }
+            println!(
+                "Reasoning effort: {}",
+                preferences
+                    .reasoning
+                    .as_deref()
+                    .unwrap_or("provider default")
+            );
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_model_reasoning(loader: &ConfigLoader, level: &str) {
+    match model_service(loader).set_reasoning(level) {
+        Ok(()) => println!("Reasoning effort set to '{}'", level.to_ascii_lowercase()),
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -2315,6 +2385,9 @@ fn main() {
             ModelCommand::Alias { alias, model } => handle_model_alias(&loader, &alias, &model),
             ModelCommand::Unalias { alias } => handle_model_unalias(&loader, &alias),
             ModelCommand::Discover => handle_model_discover(&loader),
+            ModelCommand::Favorite { name } => handle_model_favorite(&loader, &name),
+            ModelCommand::Favorites => handle_model_favorites(&loader),
+            ModelCommand::Reasoning { level } => handle_model_reasoning(&loader, &level),
         },
         Some(Commands::Session(cmd)) => match cmd {
             SessionCommand::List => handle_session_list(&loader),

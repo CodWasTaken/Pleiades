@@ -10,7 +10,7 @@ mod providers;
 
 use std::path::PathBuf;
 
-pub use models::{ModelDiscoveryReport, ModelProviderResult, ModelService};
+pub use models::{ModelDiscoveryReport, ModelPreferences, ModelProviderResult, ModelService};
 pub use plugins::{PluginInstallReport, PluginReport, PluginService};
 pub use providers::{ProviderFactory, ProviderReport, ProviderService, ProviderTestReport};
 
