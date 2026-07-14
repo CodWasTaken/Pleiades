@@ -19,6 +19,9 @@ pub struct InstalledPluginRecord {
     pub version: String,
     pub description: String,
     pub install_path: PathBuf,
+    /// Original local source used for future updates. Older registries omit it.
+    #[serde(default)]
+    pub source_path: Option<PathBuf>,
     pub installed_at_unix_ms: u128,
     pub updated_at_unix_ms: u128,
 }
@@ -88,6 +91,7 @@ impl PluginManager {
             )));
         }
 
+        let source_path = source_path.canonicalize()?;
         let manifest = crate::manifest::PluginManifest::load_from_directory(&source_path)?;
         let plugin_id = format!("{}-external", manifest.name);
         let install_path = self.install_root().join(&plugin_id);
@@ -106,6 +110,7 @@ impl PluginManager {
             version: manifest.version.clone(),
             description: manifest.description,
             install_path: install_path.clone(),
+            source_path: Some(source_path),
             installed_at_unix_ms: now,
             updated_at_unix_ms: now,
         };
@@ -120,6 +125,80 @@ impl PluginManager {
             plugin_id,
             version: manifest.version,
             install_path,
+        })
+    }
+
+    /// Refresh an external plugin from the source used during installation.
+    /// New content is validated in a staging directory before replacing the
+    /// installed copy, so a malformed update leaves the active plugin intact.
+    pub fn update(&mut self, plugin_id: &str) -> Result<UpdateOutcome, PluginError> {
+        let mut registry = self.load_registry()?;
+        let record = registry.plugins.get(plugin_id).cloned().ok_or_else(|| {
+            PluginError::NotFound(format!("plugin `{plugin_id}` is not installed"))
+        })?;
+        if record.kind != PluginKind::External {
+            return Err(PluginError::CommandFailed(format!(
+                "plugin `{plugin_id}` is not external and cannot be updated"
+            )));
+        }
+        let source = record.source_path.as_ref().ok_or_else(|| {
+            PluginError::CommandFailed(format!(
+                "plugin `{plugin_id}` predates source tracking; reinstall it before updating"
+            ))
+        })?;
+        if !source.is_dir() {
+            return Err(PluginError::NotFound(format!(
+                "plugin source `{}` is not a valid directory",
+                source.display()
+            )));
+        }
+
+        let manifest = crate::manifest::PluginManifest::load_from_directory(source)?;
+        let expected_id = format!("{}-external", manifest.name);
+        if expected_id != plugin_id {
+            return Err(PluginError::CommandFailed(format!(
+                "updated manifest resolves to `{expected_id}`, expected `{plugin_id}`"
+            )));
+        }
+
+        let staging = record.install_path.with_extension("update-staging");
+        let backup = record.install_path.with_extension("update-backup");
+        remove_dir_if_exists(&staging)?;
+        remove_dir_if_exists(&backup)?;
+        std::fs::create_dir_all(&staging)?;
+        if let Err(error) = copy_dir_recursive(source, &staging).and_then(|_| {
+            crate::manifest::PluginManifest::load_from_directory(&staging)
+                .map(|_| ())
+                .map_err(plugin_error_to_io)
+        }) {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(PluginError::Io(error));
+        }
+
+        std::fs::rename(&record.install_path, &backup)?;
+        if let Err(error) = std::fs::rename(&staging, &record.install_path) {
+            let _ = std::fs::rename(&backup, &record.install_path);
+            return Err(PluginError::Io(error));
+        }
+
+        let mut updated = record.clone();
+        updated.name = manifest.name;
+        updated.version = manifest.version.clone();
+        updated.description = manifest.description;
+        updated.updated_at_unix_ms = unix_ms();
+        registry.plugins.insert(plugin_id.to_string(), updated);
+        if let Err(error) = self.store_registry(&registry) {
+            let _ = std::fs::remove_dir_all(&record.install_path);
+            let _ = std::fs::rename(&backup, &record.install_path);
+            return Err(error);
+        }
+        remove_dir_if_exists(&backup)?;
+
+        Ok(UpdateOutcome {
+            plugin_id: plugin_id.to_string(),
+            old_version: record.version,
+            new_version: manifest.version,
+            install_path: record.install_path,
         })
     }
 
@@ -320,6 +399,18 @@ impl PluginManager {
     }
 }
 
+fn plugin_error_to_io(error: PluginError) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
+}
+
+fn remove_dir_if_exists(path: &Path) -> Result<(), std::io::Error> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), std::io::Error> {
     for entry in walkdir::WalkDir::new(src).min_depth(1) {
         let entry = entry?;
@@ -399,6 +490,63 @@ mod tests {
         let p = plugin.unwrap();
         assert_eq!(p.name, "my-plugin");
         assert!(p.enabled);
+    }
+
+    #[test]
+    fn update_replaces_valid_content_and_preserves_enabled_state() {
+        let tmp = TempDir::new().unwrap();
+        let config_home = tmp.path().join("config");
+        write_test_plugin(tmp.path(), "updated-plugin", Some(true));
+        let source = tmp.path().join("updated-plugin");
+        let mut manager = PluginManager::new(&config_home);
+        let installed = manager.install(source.to_str().unwrap()).unwrap();
+        manager.disable(&installed.plugin_id).unwrap();
+
+        let manifest_path = source.join(".pleiades-plugin/plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let outcome = manager.update(&installed.plugin_id).unwrap();
+        assert_eq!(outcome.old_version, "1.0.0");
+        assert_eq!(outcome.new_version, "2.0.0");
+        let plugin = manager
+            .plugin_registry()
+            .unwrap()
+            .plugins()
+            .iter()
+            .find(|plugin| plugin.metadata().id == installed.plugin_id)
+            .unwrap()
+            .clone();
+        assert_eq!(plugin.metadata().version, "2.0.0");
+        assert!(!plugin.enabled);
+    }
+
+    #[test]
+    fn invalid_update_keeps_installed_content() {
+        let tmp = TempDir::new().unwrap();
+        let config_home = tmp.path().join("config");
+        write_test_plugin(tmp.path(), "safe-plugin", Some(true));
+        let source = tmp.path().join("safe-plugin");
+        let mut manager = PluginManager::new(&config_home);
+        let installed = manager.install(source.to_str().unwrap()).unwrap();
+
+        std::fs::write(source.join(".pleiades-plugin/plugin.json"), "not json").unwrap();
+        assert!(manager.update(&installed.plugin_id).is_err());
+        let plugin = manager
+            .plugin_registry()
+            .unwrap()
+            .plugins()
+            .iter()
+            .find(|plugin| plugin.metadata().id == installed.plugin_id)
+            .unwrap()
+            .clone();
+        assert_eq!(plugin.metadata().version, "1.0.0");
     }
 
     #[test]

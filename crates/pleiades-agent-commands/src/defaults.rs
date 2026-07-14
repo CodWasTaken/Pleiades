@@ -388,6 +388,7 @@ enum PluginMutation {
     Uninstall,
     Enable,
     Disable,
+    Update,
 }
 
 struct PluginMutationHandler(PluginMutation);
@@ -415,6 +416,13 @@ impl CommandHandler for PluginMutationHandler {
             PluginMutation::Disable => {
                 service.disable(target)?;
                 format!("Disabled `{target}`")
+            }
+            PluginMutation::Update => {
+                let report = service.update(target)?;
+                format!(
+                    "Updated `{}` from v{} to v{}",
+                    report.id, report.old_version, report.new_version
+                )
             }
         };
         Ok(CommandResult::notification(
@@ -1001,6 +1009,12 @@ fn register_plugin_family(r: &mut crate::registry::CommandRegistry) {
         ),
         ("enable", "Enable a plugin", PluginMutation::Enable, "id"),
         ("disable", "Disable a plugin", PluginMutation::Disable, "id"),
+        (
+            "update",
+            "Update a plugin from its source",
+            PluginMutation::Update,
+            "id",
+        ),
     ] {
         r.register(
             CommandSpec::builder(

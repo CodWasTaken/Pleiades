@@ -11,7 +11,7 @@ mod providers;
 use std::path::PathBuf;
 
 pub use models::{ModelDiscoveryReport, ModelPreferences, ModelProviderResult, ModelService};
-pub use plugins::{PluginInstallReport, PluginReport, PluginService};
+pub use plugins::{PluginInstallReport, PluginReport, PluginService, PluginUpdateReport};
 pub use providers::{ProviderFactory, ProviderReport, ProviderService, ProviderTestReport};
 
 /// Root service container shared by headless and interactive frontends.
