@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-52238a81.js";
+            window.path_to_searchindex_js = "searchindex-c2ef9ac2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -412,13 +412,17 @@ credentials.</p>
 <p>The built-in tools are read, write, edit, bash, glob, grep, diff, search, and fetch. Inspect them with <code>pleiades tool list</code> and <code>pleiades tool info NAME</code>.</p>
 <p>Tools declare read-only, workspace-write, or dangerous permission levels. <code>permissions.always_allow</code> and <code>always_deny</code> provide durable decisions. Interactive permission requests are keyboard-driven Ratatui modals showing the operation, target, reason, and risk, with allow-once, allow-session, deny-once, and deny-session decisions. The live workspace never falls back to a blocking stdin question.</p>
 <h2 id="agent-access-modes"><a class="header" href="#agent-access-modes">Agent access modes</a></h2>
-<p>Interactive sessions support three access modes:</p>
+<p>Approval behavior and sandbox boundaries are independent runtime policies,
+presented through four access-mode presets:</p>
 <ul>
-<li><code>plan</code> keeps the agent read-only.</li>
-<li><code>agent</code> allows changes inside the workspace and is the default.</li>
-<li><code>unrestricted</code> permits access outside the workspace and should be used only in a trusted environment.</li>
+<li><code>plan</code> never prompts and rejects mutations in a read-only sandbox.</li>
+<li><code>agent</code> prompts for risky operations and confines writes to the workspace.</li>
+<li><code>auto</code> never prompts, but remains confined to the workspace and honors deny rules.</li>
+<li><code>yolo</code> never prompts and permits full host access. Use it only in a trusted environment.</li>
 </ul>
-<p>Switch modes with <code>/mode plan</code>, <code>/mode agent</code>, or <code>/mode unrestricted</code>, or launch with <code>--permission-mode MODE</code>.</p>
+<p>Switch modes with <code>/mode plan</code>, <code>/mode agent</code>, <code>/mode auto</code>, or <code>/mode yolo</code>,
+or launch with <code>--permission-mode MODE</code>. The old <code>unrestricted</code> spelling is
+accepted as a compatibility alias for <code>yolo</code>.</p>
 <p>Built-in filesystem tools resolve relative paths against the selected workspace. They reject <code>..</code> traversal, absolute paths outside the workspace, and symlinks that resolve outside it. Agent-mode shell execution uses a platform sandbox to keep writes inside the workspace; if isolation is unavailable, the call is refused. Plan mode rejects every mutating tool before prompting.</p>
 <p>With API-key providers, Pleiades runs built-in tools through the modal permission system above. With <code>openai-subscription</code>, Pleiades delegates the task to the official Codex CLI and maps these modes to Codex’s read-only, workspace-write, and danger-full-access sandboxes. Codex owns individual delegated tool calls, so Pleiades’s own permission modal applies only to tools executed by the Pleiades runtime. The workspace is the launch directory. ChatGPT credentials remain managed by Codex and are never copied into Pleiades.</p>
 <div style="break-before: page; page-break-before: always;"></div>
