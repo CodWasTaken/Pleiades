@@ -223,3 +223,42 @@
 ## Current Focus
 
 All original milestones are complete. The current v2 architecture upgrades the default session to a live Ratatui coding workspace with typed agent events, safe cancellation, workspace confinement, modal permissions, and evidence-based autonomous behavior. Future work is listed explicitly as future work rather than presented as implemented.
+
+---
+
+## Staged release road map (2.1 → 3.0)
+
+The "Master Implementation Directive" defines a staged evolution from the
+v2.0 functional live workspace toward a professional coding environment.
+Releases must land in order, each behind the next. Each feature family is
+tracked as a GitHub issue under the matching milestone.
+
+> Milestones and issues live at <https://github.com/CodWasTaken/Pleiades/milestones>.
+
+| Release | Title | Status |
+|---|---|---|
+| 2.1 | Unified Workspace Commands | 🚧 in progress |
+| 2.2 | Safe Autonomous and YOLO Modes | pending |
+| 2.3 | Checkpoints, Context, Verification | pending |
+| 2.4 | MCP, Plugins, Skills, Custom Commands | pending |
+| 2.5 | Professional Coding Workspace | pending |
+| 2.6 | Sessions, Memory, Observability | pending |
+| 2.7 | Subagents and Parallel Work | pending |
+| 2.8 | Headless API and IDE Integration | pending |
+| 2.9 | Security Hardening | pending |
+| 3.0 | Interface and Product Polish | pending |
+
+### Release 2.1 — Unified Workspace Commands
+
+In progress. Items (GitHub issues):
+
+- [x] 1. Shared command registry (`pleiades-agent-commands` crate, ADR 0001)
+- [ ] 2. Dynamic help and command palette from the registry
+- [ ] 3. Nested slash-command autocomplete
+- [ ] 4. CLI/TUI service unification (application services layer)
+- [ ] 5. `/provider` and `/model` workspace managers
+- [ ] 6. `/plugins` workspace manager + native overlay
+
+A slice is considered done when `cargo fmt`, `cargo clippy -D warnings`, and
+`cargo test --workspace` all pass on Linux, macOS, and Windows, and the
+relevant tests and docs are committed alongside the implementation.
