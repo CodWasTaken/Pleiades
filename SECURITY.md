@@ -55,6 +55,6 @@ We take security seriously. If you discover a security vulnerability in Pleiades
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md#tool-and-permission-boundary) for detailed security design including:
 - Permission levels (ReadOnly, WorkspaceWrite, Dangerous)
-- Plan, Agent, and Unrestricted modes plus once/session modal decisions
+- Plan, Agent, Auto, and YOLO modes plus once/session modal decisions
 - Environment-variable secret interpolation and masked configuration output
 - Canonical workspace confinement, process isolation, permission checks, cancellation, and timeouts

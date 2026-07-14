@@ -38,8 +38,10 @@ Provider streams normalize text, reasoning summaries, tool calls, provider-manag
 - `pleiades-agent-commands` — command specifications, parsing, discovery,
   autocomplete, help generation, and typed command results.
 - `pleiades-agent-services` — terminal-independent provider, model, plugin,
-  configuration, and extension operations shared by CLI and live commands.
+  permission, configuration, and extension operations shared by CLI and live commands.
 - `pleiades-agent-engine` — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.
+- `pleiades-agent-permissions` — structured permission rules, shell command
+  clause parsing, path escape checks, and deny-first decisions.
 - `pleiades-agent-tui` — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.
 - `pleiades-agent-providers` — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.
 - `pleiades-agent-tools` — confined filesystem/search/diff tools and sandboxed command execution.
@@ -47,7 +49,13 @@ Provider streams normalize text, reasoning summaries, tool calls, provider-manag
 
 ## Safety layers
 
-Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Shell writes use Bubblewrap on Linux or `sandbox-exec` on macOS, refusing execution when an Agent-mode boundary cannot be provided. Unrestricted mode removes that process boundary only after an explicit user choice.
+Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Auto mode keeps the workspace boundary but skips prompts unless a rule says to ask. YOLO removes that process boundary only after an explicit user choice. Shell writes use Bubblewrap on Linux or `sandbox-exec` on macOS when Agent-mode process isolation is required, refusing execution when that boundary cannot be provided.
+
+Structured permission rules are evaluated before mode defaults. Deny rules win
+over ask and allow, and every parsed shell clause in a compound command must be
+covered before a command is automatically allowed. Agent and Auto canonicalize
+working directories, redirection targets, explicit tool paths, and symlinks
+against the workspace boundary.
 
 The ChatGPT subscription adapter delegates execution to the official Codex CLI and maps modes to Codex sandboxes. API-provider tool calls execute in Pleiades and use Pleiades permission modals.
 

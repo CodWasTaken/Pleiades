@@ -200,6 +200,10 @@ impl ConfigLoader {
         if !override_config.permissions.always_deny.is_empty() {
             merged.permissions.always_deny = override_config.permissions.always_deny;
         }
+        merged
+            .permissions
+            .rules
+            .extend(override_config.permissions.rules);
 
         merged
     }

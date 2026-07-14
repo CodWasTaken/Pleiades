@@ -237,8 +237,8 @@ tracked as a GitHub issue under the matching milestone.
 
 | Release | Title | Status |
 |---|---|---|
-| 2.1 | Unified Workspace Commands | 🚧 in progress |
-| 2.2 | Safe Autonomous and YOLO Modes | pending |
+| 2.1 | Unified Workspace Commands | implemented |
+| 2.2 | Safe Autonomous and YOLO Modes | 🚧 in progress |
 | 2.3 | Checkpoints, Context, Verification | pending |
 | 2.4 | MCP, Plugins, Skills, Custom Commands | pending |
 | 2.5 | Professional Coding Workspace | pending |
@@ -250,14 +250,25 @@ tracked as a GitHub issue under the matching milestone.
 
 ### Release 2.1 — Unified Workspace Commands
 
-In progress. Items (GitHub issues):
+Implemented. Items (GitHub issues):
 
 - [x] 1. Shared command registry (`pleiades-agent-commands` crate, ADR 0001)
 - [x] 2. Dynamic help and command palette from the registry
 - [x] 3. Nested slash-command autocomplete
-- [ ] 4. CLI/TUI service unification (application services layer)
-- [ ] 5. `/provider` and `/model` workspace managers
-- [ ] 6. `/plugins` workspace manager + native overlay
+- [x] 4. CLI/TUI service unification (application services layer)
+- [x] 5. `/provider` and `/model` workspace managers
+- [x] 6. `/plugins` workspace manager
+
+### Release 2.2 — Safe Autonomous and YOLO Modes
+
+In progress. Items (GitHub issues):
+
+- [x] Split approval and sandbox policies (`ApprovalPolicy`, `SandboxPolicy`)
+- [x] Add `plan`, `agent`, `auto`, and `yolo` presets
+- [x] Add YOLO confirmation and persistent danger status
+- [x] Add structured `permissions.rules` and deny-first evaluation
+- [x] Add `/permissions` and `pleiades permissions` management commands
+- [ ] Publish cross-platform CI report and milestone summary
 
 A slice is considered done when `cargo fmt`, `cargo clippy -D warnings`, and
 `cargo test --workspace` all pass on Linux, macOS, and Windows, and the

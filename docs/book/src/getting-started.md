@@ -43,4 +43,4 @@ Use `pleiades --help` for the complete command tree. Running `pleiades` or `plei
 
 The directory where Pleiades starts is the workspace root. Sessions default to `agent` mode. Use `/mode plan` for read-only analysis or start with `--permission-mode plan`. Press `F1` inside the workspace for searchable keyboard help.
 
-On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (`bwrap`) for write isolation. On macOS they use `sandbox-exec`. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation; `unrestricted` remains an explicit opt-in.
+On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (`bwrap`) for write isolation. On macOS they use `sandbox-exec`. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation. Use `/mode auto` for workspace-confined unattended work and `/mode yolo` only after explicit full-host confirmation.

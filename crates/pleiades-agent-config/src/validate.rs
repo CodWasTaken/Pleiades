@@ -170,6 +170,14 @@ fn validate_permissions(
             });
         }
     }
+
+    if let Err(error) = pleiades_agent_permissions::PermissionEngine::new(permissions.rules.clone())
+    {
+        errors.push(FieldError {
+            field: "permissions.rules".to_string(),
+            message: error.to_string(),
+        });
+    }
 }
 
 /// Validate a single config key-value pair.
@@ -322,6 +330,31 @@ mod tests {
         config.permissions.always_deny.push("npm".to_string());
         let result = validate(&config);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_permission_rule_pattern() {
+        let mut config = make_valid_config();
+        config
+            .permissions
+            .rules
+            .push(pleiades_agent_permissions::PermissionRule {
+                tool: "bash".to_string(),
+                pattern: "[".to_string(),
+                action: pleiades_agent_permissions::PermissionAction::Allow,
+                cwd: None,
+                network: None,
+                mcp_server: None,
+                mcp_tool: None,
+            });
+        let result = validate(&config);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .iter()
+                .any(|error| error.field == "permissions.rules")
+        );
     }
 
     #[test]

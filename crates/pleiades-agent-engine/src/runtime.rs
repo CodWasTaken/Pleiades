@@ -15,6 +15,7 @@ use pleiades_agent_config::Config;
 use pleiades_agent_core::conversation::{ContentBlock, Conversation, Message, MessageRole};
 use pleiades_agent_core::provider::{AgentActivityKind, AgentActivityStatus, StreamEvent, Usage};
 use pleiades_agent_core::tool::PermissionLevel;
+use pleiades_agent_permissions::{DecisionKind, PermissionEngine, ToolInvocation, parse_shell};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -954,10 +955,20 @@ async fn request_permission_if_needed(
         Ok(level) => level,
         Err(_) => return PermissionOutcome::Denied,
     };
+    let rule_decision = match PermissionEngine::new(context.config.permissions.rules.clone()) {
+        Ok(engine) => engine.evaluate(&tool_invocation(context, call)),
+        Err(_) => return PermissionOutcome::Denied,
+    };
+    if rule_decision.kind == DecisionKind::Deny {
+        return PermissionOutcome::Denied;
+    }
     if context.mode.sandbox_policy() == SandboxPolicy::ReadOnly
         && level != PermissionLevel::ReadOnly
     {
         return PermissionOutcome::Denied;
+    }
+    if rule_decision.kind == DecisionKind::Allow {
+        return PermissionOutcome::Allowed;
     }
     let explicitly_allowed = context.allowed_session.contains(&call.name)
         || context
@@ -971,7 +982,9 @@ async fn request_permission_if_needed(
         ApprovalPolicy::OnRisk => false,
         ApprovalPolicy::Always => false,
     };
-    if level == PermissionLevel::ReadOnly || explicitly_allowed || policy_allows {
+    if rule_decision.kind != DecisionKind::Ask
+        && (level == PermissionLevel::ReadOnly || explicitly_allowed || policy_allows)
+    {
         return PermissionOutcome::Allowed;
     }
 
@@ -985,7 +998,11 @@ async fn request_permission_if_needed(
         tool: call.name.clone(),
         operation: description.to_string(),
         target,
-        reason: "The model requested this operation to continue the current task.".to_string(),
+        reason: if rule_decision.kind == DecisionKind::Ask {
+            rule_decision.reason
+        } else {
+            "The model requested this operation to continue the current task.".to_string()
+        },
         risk: match level {
             PermissionLevel::ReadOnly => "Reads project or network data".to_string(),
             PermissionLevel::WorkspaceWrite => {
@@ -1030,6 +1047,158 @@ async fn request_permission_if_needed(
                 PermissionOutcome::Denied
             }
         };
+    }
+}
+
+fn tool_invocation(context: &RuntimeContext, call: &ToolCall) -> ToolInvocation {
+    let process_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = call
+        .input
+        .get("workdir")
+        .and_then(|value| value.as_str())
+        .map(|workdir| resolve_path(&process_cwd, workdir))
+        .unwrap_or_else(|| process_cwd.clone());
+    let workspace_root = if context.mode.sandbox_policy() == SandboxPolicy::FullAccess {
+        std::path::PathBuf::new()
+    } else {
+        process_cwd
+    };
+    let command = call
+        .input
+        .get("command")
+        .and_then(|value| value.as_str())
+        .map(ToString::to_string);
+    let mut invocation = ToolInvocation {
+        tool: call.name.clone(),
+        command: command.clone(),
+        cwd,
+        workspace_root,
+        target_paths: collect_target_paths(&call.input),
+        network_destinations: collect_network_destinations(&call.input),
+        plugin_source: call
+            .input
+            .get("source")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string),
+        mcp_server: call
+            .input
+            .get("mcp_server")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string),
+        mcp_tool: call
+            .input
+            .get("mcp_tool")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string),
+        env_vars: collect_env_vars(&call.input),
+    };
+    if let Some(command) = command {
+        invocation
+            .network_destinations
+            .extend(network_destinations_from_command(&command));
+        invocation.env_vars.extend(env_vars_from_command(&command));
+    }
+    invocation.network_destinations.sort();
+    invocation.network_destinations.dedup();
+    invocation.env_vars.sort();
+    invocation.env_vars.dedup();
+    invocation
+}
+
+fn collect_target_paths(input: &serde_json::Value) -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    for key in [
+        "path",
+        "file_path",
+        "directory",
+        "target",
+        "dest",
+        "destination",
+    ] {
+        if let Some(path) = input.get(key).and_then(|value| value.as_str()) {
+            paths.push(std::path::PathBuf::from(path));
+        }
+    }
+    if let Some(items) = input.get("paths").and_then(|value| value.as_array()) {
+        paths.extend(
+            items
+                .iter()
+                .filter_map(|value| value.as_str())
+                .map(std::path::PathBuf::from),
+        );
+    }
+    paths
+}
+
+fn collect_network_destinations(input: &serde_json::Value) -> Vec<String> {
+    let mut destinations = Vec::new();
+    for key in ["url", "endpoint", "base_url"] {
+        if let Some(value) = input.get(key).and_then(|value| value.as_str()) {
+            destinations.push(value.to_string());
+        }
+    }
+    if let Some(items) = input.get("urls").and_then(|value| value.as_array()) {
+        destinations.extend(
+            items
+                .iter()
+                .filter_map(|value| value.as_str())
+                .map(ToString::to_string),
+        );
+    }
+    destinations
+}
+
+fn collect_env_vars(input: &serde_json::Value) -> Vec<String> {
+    input
+        .get("env")
+        .and_then(|value| value.as_object())
+        .map(|env| env.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+fn network_destinations_from_command(command: &str) -> Vec<String> {
+    parse_shell(command)
+        .ok()
+        .into_iter()
+        .flat_map(|program| program.clauses)
+        .flat_map(|clause| clause.words)
+        .filter(|word| word.starts_with("http://") || word.starts_with("https://"))
+        .collect()
+}
+
+fn env_vars_from_command(command: &str) -> Vec<String> {
+    parse_shell(command)
+        .ok()
+        .into_iter()
+        .flat_map(|program| program.clauses)
+        .flat_map(|clause| clause.words)
+        .filter_map(|word| {
+            if let Some((name, _)) = word.split_once('=') {
+                if is_env_name(name) {
+                    return Some(name.to_string());
+                }
+            }
+            word.strip_prefix('$')
+                .filter(|name| is_env_name(name))
+                .map(ToString::to_string)
+        })
+        .collect()
+}
+
+fn is_env_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    chars
+        .next()
+        .is_some_and(|character| character == '_' || character.is_ascii_alphabetic())
+        && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
+fn resolve_path(base: &std::path::Path, path: &str) -> std::path::PathBuf {
+    let path = std::path::PathBuf::from(path);
+    if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
     }
 }
 
@@ -1560,12 +1729,22 @@ mod tests {
         behavior: MockBehavior,
         executions: Arc<AtomicUsize>,
     ) -> (tempfile::TempDir, AgentRuntime) {
+        runtime_with_mock_config(mode, behavior, executions, |_| {})
+    }
+
+    fn runtime_with_mock_config(
+        mode: AgentMode,
+        behavior: MockBehavior,
+        executions: Arc<AtomicUsize>,
+        configure: impl FnOnce(&mut Config),
+    ) -> (tempfile::TempDir, AgentRuntime) {
         let temp = tempfile::tempdir().unwrap();
         let mut config = Config::default();
         config.core.default_provider = Some("mock".into());
         config.core.default_model = Some("mock-1".into());
         config.session.history_dir = Some(temp.path().join("sessions").display().to_string());
         config.permissions.ask_always = true;
+        configure(&mut config);
         let mut engine = Engine::with_memory(config.clone(), MemoryManager::new());
         engine.register_provider(Box::new(MockProvider {
             calls: Arc::new(AtomicUsize::new(0)),
@@ -1705,6 +1884,86 @@ mod tests {
             AgentMode::Auto,
             MockBehavior::ToolThenFinish,
             executions.clone(),
+        );
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("make a workspace change".into()))
+            .await
+            .unwrap();
+        let mut prompted = false;
+        loop {
+            match next_event(&mut handle.events).await {
+                AgentEvent::PermissionRequested(_) => prompted = true,
+                AgentEvent::TaskCompleted { .. } => break,
+                _ => {}
+            }
+        }
+        assert!(!prompted);
+        assert_eq!(executions.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn auto_mode_honors_explicit_structured_deny_rules() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock_config(
+            AgentMode::Auto,
+            MockBehavior::ToolThenFinish,
+            executions.clone(),
+            |config| {
+                config
+                    .permissions
+                    .rules
+                    .push(pleiades_agent_permissions::PermissionRule {
+                        tool: "mock-write".to_string(),
+                        pattern: "src/*".to_string(),
+                        action: pleiades_agent_permissions::PermissionAction::Deny,
+                        cwd: None,
+                        network: None,
+                        mcp_server: None,
+                        mcp_tool: None,
+                    });
+            },
+        );
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("make a workspace change".into()))
+            .await
+            .unwrap();
+        let mut prompted = false;
+        loop {
+            match next_event(&mut handle.events).await {
+                AgentEvent::PermissionRequested(_) => prompted = true,
+                AgentEvent::TaskCompleted { .. } => break,
+                _ => {}
+            }
+        }
+        assert!(!prompted);
+        assert_eq!(executions.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn agent_mode_honors_explicit_structured_allow_rules() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock_config(
+            AgentMode::Agent,
+            MockBehavior::ToolThenFinish,
+            executions.clone(),
+            |config| {
+                config
+                    .permissions
+                    .rules
+                    .push(pleiades_agent_permissions::PermissionRule {
+                        tool: "mock-write".to_string(),
+                        pattern: "src/*".to_string(),
+                        action: pleiades_agent_permissions::PermissionAction::Allow,
+                        cwd: None,
+                        network: None,
+                        mcp_server: None,
+                        mcp_tool: None,
+                    });
+            },
         );
         let mut handle = runtime.spawn();
         handle

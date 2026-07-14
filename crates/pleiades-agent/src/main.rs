@@ -110,6 +110,10 @@ enum Commands {
     #[command(subcommand)]
     Plugin(PluginCommand),
 
+    /// Manage permission rules
+    #[command(subcommand)]
+    Permissions(PermissionsCommand),
+
     /// Manage and render prompt templates
     #[command(subcommand)]
     Prompt(PromptCommand),
@@ -407,6 +411,43 @@ enum PluginCommand {
     Update {
         /// Plugin ID
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PermissionsCommand {
+    /// Show configured permission rules
+    Show,
+
+    /// Allow matching bash commands without prompting
+    Allow {
+        /// Glob pattern matched against each shell command clause
+        #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+        pattern: Vec<String>,
+    },
+
+    /// Ask before running matching bash commands
+    Ask {
+        /// Glob pattern matched against each shell command clause
+        #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+        pattern: Vec<String>,
+    },
+
+    /// Deny matching bash commands
+    Deny {
+        /// Glob pattern matched against each shell command clause
+        #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+        pattern: Vec<String>,
+    },
+
+    /// Clear structured and legacy allow/deny permission rules
+    Reset,
+
+    /// Evaluate a bash command against configured rules
+    Test {
+        /// Command to evaluate
+        #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+        command: Vec<String>,
     },
 }
 
@@ -1720,6 +1761,135 @@ fn handle_plugin_update(loader: &ConfigLoader, id: &str) {
     }
 }
 
+fn permission_service(loader: &ConfigLoader) -> pleiades_agent_services::PermissionService {
+    pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    )
+    .permission()
+}
+
+fn handle_permissions_show(loader: &ConfigLoader) {
+    match permission_service(loader).show() {
+        Ok(report) => {
+            println!("Permission rules:");
+            if report.rules.is_empty() {
+                println!("  (none)");
+            } else {
+                for item in report.rules {
+                    println!(
+                        "  {}. {} {} {}",
+                        item.index,
+                        permission_action_label_cli(item.rule.action),
+                        item.rule.tool,
+                        item.rule.pattern
+                    );
+                }
+            }
+            println!(
+                "Legacy always allow: {}",
+                if report.always_allow.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    report.always_allow.join(", ")
+                }
+            );
+            println!(
+                "Legacy always deny: {}",
+                if report.always_deny.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    report.always_deny.join(", ")
+                }
+            );
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_permissions_add(
+    loader: &ConfigLoader,
+    action: pleiades_agent_permissions::PermissionAction,
+    pattern: Vec<String>,
+) {
+    if pattern.is_empty() {
+        eprintln!("Error: usage: pleiades permissions <allow|ask|deny> <pattern>");
+        std::process::exit(1);
+    }
+    let pattern = pattern.join(" ");
+    match permission_service(loader).add_bash_rule(action, &pattern) {
+        Ok(()) => println!(
+            "Added permission rule: {} bash {}",
+            permission_action_label_cli(action),
+            pattern
+        ),
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_permissions_reset(loader: &ConfigLoader) {
+    match permission_service(loader).reset() {
+        Ok(()) => println!("Permission rules reset"),
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_permissions_test(loader: &ConfigLoader, command: Vec<String>) {
+    if command.is_empty() {
+        eprintln!("Error: usage: pleiades permissions test <command>");
+        std::process::exit(1);
+    }
+    let command = command.join(" ");
+    match permission_service(loader).test_bash_command(&command) {
+        Ok(report) => {
+            println!("Command: {}", report.command);
+            println!(
+                "Decision: {}",
+                permission_decision_label_cli(report.decision.kind)
+            );
+            println!("Reason: {}", report.decision.reason);
+            if !report.decision.clauses.is_empty() {
+                println!("Clauses:");
+                for clause in report.decision.clauses {
+                    println!("  - {}", clause);
+                }
+            }
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn permission_action_label_cli(
+    action: pleiades_agent_permissions::PermissionAction,
+) -> &'static str {
+    match action {
+        pleiades_agent_permissions::PermissionAction::Allow => "allow",
+        pleiades_agent_permissions::PermissionAction::Ask => "ask",
+        pleiades_agent_permissions::PermissionAction::Deny => "deny",
+    }
+}
+
+fn permission_decision_label_cli(kind: pleiades_agent_permissions::DecisionKind) -> &'static str {
+    match kind {
+        pleiades_agent_permissions::DecisionKind::Allow => "allow",
+        pleiades_agent_permissions::DecisionKind::Ask => "ask",
+        pleiades_agent_permissions::DecisionKind::Deny => "deny",
+        pleiades_agent_permissions::DecisionKind::Default => "default",
+    }
+}
+
 fn handle_prompt_list() {
     let lib = pleiades_agent_prompts::PromptLibrary::with_builtins();
     let summaries = lib.list();
@@ -2464,6 +2634,26 @@ fn main() {
             PluginCommand::Enable { id } => handle_plugin_enable(&loader, &id),
             PluginCommand::Disable { id } => handle_plugin_disable(&loader, &id),
             PluginCommand::Update { id } => handle_plugin_update(&loader, &id),
+        },
+        Some(Commands::Permissions(cmd)) => match cmd {
+            PermissionsCommand::Show => handle_permissions_show(&loader),
+            PermissionsCommand::Allow { pattern } => handle_permissions_add(
+                &loader,
+                pleiades_agent_permissions::PermissionAction::Allow,
+                pattern,
+            ),
+            PermissionsCommand::Ask { pattern } => handle_permissions_add(
+                &loader,
+                pleiades_agent_permissions::PermissionAction::Ask,
+                pattern,
+            ),
+            PermissionsCommand::Deny { pattern } => handle_permissions_add(
+                &loader,
+                pleiades_agent_permissions::PermissionAction::Deny,
+                pattern,
+            ),
+            PermissionsCommand::Reset => handle_permissions_reset(&loader),
+            PermissionsCommand::Test { command } => handle_permissions_test(&loader, command),
         },
         Some(Commands::Prompt(cmd)) => match cmd {
             PromptCommand::List => handle_prompt_list(),

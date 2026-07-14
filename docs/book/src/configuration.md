@@ -26,6 +26,7 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `plugins.sandbox` | boolean | `false` (reserved for a future sandbox runtime) |
 | `permissions.always_allow` | string list | empty |
 | `permissions.always_deny` | string list | empty |
+| `permissions.rules` | array of permission rules | empty |
 | `permissions.ask_always` | boolean | `true` |
 | `permissions.grant_duration_minutes` | integer | `60` |
 | `session.context_size` | integer | `100` |
@@ -48,6 +49,16 @@ Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environ
 
 The special `providers.openai-subscription` entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with `pleiades auth status`. Run `pleiades setup` instead of editing this entry manually.
 
-Interactive agent sandbox modes are selected with `--permission-mode plan|agent|unrestricted` or `/mode plan|agent|unrestricted`. `agent` is the default and maps to Codex's workspace-write sandbox. `unrestricted` removes workspace isolation and should only be used in an already isolated environment.
+Interactive agent sandbox modes are selected with `--permission-mode
+plan|agent|auto|yolo` or `/mode plan|agent|auto|yolo`. `agent` is the default.
+`auto` runs without prompts inside the workspace. `yolo` removes workspace
+isolation after explicit confirmation and should only be used in an already
+isolated environment. The old `unrestricted` spelling remains accepted as a
+compatibility alias for `yolo`.
+
+Structured permission rules have `tool`, `pattern`, and `action` fields, plus
+optional `cwd`, `network`, `mcp_server`, and `mcp_tool` matchers. `action` is
+`allow`, `ask`, or `deny`. Rules can be edited directly or managed with
+`pleiades permissions allow|ask|deny|show|test|reset`.
 
 Built-in themes are `seven-sisters`, `andromeda`, `orion`, `event-horizon`, `solar-wind`, `high-contrast`, and `ascii`. Legacy `catppuccin-mocha`, `dracula`, and `tokyo-night` values remain accepted as compatibility aliases.

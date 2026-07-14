@@ -27,7 +27,7 @@ Named after the Seven Sisters star cluster, Pleiades represents a constellation 
 - **Transparent Activity** — Typed planning, searching, reading, editing, testing, review, completion, and failure events
 - **Seven Sisters Design** — Native Markdown widgets, multiline composer, searchable overlays, diffs, tool output, and accessible fallbacks
 - **Memory System** — Multi-tier memory from conversation context to long-term project knowledge
-- **Safe Autonomy** — Plan, Agent, and Unrestricted modes; workspace path confinement; modal permission decisions; process isolation
+- **Safe Autonomy** — Plan, Agent, Auto, and YOLO modes; structured deny-first permission rules; workspace path confinement; modal permission decisions
 - **Customizable** — Select terminal themes and configure models, permissions, prompts, and workflows
 - **Production Quality** — Cross-platform CI, integration tests, release binaries, and checksummed installs
 

@@ -5,12 +5,16 @@
 //! therefore present the same operation without duplicating business logic.
 
 mod models;
+mod permissions;
 mod plugins;
 mod providers;
 
 use std::path::PathBuf;
 
 pub use models::{ModelDiscoveryReport, ModelPreferences, ModelProviderResult, ModelService};
+pub use permissions::{
+    PermissionReport, PermissionRuleReport, PermissionService, PermissionTestReport,
+};
 pub use plugins::{PluginInstallReport, PluginReport, PluginService, PluginUpdateReport};
 pub use providers::{ProviderFactory, ProviderReport, ProviderService, ProviderTestReport};
 
@@ -51,6 +55,10 @@ impl ApplicationServices {
 
     pub fn model(&self) -> ModelService {
         ModelService::new(self.loader())
+    }
+
+    pub fn permission(&self) -> PermissionService {
+        PermissionService::new(self.loader())
     }
 
     pub fn loader(&self) -> pleiades_agent_config::ConfigLoader {

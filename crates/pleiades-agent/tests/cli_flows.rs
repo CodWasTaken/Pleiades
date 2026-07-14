@@ -122,6 +122,26 @@ fn provider_service_reports_never_print_resolved_secrets() {
 }
 
 #[test]
+fn permissions_cli_add_show_and_test_rules() {
+    let home = tempfile::tempdir().unwrap();
+    command(home.path())
+        .args(["permissions", "deny", "git", "push", "*"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Added permission rule"));
+    command(home.path())
+        .args(["permissions", "show"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("deny bash git push *"));
+    command(home.path())
+        .args(["permissions", "test", "git", "push", "origin", "main"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Decision: deny"));
+}
+
+#[test]
 fn workflow_create_validate_list_and_run() {
     let workspace = tempfile::tempdir().unwrap();
     command(workspace.path())
