@@ -36,5 +36,10 @@ the same service operation and only report success after the provider stream
 emits a completion event. Model discovery and mutations are also available in
 the workspace through `/model list [PROVIDER] [SEARCH]`, `/model info NAME`,
 `/model discover`, `/model use NAME`, `/model alias ALIAS MODEL`, and
-`/model unalias ALIAS`. Model configuration writes preserve environment
-variable references instead of persisting resolved credentials.
+`/model unalias ALIAS`. Use `/model favorite NAME` to toggle a favorite,
+`/model favorites` to inspect preferences, and `/model reasoning LEVEL` to
+select `minimal`, `low`, `medium`, or `high` reasoning effort for adapters that
+support it. The same operations are available as `pleiades model favorite`,
+`pleiades model favorites`, and `pleiades model reasoning`. Model configuration
+writes preserve environment variable references instead of persisting resolved
+credentials.

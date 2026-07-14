@@ -180,6 +180,13 @@ impl ConfigLoader {
         merged.providers.extend(override_config.providers);
         merged.models.aliases.extend(override_config.models.aliases);
         merged.models.default = override_config.models.default.or(merged.models.default);
+        merged
+            .models
+            .favorites
+            .extend(override_config.models.favorites);
+        merged.models.favorites.sort();
+        merged.models.favorites.dedup();
+        merged.models.reasoning = override_config.models.reasoning.or(merged.models.reasoning);
 
         merged
             .plugins

@@ -267,6 +267,66 @@ impl CommandHandler for ModelUnaliasHandler {
     }
 }
 
+struct ModelFavoriteHandler;
+
+#[async_trait]
+impl CommandHandler for ModelFavoriteHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let model = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /model favorite <name>"))?;
+        let added = context.services().model().favorite(model)?;
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!(
+                "Model `{model}` {} favorites",
+                if added { "added to" } else { "removed from" }
+            ),
+        ))
+    }
+}
+
+struct ModelFavoritesHandler;
+
+#[async_trait]
+impl CommandHandler for ModelFavoritesHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        let preferences = context.services().model().preferences()?;
+        let favorites = if preferences.favorites.is_empty() {
+            "No favorite models yet.".to_string()
+        } else {
+            preferences.favorites.join("\n")
+        };
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new("Model preferences")
+                .section("Favorites", favorites)
+                .section(
+                    "Reasoning effort",
+                    preferences
+                        .reasoning
+                        .as_deref()
+                        .unwrap_or("provider default"),
+                ),
+        ))
+    }
+}
+
+struct ModelReasoningHandler;
+
+#[async_trait]
+impl CommandHandler for ModelReasoningHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let level = args.first().ok_or_else(|| {
+            Error::invalid_input("usage: /model reasoning <minimal|low|medium|high>")
+        })?;
+        context.services().model().set_reasoning(level)?;
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!("Reasoning effort set to `{}`", level.to_ascii_lowercase()),
+        ))
+    }
+}
+
 struct PluginListHandler;
 
 #[async_trait]
@@ -833,6 +893,50 @@ fn register_model_family(r: &mut crate::registry::CommandRegistry) {
             ModelUnaliasHandler,
         )
         .arguments(vec![ArgumentSpec::required("alias", "Alias to remove")])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "favorite"],
+            "Add or remove a model from favorites",
+            ModelFavoriteHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Model identifier")
+                .with_completer(CompletionSource::Model),
+        ])
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "favorites"],
+            "Show favorite models and reasoning preference",
+            ModelFavoritesHandler,
+        )
+        .category(CommandCategory::Provider)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["model", "reasoning"],
+            "Set preferred reasoning effort",
+            ModelReasoningHandler,
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "level",
+            "minimal, low, medium, or high",
+        )])
         .category(CommandCategory::Provider)
         .availability(CommandAvailability::Both)
         .permission(PermissionRequirement::Write)
