@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f32a5a53.js";
+            window.path_to_searchindex_js = "searchindex-6dccb53d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -256,8 +256,10 @@ executes provider or tool logic in the TUI.</p>
 <code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. The provider
 family includes <code>list</code>, <code>use</code>, <code>info</code>, <code>add</code>, <code>remove</code>, and <code>reload</code>. Provider
 reports are obtained through the same application service used by the external
-CLI and always mask credentials. Connection/authentication commands, model
-management, and plugin management continue as separate Release 2.1 slices.</p>
+CLI and always mask credentials. Model and plugin command families are also
+registered with nested completion and structured documents. Provider
+authentication wizards and richer management overlays continue as separate
+Release 2.1 slices.</p>
 <h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
 <p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
 <p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>
@@ -417,6 +419,19 @@ variable references instead of persisting resolved credentials.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="plugins-and-hooks"><a class="header" href="#plugins-and-hooks">Plugins and hooks</a></h1>
 <p>Plugins are directories containing <code>plugin.json</code>. Install a local plugin with <code>pleiades plugin install PATH</code>, then use <code>plugin list</code>, <code>enable</code>, <code>disable</code>, and <code>uninstall</code>.</p>
+<p>The same operations are available without leaving the live workspace:</p>
+<pre><code class="language-text">/plugins list
+/plugins info &lt;id&gt;
+/plugins install &lt;path&gt;
+/plugins uninstall &lt;id&gt;
+/plugins enable &lt;id&gt;
+/plugins disable &lt;id&gt;
+/plugins permissions &lt;id&gt;
+/plugins reload
+</code></pre>
+<p>These commands call the same application service as the Clap commands.
+Information and permission documents include the plugin source, executable
+hooks, and the permission boundary requested by each tool.</p>
 <p>The current runtime supports shell hooks for <code>PreToolUse</code>, <code>PostToolUse</code>, and <code>PostToolUseFailure</code>. Hook input is provided as JSON on standard input with contextual environment variables. Treat third-party hook commands as executable code and inspect them before installation.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="prompt-templates"><a class="header" href="#prompt-templates">Prompt templates</a></h1>
