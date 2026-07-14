@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8a00cbab.js";
+            window.path_to_searchindex_js = "searchindex-0a6ae1e5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -216,7 +216,16 @@
 </tbody>
 </table>
 </div>
-<p>The slash commands <code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/diff</code>, <code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code> provide the same operations.</p>
+<p>Slash commands, searchable help, the command palette, and nested completion are
+generated from one typed command registry. Typing <code>/</code> and pressing <code>Tab</code> lists
+root commands; typing a family followed by a space, such as <code>/mode </code>, lists its
+registered subcommands. Palette selections and typed slash commands both travel
+through the runtime command channel and return structured UI events—neither path
+executes provider or tool logic in the TUI.</p>
+<p>The currently implemented workspace commands include <code>/help</code>, <code>/status</code>,
+<code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/load</code>, <code>/diff</code>,
+<code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. Provider,
+model, and plugin management subcommands will expand during Release 2.1.</p>
 <h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
 <p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
 <p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>

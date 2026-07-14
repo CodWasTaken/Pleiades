@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8a00cbab.js";
+            window.path_to_searchindex_js = "searchindex-0a6ae1e5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -245,7 +245,16 @@ pleiades
 </tbody>
 </table>
 </div>
-<p>The slash commands <code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/diff</code>, <code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code> provide the same operations.</p>
+<p>Slash commands, searchable help, the command palette, and nested completion are
+generated from one typed command registry. Typing <code>/</code> and pressing <code>Tab</code> lists
+root commands; typing a family followed by a space, such as <code>/mode </code>, lists its
+registered subcommands. Palette selections and typed slash commands both travel
+through the runtime command channel and return structured UI events—neither path
+executes provider or tool logic in the TUI.</p>
+<p>The currently implemented workspace commands include <code>/help</code>, <code>/status</code>,
+<code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/load</code>, <code>/diff</code>,
+<code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. Provider,
+model, and plugin management subcommands will expand during Release 2.1.</p>
 <h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
 <p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
 <p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>
@@ -431,6 +440,13 @@ background results ───┘
 
 UI effects ─────────────&gt; AgentCommand channel ─&gt; AgentRuntime
 </code></pre>
+<p>Slash commands and command-palette actions resolve through
+<code>pleiades-agent-commands</code>. Its handlers receive an immutable <code>CommandContext</code>
+and return <code>CommandResult</code>; they do not access Ratatui, providers, tools, or
+stdout. The runtime applies typed <code>AppEffect</code> values and emits typed overlay,
+notification, document, and shutdown events back to the reducer. Searchable
+help and nested autocomplete query the same registry, eliminating parallel
+command lists and numeric palette dispatch.</p>
 <p>The terminal loop uses <code>tokio::select!</code> across Crossterm’s <code>EventStream</code>, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.</p>
 <h2 id="agent-runtime"><a class="header" href="#agent-runtime">Agent runtime</a></h2>
 <p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, and shutdown.</p>
@@ -439,6 +455,8 @@ UI effects ─────────────&gt; AgentCommand channel ─&
 <ul>
 <li><code>pleiades-agent-core</code> — provider/tool traits and normalized domain types.</li>
 <li><code>pleiades-agent-config</code> — layered configuration and environment interpolation.</li>
+<li><code>pleiades-agent-commands</code> — command specifications, parsing, discovery,
+autocomplete, help generation, and typed command results.</li>
 <li><code>pleiades-agent-engine</code> — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.</li>
 <li><code>pleiades-agent-tui</code> — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.</li>
 <li><code>pleiades-agent-providers</code> — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.</li>

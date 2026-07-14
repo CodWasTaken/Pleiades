@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8a00cbab.js";
+            window.path_to_searchindex_js = "searchindex-0a6ae1e5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -191,6 +191,13 @@ background results ───┘
 
 UI effects ─────────────&gt; AgentCommand channel ─&gt; AgentRuntime
 </code></pre>
+<p>Slash commands and command-palette actions resolve through
+<code>pleiades-agent-commands</code>. Its handlers receive an immutable <code>CommandContext</code>
+and return <code>CommandResult</code>; they do not access Ratatui, providers, tools, or
+stdout. The runtime applies typed <code>AppEffect</code> values and emits typed overlay,
+notification, document, and shutdown events back to the reducer. Searchable
+help and nested autocomplete query the same registry, eliminating parallel
+command lists and numeric palette dispatch.</p>
 <p>The terminal loop uses <code>tokio::select!</code> across Crossterm’s <code>EventStream</code>, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.</p>
 <h2 id="agent-runtime"><a class="header" href="#agent-runtime">Agent runtime</a></h2>
 <p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, and shutdown.</p>
@@ -199,6 +206,8 @@ UI effects ─────────────&gt; AgentCommand channel ─&
 <ul>
 <li><code>pleiades-agent-core</code> — provider/tool traits and normalized domain types.</li>
 <li><code>pleiades-agent-config</code> — layered configuration and environment interpolation.</li>
+<li><code>pleiades-agent-commands</code> — command specifications, parsing, discovery,
+autocomplete, help generation, and typed command results.</li>
 <li><code>pleiades-agent-engine</code> — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.</li>
 <li><code>pleiades-agent-tui</code> — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.</li>
 <li><code>pleiades-agent-providers</code> — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.</li>
