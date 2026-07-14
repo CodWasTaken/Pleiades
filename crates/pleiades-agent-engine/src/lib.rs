@@ -18,3 +18,14 @@ pub use runtime::{
     PermissionRequest,
 };
 pub use session::{SessionInfo, SessionStore};
+
+/// Re-exports from the command registry crate.
+///
+/// The runtime owns a [`pleiades_agent_commands::CommandRegistry`] and routes
+/// slash commands through [`AgentCommand::DispatchSlash`].  Frontends consume
+/// the typed [`CommandResult`] variants emitted as [`AgentEvent`] payloads via
+/// these aliases.
+pub use pleiades_agent_commands::{
+    CommandContext, CommandRegistry, CommandResult, Notification, NotificationLevel, OverlayKind,
+    RenderableDocument,
+};

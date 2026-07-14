@@ -1487,6 +1487,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pleiades-agent-commands"
+version = "2.0.0"
+dependencies = [
+ "async-trait",
+ "pleiades-agent-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "pleiades-agent-config"
 version = "2.0.0"
 dependencies = [
@@ -1523,6 +1536,7 @@ dependencies = [
  "async-trait",
  "dirs 6.0.0",
  "futures",
+ "pleiades-agent-commands",
  "pleiades-agent-config",
  "pleiades-agent-core",
  "pleiades-agent-memory",
@@ -1656,6 +1670,7 @@ dependencies = [
  "futures-util",
  "insta",
  "once_cell",
+ "pleiades-agent-commands",
  "pleiades-agent-config",
  "pleiades-agent-core",
  "pleiades-agent-engine",

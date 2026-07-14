@@ -5,6 +5,28 @@ All notable changes to Pleiades will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Added `pleiades-agent-commands` crate: typed command registry, `CommandSpec`,
+  `CommandResult`, `CommandHandler`, `AppEffect`, `OverlayKind`,
+  `RenderableDocument`, `CommandContext`, `Suggestion`, parser, and the
+  live-workspace default commands — the single source of truth for slash
+  commands, the command palette, help, and autocomplete. See
+  `docs/adr/0001-command-registry-and-application-services.md`.
+- Added registry, runtime, and reducer coverage for command registration, alias collisions,
+  nested subcommand lookup, deepest-path resolution, palette filtering, slash
+  autocomplete, help document generation, typed command events, and live model-state updates.
+
+### Changed
+
+- The Cargo workspace now includes `crates/pleiades-agent-commands`. Workspace
+  formatting, Clippy with warnings denied, and tests remain green.
+- Slash input, command-palette selections, help, and completion now derive from
+  the shared registry. Command results cross the runtime boundary as typed
+  overlay, notification, document, effect, and shutdown events.
+
 ## [2.0.0] - 2026-07-13
 
 ### Added

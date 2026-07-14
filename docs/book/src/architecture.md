@@ -15,6 +15,14 @@ background results ───┘
 UI effects ─────────────> AgentCommand channel ─> AgentRuntime
 ```
 
+Slash commands and command-palette actions resolve through
+`pleiades-agent-commands`. Its handlers receive an immutable `CommandContext`
+and return `CommandResult`; they do not access Ratatui, providers, tools, or
+stdout. The runtime applies typed `AppEffect` values and emits typed overlay,
+notification, document, and shutdown events back to the reducer. Searchable
+help and nested autocomplete query the same registry, eliminating parallel
+command lists and numeric palette dispatch.
+
 The terminal loop uses `tokio::select!` across Crossterm's `EventStream`, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.
 
 ## Agent runtime
@@ -27,6 +35,8 @@ Provider streams normalize text, reasoning summaries, tool calls, provider-manag
 
 - `pleiades-agent-core` — provider/tool traits and normalized domain types.
 - `pleiades-agent-config` — layered configuration and environment interpolation.
+- `pleiades-agent-commands` — command specifications, parsing, discovery,
+  autocomplete, help generation, and typed command results.
 - `pleiades-agent-engine` — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.
 - `pleiades-agent-tui` — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.
 - `pleiades-agent-providers` — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.

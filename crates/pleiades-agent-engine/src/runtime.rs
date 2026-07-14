@@ -7,6 +7,10 @@
 use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
+use pleiades_agent_commands::{
+    self as commands, AppEffect, CommandResult, Notification, NotificationLevel, OverlayKind,
+    RenderableDocument,
+};
 use pleiades_agent_config::Config;
 use pleiades_agent_core::conversation::{ContentBlock, Conversation, Message, MessageRole};
 use pleiades_agent_core::provider::{AgentActivityKind, AgentActivityStatus, StreamEvent, Usage};
@@ -125,6 +129,13 @@ pub enum AgentCommand {
     ClearConversation,
     LoadSession(String),
     SaveSession,
+    /// Dispatch a slash command (with leading `/`) through the command
+    /// registry.  The runtime resolves the spec, invokes its handler, applies
+    /// any emitted [`AppEffect`]s, and forwards [`OverlayKind`] /
+    /// [`Notification`] / [`RenderableDocument`] results to the frontend as
+    /// [`AgentEvent`] variants.  Frontends use this for both typed slash
+    /// commands and command-palette selections.
+    DispatchSlash(String),
     Shutdown,
 }
 
@@ -169,6 +180,21 @@ pub enum AgentEvent {
         message: String,
     },
     TaskCancelled,
+    /// A slash/palette command requested the frontend open a native overlay.
+    /// Forwarded verbatim from a [`CommandResult::OpenOverlay`].
+    OpenOverlay(OverlayKind),
+    /// A slash/palette command surfaced a transient notification.  Forwarded
+    /// verbatim from a [`CommandResult::Notification`].
+    Notify(Notification),
+    /// A slash/palette command produced a structured document to render in
+    /// the active panel.  Forwarded verbatim from a
+    /// [`CommandResult::RenderDocument`].
+    Document(RenderableDocument),
+    /// Runtime has decided to shut down (e.g. the user typed `/quit`).  The
+    /// frontend treats this as a request to leave the workspace and clean up
+    /// its terminal state.  Sent before the runtime task exits; once it
+    /// finishes, the event channel is dropped and `recv()` returns `None`.
+    ShuttingDown,
     Error(String),
 }
 
@@ -187,6 +213,7 @@ pub struct AgentRuntime {
     mode: AgentMode,
     session_store: SessionStore,
     engine_override: Option<Engine>,
+    registry: commands::CommandRegistry,
 }
 
 impl AgentRuntime {
@@ -206,7 +233,15 @@ impl AgentRuntime {
             mode,
             session_store,
             engine_override: None,
+            registry: commands::defaults::default_registry(),
         }
+    }
+
+    /// Replace the runtime's command registry.  Used by tests and frontends
+    /// that want to seed a smaller or extended registry.
+    pub fn with_registry(mut self, registry: commands::CommandRegistry) -> Self {
+        self.registry = registry;
+        self
     }
 
     #[cfg(test)]
@@ -235,10 +270,11 @@ impl AgentRuntime {
             mut config,
             conversation,
             mut provider_name,
-            model_name,
+            mut model_name,
             mut mode,
             session_store,
             engine_override,
+            registry,
         } = self;
         config.core.default_provider = Some(provider_name.clone());
         config.core.default_model = Some(model_name.clone());
@@ -316,6 +352,7 @@ impl AgentRuntime {
                             send_event(&events, AgentEvent::ProviderChanged(provider)).await;
                         }
                         AgentCommand::SetModel(model) => {
+                            model_name = model.clone();
                             config.core.default_model = Some(model.clone());
                             if let Some(ctx) = context.as_mut() {
                                 ctx.set_config(config.clone(), mode);
@@ -351,6 +388,25 @@ impl AgentRuntime {
                                     ).await,
                                     Err(error) => send_event(&events, AgentEvent::Error(error.to_string())).await,
                                 }
+                            }
+                        }
+                        AgentCommand::DispatchSlash(input) => {
+                            let should_shutdown = dispatch_slash(
+                                &input,
+                                &registry,
+                                &mut config,
+                                &mut mode,
+                                &mut provider_name,
+                                &mut model_name,
+                                &mut context,
+                                &active,
+                                &events,
+                            ).await;
+                            if should_shutdown {
+                                if let Some(task) = &active {
+                                    task.cancellation.cancel();
+                                }
+                                break;
                             }
                         }
                         AgentCommand::Shutdown => {
@@ -1069,6 +1125,213 @@ fn now_ms() -> u128 {
         .as_millis()
 }
 
+/// Resolve and execute a slash command (with leading `/`) via the command
+/// registry, applying the resulting [`CommandResult`] as runtime state
+/// changes (for [`CommandResult::Effects`]) or forwarding overlay /
+/// notification / document requests to the frontend as [`AgentEvent`]
+/// variants.  Returns `true` when the runtime should shut down (e.g. the
+/// handler emitted `Quit` / `Shutdown`).
+async fn dispatch_slash(
+    input: &str,
+    registry: &commands::CommandRegistry,
+    config: &mut Config,
+    mode: &mut AgentMode,
+    provider_name: &mut String,
+    model_name: &mut String,
+    context: &mut Option<RuntimeContext>,
+    active: &Option<ActiveTask>,
+    events: &mpsc::Sender<AgentEvent>,
+) -> bool {
+    let ctx = commands::CommandContext::new(
+        provider_name.clone(),
+        model_name.clone(),
+        mode.label().to_string(),
+    );
+    let result = match registry.dispatch(input, &ctx, true).await {
+        Ok(res) => res,
+        Err(err) => {
+            send_event(events, AgentEvent::Error(err.to_string())).await;
+            return false;
+        }
+    };
+    match result {
+        CommandResult::Effects(effects) => {
+            for effect in effects {
+                if apply_app_effect(
+                    effect,
+                    config,
+                    mode,
+                    provider_name,
+                    model_name,
+                    context,
+                    active,
+                    events,
+                )
+                .await
+                {
+                    return true;
+                }
+            }
+        }
+        CommandResult::OpenOverlay(kind) => {
+            send_event(events, AgentEvent::OpenOverlay(kind)).await;
+        }
+        CommandResult::Notification(notification) => {
+            send_event(events, AgentEvent::Notify(notification)).await;
+        }
+        CommandResult::RenderDocument(document) => {
+            send_event(events, AgentEvent::Document(document)).await;
+        }
+        CommandResult::RuntimeRestart(req) => {
+            send_event(
+                events,
+                AgentEvent::Error(format!("runtime restart requested: {}", req.reason)),
+            )
+            .await;
+        }
+        CommandResult::BackgroundTask(handle) => {
+            send_event(
+                events,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Info,
+                    message: format!("background task spawned: {}", handle.id),
+                }),
+            )
+            .await;
+        }
+        CommandResult::Noop => {}
+    }
+    false
+}
+
+/// Apply one [`AppEffect`] to the runtime.  Returns `true` when the loop
+/// should shut down afterwards (effects `Quit` and `Shutdown`).
+async fn apply_app_effect(
+    effect: AppEffect,
+    config: &mut Config,
+    mode: &mut AgentMode,
+    provider_name: &mut String,
+    model_name: &mut String,
+    context: &mut Option<RuntimeContext>,
+    active: &Option<ActiveTask>,
+    events: &mpsc::Sender<AgentEvent>,
+) -> bool {
+    match effect {
+        AppEffect::SetMode(name) => {
+            if let Some(task) = active.as_ref() {
+                task.cancellation.cancel();
+            }
+            let next = AgentMode::parse(&name);
+            *mode = next;
+            if let Some(ctx) = context.as_mut() {
+                ctx.set_mode(next);
+            }
+            send_event(events, AgentEvent::ModeChanged(next)).await;
+        }
+        AppEffect::SetProvider(name) => {
+            *provider_name = name.clone();
+            config.core.default_provider = Some(name.clone());
+            if let Some(ctx) = context.as_mut() {
+                ctx.set_config(config.clone(), *mode);
+            }
+            send_event(events, AgentEvent::ProviderChanged(name)).await;
+        }
+        AppEffect::SetModel(name) => {
+            *model_name = name.clone();
+            config.core.default_model = Some(name.clone());
+            if let Some(ctx) = context.as_mut() {
+                ctx.set_config(config.clone(), *mode);
+            }
+            send_event(events, AgentEvent::ModelChanged(name)).await;
+        }
+        AppEffect::ClearConversation => {
+            if active.is_none() {
+                if let Some(ctx) = context.as_mut() {
+                    ctx.conversation.clear();
+                    send_event(events, AgentEvent::ConversationCleared).await;
+                }
+            }
+        }
+        AppEffect::LoadSession(id) => {
+            if active.is_none() {
+                if let Some(ctx) = context.as_mut() {
+                    match ctx.session_store.load(&id) {
+                        Ok(conv) => {
+                            ctx.conversation = conv;
+                            send_event(
+                                events,
+                                AgentEvent::SessionReady {
+                                    id: ctx.conversation.id.clone(),
+                                    history: ctx.conversation.messages.clone(),
+                                },
+                            )
+                            .await;
+                        }
+                        Err(e) => send_event(events, AgentEvent::Error(e.to_string())).await,
+                    }
+                }
+            }
+        }
+        AppEffect::SaveSession => {
+            if let Some(ctx) = context.as_ref() {
+                match ctx.session_store.save(&ctx.conversation) {
+                    Ok(()) => {
+                        send_event(
+                            events,
+                            AgentEvent::SessionSaved(ctx.conversation.id.clone()),
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::CancelTask => {
+            if let Some(task) = active.as_ref() {
+                task.cancellation.cancel();
+            }
+        }
+        AppEffect::Quit | AppEffect::Shutdown => {
+            if let Some(task) = active.as_ref() {
+                task.cancellation.cancel();
+            }
+            send_event(events, AgentEvent::ShuttingDown).await;
+            return true;
+        }
+        AppEffect::ReloadExtensions => {
+            send_event(
+                events,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Info,
+                    message: "Extensions reload requested outside the live workspace lifecycle."
+                        .to_string(),
+                }),
+            )
+            .await;
+        }
+        AppEffect::Status(s) => {
+            send_event(
+                events,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Info,
+                    message: s,
+                }),
+            )
+            .await;
+        }
+        AppEffect::Custom(name) => {
+            send_event(
+                events,
+                AgentEvent::Error(format!(
+                    "custom effect `{name}` not implemented in this slice"
+                )),
+            )
+            .await;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -1273,6 +1536,47 @@ mod tests {
             .await
             .expect("runtime event timeout")
             .expect("runtime event channel closed")
+    }
+
+    #[tokio::test]
+    async fn slash_commands_flow_through_typed_runtime_events() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/model mock-2".into()))
+            .await
+            .unwrap();
+
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::ModelChanged(ref model) if model == "mock-2"
+            ) {
+                break;
+            }
+        }
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/status".into()))
+            .await
+            .unwrap();
+        let document = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                break document;
+            }
+        };
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "Model" && section.body == "mock-2")
+        );
+
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }
 
     #[tokio::test]

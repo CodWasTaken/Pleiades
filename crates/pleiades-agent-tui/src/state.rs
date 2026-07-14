@@ -5,10 +5,12 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use pleiades_agent_commands::{CommandRegistry, RenderableDocument};
 use pleiades_agent_core::conversation::{Message, MessageRole};
 use pleiades_agent_core::provider::{AgentActivityStatus, Usage};
 use pleiades_agent_engine::{
-    Activity, AgentCommand, AgentEvent, AgentMode, PermissionDecision, PermissionRequest,
+    Activity, AgentCommand, AgentEvent, AgentMode, NotificationLevel, OverlayKind,
+    PermissionDecision, PermissionRequest,
 };
 use ratatui::style::Style;
 use tui_textarea::{Input, TextArea};
@@ -51,6 +53,10 @@ pub enum Overlay {
     },
     Configuration,
     Diagnostics,
+    /// Structured document rendered by a slash/palette command (e.g. `/status`,
+    /// `/info`).  We keep the title visible for this slice; richer overlay
+    /// rendering lands with item 3 / the unified inspector panel (3.0).
+    Document(RenderableDocument),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,6 +124,10 @@ pub struct AppState {
     pub model_options: Vec<String>,
     pub file_options: Vec<String>,
     pub session_options: Vec<String>,
+    pub commands: CommandRegistry,
+    /// Set when the runtime requested shutdown (e.g. user typed `/quit`).  The
+    /// live workspace checks this flag after each event and stops the loop.
+    pub quit_requested: bool,
     input_history: Vec<String>,
     history_cursor: Option<usize>,
     active_assistant: Option<usize>,
@@ -167,12 +177,44 @@ impl AppState {
             model_options: Vec::new(),
             file_options: Vec::new(),
             session_options: Vec::new(),
+            commands: pleiades_agent_commands::defaults::default_registry(),
+            quit_requested: false,
             input_history: Vec::new(),
             history_cursor: None,
             active_assistant: None,
         };
         state.reset_composer();
         state
+    }
+
+    /// Look up slash-command completion candidates from the registry.
+    /// Returns the labels of every matching command, subcommand, or alias —
+    /// nested subcommands surfaced for `/provider `, `/mcp `, etc.  Used by
+    /// the composer Tab-completion path (item 2.1.3).
+    pub fn complete_slash_candidates(&self, partial: &str) -> Vec<String> {
+        self.commands
+            .suggest(partial, true)
+            .into_iter()
+            .map(|suggestion| suggestion.label)
+            .collect()
+    }
+
+    /// Build the palette listing for the current query, returning tuples of
+    /// `(label, description)`.  Driven by [`CommandRegistry::filter`] so the
+    /// palette cannot drift from the registry.
+    pub fn palette_listing(&self, query: &str) -> Vec<(String, String)> {
+        self.commands
+            .filter(query, true)
+            .into_iter()
+            .map(|spec| {
+                let label = spec.slash();
+                let mut description = spec.description.to_string();
+                if spec.shortcut != pleiades_agent_commands::Shortcut::None {
+                    description.push_str(&format!("  [{}]", spec.shortcut.label()));
+                }
+                (label, description)
+            })
+            .collect()
     }
 
     pub fn set_picker_options(
@@ -275,12 +317,25 @@ impl AppState {
             }
             (KeyCode::Tab, _) if self.focus == Focus::Composer => {
                 let input = self.composer.lines().join("\n");
-                if input.starts_with('/') && !input.contains(char::is_whitespace) {
-                    if let Some(command) = slash_commands()
-                        .iter()
-                        .find(|command| command.starts_with(&input))
-                    {
-                        self.set_composer_text(format!("{command} "));
+                if input.starts_with('/') {
+                    let candidates = self.complete_slash_candidates(&input);
+                    match candidates.len() {
+                        0 => self.status = format!("No matching command for {input}"),
+                        1 => {
+                            let completion = format!("/{} ", candidates[0]);
+                            if completion.trim_end().starts_with(input.as_str()) {
+                                self.set_composer_text(completion);
+                            } else {
+                                self.status = format!("Match: /{}", candidates[0]);
+                            }
+                        }
+                        _ => {
+                            self.status = candidates
+                                .iter()
+                                .map(|label| format!("/{label}"))
+                                .collect::<Vec<_>>()
+                                .join("  ");
+                        }
                     }
                 } else {
                     self.focus = Focus::Conversation;
@@ -399,15 +454,19 @@ impl AppState {
                 mut selected,
                 mut query,
             } => {
-                let matches = palette_matches(&query);
-                let count = matches.len();
+                let listing = self.palette_listing(&query);
+                let count = listing.len();
                 match key.code {
                     KeyCode::Up => selected = selected.saturating_sub(1),
                     KeyCode::Down => selected = (selected + 1).min(count.saturating_sub(1)),
                     KeyCode::Enter => {
                         self.overlay = None;
-                        if let Some((command, _)) = matches.get(selected) {
-                            return self.run_palette(*command);
+                        if let Some((command, _)) = listing.get(selected) {
+                            // Dispatch the canonical slash form through the runtime
+                            // so palette and slash commands share a single path.
+                            return vec![Effect::Command(AgentCommand::DispatchSlash(
+                                command.clone(),
+                            ))];
                         }
                     }
                     _ => {
@@ -476,94 +535,13 @@ impl AppState {
         if !input.starts_with('/') {
             return vec![Effect::Command(AgentCommand::Submit(input.to_string()))];
         }
-        let mut parts = input.splitn(2, char::is_whitespace);
-        let command = parts.next().unwrap_or_default();
-        let value = parts.next().unwrap_or_default().trim();
-        match command {
-            "/help" => {
-                self.overlay = Some(Overlay::Help {
-                    query: String::new(),
-                });
-            }
-            "/diff" => self.overlay = Some(Overlay::Diff),
-            "/output" => {
-                if let Some(activity) = self.activities.get(self.selected_activity) {
-                    self.overlay = Some(Overlay::ToolOutput {
-                        activity_id: activity.id.clone(),
-                    });
-                }
-            }
-            "/doctor" => self.overlay = Some(Overlay::Diagnostics),
-            "/config" => self.overlay = Some(Overlay::Configuration),
-            "/files" => self.open_picker(PickerKind::File),
-            "/sessions" => self.open_picker(PickerKind::Session),
-            "/clear" => return vec![Effect::Command(AgentCommand::ClearConversation)],
-            "/save" => return vec![Effect::Command(AgentCommand::SaveSession)],
-            "/mode" if !value.is_empty() => {
-                return vec![Effect::Command(AgentCommand::SetMode(AgentMode::parse(
-                    value,
-                )))];
-            }
-            "/provider" if !value.is_empty() => {
-                return vec![Effect::Command(AgentCommand::SetProvider(
-                    value.to_string(),
-                ))];
-            }
-            "/model" if !value.is_empty() => {
-                return vec![Effect::Command(AgentCommand::SetModel(value.to_string()))];
-            }
-            "/exit" | "/quit" => {
-                return vec![Effect::Command(AgentCommand::Shutdown), Effect::Quit];
-            }
-            _ => self.status = format!("Unknown or incomplete command: {input}"),
-        }
-        Vec::new()
-    }
-
-    fn run_palette(&mut self, selected: usize) -> Vec<Effect> {
-        match selected {
-            0 => {
-                self.overlay = Some(Overlay::Help {
-                    query: String::new(),
-                });
-                Vec::new()
-            }
-            1 => {
-                self.overlay = Some(Overlay::Diff);
-                Vec::new()
-            }
-            2 => {
-                self.open_picker(PickerKind::File);
-                Vec::new()
-            }
-            3 => {
-                self.open_picker(PickerKind::Provider);
-                Vec::new()
-            }
-            4 => {
-                self.open_picker(PickerKind::Model);
-                Vec::new()
-            }
-            5 => {
-                self.open_picker(PickerKind::Session);
-                Vec::new()
-            }
-            6 => {
-                self.overlay = Some(Overlay::Configuration);
-                Vec::new()
-            }
-            7 => {
-                self.overlay = Some(Overlay::Diagnostics);
-                Vec::new()
-            }
-            8 => vec![Effect::Command(AgentCommand::SetMode(AgentMode::Plan))],
-            9 => vec![Effect::Command(AgentCommand::SetMode(AgentMode::Agent))],
-            10 => vec![Effect::Command(AgentCommand::SetMode(
-                AgentMode::Unrestricted,
-            ))],
-            11 => vec![Effect::Command(AgentCommand::SaveSession)],
-            _ => vec![Effect::Command(AgentCommand::Shutdown), Effect::Quit],
-        }
+        // Route every slash command through the registry (issue 2.1 items
+        // 2-3).  The runtime resolves the spec, invokes its handler, applies
+        // typed AppEffects, and forwards OpenOverlay / Notify / Document /
+        // ShuttingDown back as AgentEvent variants consumed by `apply_agent`.
+        vec![Effect::Command(AgentCommand::DispatchSlash(
+            input.to_string(),
+        ))]
     }
 
     fn open_picker(&mut self, kind: PickerKind) {
@@ -701,8 +679,67 @@ impl AppState {
                 self.finish_task(self.elapsed());
                 self.status = "Task cancelled".to_string();
             }
+            AgentEvent::OpenOverlay(kind) => self.open_overlay_kind(kind),
+            AgentEvent::Notify(notification) => {
+                let label = match notification.level {
+                    NotificationLevel::Info => "Info",
+                    NotificationLevel::Success => "Success",
+                    NotificationLevel::Warning => "Warning",
+                    NotificationLevel::Error => "Error",
+                };
+                self.status = format!("{label}: {}", notification.message);
+            }
+            AgentEvent::Document(document) => {
+                self.overlay = Some(Overlay::Document(document));
+            }
+            AgentEvent::ShuttingDown => {
+                self.quit_requested = true;
+                self.status = "Shutting down".to_string();
+            }
             AgentEvent::Error(message) => self.status = format!("Error: {message}"),
         }
+    }
+
+    fn open_overlay_kind(&mut self, kind: OverlayKind) {
+        self.overlay = match kind {
+            OverlayKind::Help => Some(Overlay::Help {
+                query: String::new(),
+            }),
+            OverlayKind::CommandPalette => Some(Overlay::CommandPalette {
+                selected: 0,
+                query: String::new(),
+            }),
+            OverlayKind::Diff => Some(Overlay::Diff),
+            OverlayKind::ToolOutput => {
+                self.activities
+                    .get(self.selected_activity)
+                    .map(|activity| Overlay::ToolOutput {
+                        activity_id: activity.id.clone(),
+                    })
+            }
+            OverlayKind::Diagnostics => Some(Overlay::Diagnostics),
+            OverlayKind::Configuration => Some(Overlay::Configuration),
+            OverlayKind::FilePicker => {
+                self.open_picker(PickerKind::File);
+                return;
+            }
+            OverlayKind::SessionPicker => {
+                self.open_picker(PickerKind::Session);
+                return;
+            }
+            OverlayKind::ProviderPicker | OverlayKind::ProviderWizard => {
+                self.open_picker(PickerKind::Provider);
+                return;
+            }
+            OverlayKind::ModelPicker => {
+                self.open_picker(PickerKind::Model);
+                return;
+            }
+            unsupported => {
+                self.status = format!("Overlay {unsupported:?} is not available in this release");
+                None
+            }
+        };
     }
 
     fn append_assistant(&mut self, delta: &str, reasoning: bool) {
@@ -801,24 +838,6 @@ impl AppState {
     }
 }
 
-fn slash_commands() -> &'static [&'static str] {
-    &[
-        "/help",
-        "/diff",
-        "/output",
-        "/doctor",
-        "/config",
-        "/files",
-        "/sessions",
-        "/clear",
-        "/save",
-        "/mode",
-        "/provider",
-        "/model",
-        "/quit",
-    ]
-}
-
 fn truncate_display(value: String, limit: usize) -> String {
     if value.len() <= limit {
         return value;
@@ -830,34 +849,6 @@ fn truncate_display(value: String, limit: usize) -> String {
         .last()
         .unwrap_or(0);
     format!("{}\n… content truncated …", &value[..boundary])
-}
-
-pub fn palette_commands() -> &'static [&'static str] {
-    &[
-        "Searchable help",
-        "Review current diff",
-        "Find a workspace file",
-        "Select provider",
-        "Select model",
-        "Open saved session",
-        "Configuration",
-        "Diagnostics",
-        "Switch to Plan mode",
-        "Switch to Agent mode",
-        "Switch to Unrestricted mode",
-        "Save session",
-        "Quit Pleiades",
-    ]
-}
-
-pub fn palette_matches(query: &str) -> Vec<(usize, &'static str)> {
-    let query = query.to_ascii_lowercase();
-    palette_commands()
-        .iter()
-        .enumerate()
-        .filter(|(_, value)| value.to_ascii_lowercase().contains(&query))
-        .map(|(index, value)| (index, *value))
-        .collect()
 }
 
 fn update_query(query: &mut String, key: KeyEvent) {
@@ -874,9 +865,10 @@ fn update_query(query: &mut String, key: KeyEvent) {
 
 #[cfg(test)]
 mod tests {
-    use super::AppState;
+    use super::{AppState, Effect, Overlay};
     use crate::theme::Theme;
-    use pleiades_agent_engine::{AgentEvent, AgentMode};
+    use pleiades_agent_commands::{Notification, NotificationLevel, RenderableDocument};
+    use pleiades_agent_engine::{AgentCommand, AgentEvent, AgentMode, OverlayKind};
     use std::path::PathBuf;
 
     fn state() -> AppState {
@@ -923,5 +915,50 @@ mod tests {
                 .is_char_boundary(state.messages[0].content.len())
         );
         assert!(state.messages[0].content.ends_with("… content truncated …"));
+    }
+
+    #[test]
+    fn slash_commands_dispatch_through_the_runtime() {
+        let mut state = state();
+        let effects = state.execute_input("/provider use openai");
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::Command(AgentCommand::DispatchSlash(command))]
+                if command == "/provider use openai"
+        ));
+    }
+
+    #[test]
+    fn palette_and_nested_completion_come_from_the_registry() {
+        let state = state();
+        assert!(
+            state
+                .palette_listing("doctor")
+                .iter()
+                .any(|(command, _)| command == "/doctor")
+        );
+        let completions = state.complete_slash_candidates("/mode ");
+        assert!(completions.iter().any(|item| item == "mode plan"));
+        assert!(completions.iter().any(|item| item == "mode agent"));
+    }
+
+    #[test]
+    fn typed_command_events_update_frontend_state() {
+        let mut state = state();
+        state.apply_agent(AgentEvent::OpenOverlay(OverlayKind::Diagnostics));
+        assert!(matches!(state.overlay, Some(Overlay::Diagnostics)));
+
+        state.apply_agent(AgentEvent::Notify(Notification {
+            level: NotificationLevel::Success,
+            message: "configuration saved".into(),
+        }));
+        assert_eq!(state.status, "Success: configuration saved");
+
+        let document = RenderableDocument::new("Status").section("Mode", "agent");
+        state.apply_agent(AgentEvent::Document(document.clone()));
+        assert_eq!(state.overlay, Some(Overlay::Document(document)));
+
+        state.apply_agent(AgentEvent::ShuttingDown);
+        assert!(state.quit_requested);
     }
 }
