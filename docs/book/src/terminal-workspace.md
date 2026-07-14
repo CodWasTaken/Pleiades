@@ -44,8 +44,10 @@ The currently implemented workspace commands include `/help`, `/status`,
 `/output`, `/doctor`, `/config`, `/clear`, `/save`, and `/quit`. The provider
 family includes `list`, `use`, `info`, `add`, `remove`, and `reload`. Provider
 reports are obtained through the same application service used by the external
-CLI and always mask credentials. Connection/authentication commands, model
-management, and plugin management continue as separate Release 2.1 slices.
+CLI and always mask credentials. Model and plugin command families are also
+registered with nested completion and structured documents. Provider
+authentication wizards and richer management overlays continue as separate
+Release 2.1 slices.
 
 ## Terminal compatibility
 

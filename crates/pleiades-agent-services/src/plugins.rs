@@ -14,6 +14,16 @@ pub struct PluginReport {
     pub enabled: bool,
     pub tool_count: usize,
     pub has_hooks: bool,
+    pub source: String,
+    pub permissions: Vec<String>,
+}
+
+/// Outcome of installing a local plugin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginInstallReport {
+    pub id: String,
+    pub version: String,
+    pub install_path: PathBuf,
 }
 
 pub struct PluginService {
@@ -26,23 +36,73 @@ impl PluginService {
     }
 
     pub fn list(&self) -> Result<Vec<PluginReport>, Error> {
-        let mut reports = PluginManager::new(&self.config_home)
-            .list_plugins()
-            .map_err(|error| Error::plugin(error.to_string()))?
-            .into_iter()
-            .map(|plugin| PluginReport {
-                id: plugin.id,
-                name: plugin.name,
-                version: plugin.version,
-                description: plugin.description,
-                kind: plugin.kind,
-                enabled: plugin.enabled,
-                tool_count: plugin.tool_count,
-                has_hooks: plugin.has_hooks,
+        let registry = PluginManager::new(&self.config_home)
+            .plugin_registry()
+            .map_err(|error| Error::plugin(error.to_string()))?;
+        let mut reports = registry
+            .plugins()
+            .iter()
+            .map(|plugin| {
+                let mut permissions = plugin
+                    .tools()
+                    .iter()
+                    .map(|tool| format!("tool:{}:{}", tool.name, tool.required_permission.as_str()))
+                    .collect::<Vec<_>>();
+                if !plugin.hooks().is_empty() {
+                    permissions.push("executable-hooks".to_string());
+                }
+                PluginReport {
+                    id: plugin.metadata().id.clone(),
+                    name: plugin.metadata().name.clone(),
+                    version: plugin.metadata().version.clone(),
+                    description: plugin.metadata().description.clone(),
+                    kind: plugin.metadata().kind,
+                    enabled: plugin.enabled,
+                    tool_count: plugin.tools().len(),
+                    has_hooks: !plugin.hooks().is_empty(),
+                    source: plugin.metadata().source.clone(),
+                    permissions,
+                }
             })
             .collect::<Vec<_>>();
         reports.sort_by(|left, right| left.id.cmp(&right.id));
         Ok(reports)
+    }
+
+    pub fn info(&self, id: &str) -> Result<PluginReport, Error> {
+        self.list()?
+            .into_iter()
+            .find(|plugin| plugin.id == id)
+            .ok_or_else(|| Error::plugin(format!("plugin `{id}` is not installed")))
+    }
+
+    pub fn install(&self, source: &str) -> Result<PluginInstallReport, Error> {
+        let outcome = PluginManager::new(&self.config_home)
+            .install(source)
+            .map_err(|error| Error::plugin(error.to_string()))?;
+        Ok(PluginInstallReport {
+            id: outcome.plugin_id,
+            version: outcome.version,
+            install_path: outcome.install_path,
+        })
+    }
+
+    pub fn uninstall(&self, id: &str) -> Result<(), Error> {
+        PluginManager::new(&self.config_home)
+            .uninstall(id)
+            .map_err(|error| Error::plugin(error.to_string()))
+    }
+
+    pub fn enable(&self, id: &str) -> Result<(), Error> {
+        PluginManager::new(&self.config_home)
+            .enable(id)
+            .map_err(|error| Error::plugin(error.to_string()))
+    }
+
+    pub fn disable(&self, id: &str) -> Result<(), Error> {
+        PluginManager::new(&self.config_home)
+            .disable(id)
+            .map_err(|error| Error::plugin(error.to_string()))
     }
 }
 
@@ -61,5 +121,15 @@ mod tests {
                 .iter()
                 .any(|plugin| { plugin.id == "pleiades-agent-core-builtin" && plugin.enabled })
         );
+    }
+
+    #[test]
+    fn enable_and_disable_are_reflected_in_reports() {
+        let temp = tempfile::tempdir().unwrap();
+        let service = PluginService::new(temp.path().to_path_buf());
+        service.disable("pleiades-agent-core-builtin").unwrap();
+        assert!(!service.info("pleiades-agent-core-builtin").unwrap().enabled);
+        service.enable("pleiades-agent-core-builtin").unwrap();
+        assert!(service.info("pleiades-agent-core-builtin").unwrap().enabled);
     }
 }
