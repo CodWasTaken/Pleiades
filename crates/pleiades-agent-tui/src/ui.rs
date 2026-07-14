@@ -12,7 +12,7 @@ use ratatui::widgets::{
 };
 
 use crate::markdown::render_markdown;
-use crate::state::{AppState, Focus, Overlay, PickerKind, palette_matches};
+use crate::state::{AppState, Focus, Overlay, PickerKind};
 use crate::theme::Theme;
 
 pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
@@ -295,18 +295,20 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
             render_modal(frame, area, " Safe autonomy ", text, theme);
         }
         Overlay::Help { query } => {
-            let query_lower = query.to_ascii_lowercase();
             let mut text = vec![field("Search", &query, theme), Line::default()];
-            text.extend(
-                help_entries()
-                    .into_iter()
-                    .filter(|(key, description)| {
-                        format!("{key} {description}")
-                            .to_ascii_lowercase()
-                            .contains(&query_lower)
-                    })
-                    .map(|(key, description)| field(key, description, theme)),
-            );
+            let commands = app.palette_listing(&query);
+            if commands.is_empty() {
+                text.push(Line::from(Span::styled(
+                    "No matching commands.",
+                    theme.muted(),
+                )));
+            } else {
+                text.extend(
+                    commands
+                        .into_iter()
+                        .map(|(command, description)| field(&command, &description, theme)),
+                );
+            }
             render_modal(
                 frame,
                 area,
@@ -316,34 +318,31 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
             );
         }
         Overlay::CommandPalette { selected, query } => {
-            let matches = palette_matches(&query);
+            let matches = app.palette_listing(&query);
             let mut text = vec![field("Search", &query, theme), Line::default()];
-            text.extend(
-                matches
-                    .iter()
-                    .enumerate()
-                    .map(|(visible_index, (_, command))| {
-                        let style = if visible_index == selected {
-                            Style::default()
-                                .fg(theme.background)
-                                .bg(theme.primary)
-                                .add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(theme.foreground)
-                        };
-                        Line::from(Span::styled(
-                            format!(
-                                " {} {command}",
-                                if visible_index == selected {
-                                    "›"
-                                } else {
-                                    " "
-                                }
-                            ),
-                            style,
-                        ))
-                    }),
-            );
+            text.extend(matches.iter().enumerate().map(
+                |(visible_index, (command, description))| {
+                    let style = if visible_index == selected {
+                        Style::default()
+                            .fg(theme.background)
+                            .bg(theme.primary)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.foreground)
+                    };
+                    Line::from(Span::styled(
+                        format!(
+                            " {} {command:<24} {description}",
+                            if visible_index == selected {
+                                "›"
+                            } else {
+                                " "
+                            }
+                        ),
+                        style,
+                    ))
+                },
+            ));
             render_modal(
                 frame,
                 area,
@@ -514,6 +513,32 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
             ];
             render_modal(frame, area, " Diagnostics  ·  Esc close ", text, theme);
         }
+        Overlay::Document(document) => {
+            let mut text = Vec::new();
+            for section in document.sections {
+                text.push(Line::from(Span::styled(section.heading, theme.title())));
+                text.extend(section.body.lines().map(|line| {
+                    Line::from(Span::styled(
+                        line.to_string(),
+                        Style::default().fg(theme.foreground),
+                    ))
+                }));
+                text.push(Line::default());
+            }
+            if text.is_empty() {
+                text.push(Line::from(Span::styled(
+                    "No details available.",
+                    theme.muted(),
+                )));
+            }
+            render_modal(
+                frame,
+                area,
+                &format!(" {}  ·  Esc close ", document.title),
+                text,
+                theme,
+            );
+        }
     }
 }
 
@@ -586,34 +611,6 @@ fn picker_label(kind: PickerKind) -> &'static str {
         PickerKind::File => "File",
         PickerKind::Session => "Session",
     }
-}
-
-fn help_entries() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("Enter", "send a message or queue a follow-up"),
-        ("Alt+Enter", "insert a new line in the composer"),
-        ("Tab", "cycle conversation, activity, and composer focus"),
-        ("PgUp/PgDn", "scroll the conversation while output streams"),
-        ("Ctrl+P", "open the searchable command palette"),
-        ("Ctrl+R", "select a configured provider"),
-        ("Ctrl+M", "select a configured model"),
-        ("Ctrl+F", "find and reference a workspace file"),
-        ("Ctrl+L", "open a saved session"),
-        ("Ctrl+D", "review the current workspace diff"),
-        ("Ctrl+O", "open selected activity output"),
-        ("Ctrl+T", "inspect selected tool details"),
-        ("Ctrl+,", "open configuration"),
-        ("Ctrl+C", "cancel running work"),
-        ("Ctrl+Q", "save and quit Pleiades"),
-        ("/mode", "switch plan, agent, or unrestricted mode"),
-        ("/provider", "switch provider by name"),
-        ("/model", "switch model by name"),
-        ("/diff", "review the current diff"),
-        ("/doctor", "open live diagnostics"),
-        ("/clear", "clear the current conversation"),
-        ("/save", "save the current session"),
-        ("/quit", "exit the terminal workspace"),
-    ]
 }
 
 fn panel_block<'a>(title: &'a str, theme: Theme, focused: bool) -> Block<'a> {

@@ -10,6 +10,7 @@ repository = "https://github.com/CodWasTaken/Pleiades"
 [dependencies]
 pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
 pleiades-agent-config = { path = "../pleiades-agent-config", version = "2.0.0" }
+pleiades-agent-commands = { path = "../pleiades-agent-commands", version = "2.0.0" }
 pleiades-agent-engine = { path = "../pleiades-agent-engine", version = "2.0.0" }
 
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }

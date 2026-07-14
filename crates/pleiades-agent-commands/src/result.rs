@@ -129,14 +129,14 @@ pub enum NotificationLevel {
 }
 
 /// A transient notification surfaced to the user.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Notification {
     pub level: NotificationLevel,
     pub message: String,
 }
 
 /// A structured document the frontend renders in the active panel.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RenderableDocument {
     pub title: String,
     pub sections: Vec<RenderableSection>,
@@ -164,7 +164,7 @@ impl RenderableDocument {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderableSection {
     pub heading: String,
     pub body: String,

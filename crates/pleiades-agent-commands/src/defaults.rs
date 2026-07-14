@@ -17,7 +17,7 @@ use pleiades_agent_core::Error;
 
 use crate::context::CommandContext;
 use crate::handler::{CommandHandler, HandlerResult};
-use crate::result::{AppEffect, CommandResult, NotificationLevel, OverlayKind};
+use crate::result::{AppEffect, CommandResult, OverlayKind};
 use crate::spec::{
     ArgumentSpec, CommandAvailability, CommandCategory, CommandSpec, CompletionSource,
     PermissionRequirement, Shortcut,
@@ -50,10 +50,18 @@ where
     FnHandler { f }
 }
 
-fn unsupported(name: &str) -> Error {
-    Error::Unsupported(format!(
-        "command `{name}` has no implementation in this slice"
-    ))
+struct StatusHandler;
+
+#[async_trait]
+impl CommandHandler for StatusHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new("Pleiades Status")
+                .section("Provider", context.provider())
+                .section("Model", context.model())
+                .section("Mode", context.mode()),
+        ))
+    }
 }
 
 /// Build and populate a fresh [`CommandRegistry`] with the default live
@@ -69,7 +77,6 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_provider_family(&mut r);
     register_model_family(&mut r);
     register_mode_family(&mut r);
-    register_legacy_repl(&mut r);
     r
 }
 
@@ -264,12 +271,7 @@ fn register_help(r: &mut crate::registry::CommandRegistry) {
         CommandSpec::builder(
             vec!["status"],
             "Show the current workspace status snapshot",
-            handler(|args| {
-                let _ = args;
-                Ok(CommandResult::RenderDocument(
-                    crate::result::RenderableDocument::new("Pleiades Status"),
-                ))
-            }),
+            StatusHandler,
         )
         .category(CommandCategory::Help)
         .availability(CommandAvailability::Both)
@@ -393,68 +395,6 @@ fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
     }
 }
 
-fn register_legacy_repl(r: &mut crate::registry::CommandRegistry) {
-    // /info — preview of provider/model/workspace state (REPL legacy).
-    r.register(
-        CommandSpec::builder(
-            vec!["info"],
-            "Print a quick state summary (provider, model, mode)",
-            handler(|_| {
-                Ok(CommandResult::RenderDocument(
-                    crate::result::RenderableDocument::new("Workspace Info"),
-                ))
-            }),
-        )
-        .category(CommandCategory::Help)
-        .availability(CommandAvailability::Both)
-        .build(),
-    )
-    .ok();
-
-    // /tokens — preview current token usage.
-    r.register(
-        CommandSpec::builder(
-            vec!["tokens"],
-            "Show current token usage for this session",
-            handler(|_| Err(unsupported("tokens"))),
-        )
-        .aliases(vec!["tok"])
-        .category(CommandCategory::Help)
-        .availability(CommandAvailability::Both)
-        .build(),
-    )
-    .ok();
-
-    // /export [format] — export transcript.
-    r.register(
-        CommandSpec::builder(
-            vec!["export"],
-            "Export the current transcript (md, json)",
-            handler(|args| match args.first() {
-                Some(fmt) if matches!(fmt.as_str(), "md" | "json") => {
-                    Ok(CommandResult::notification(
-                        NotificationLevel::Warning,
-                        format!("export to `{fmt}` not yet implemented in this slice"),
-                    ))
-                }
-                Some(other) => Err(Error::invalid_input(format!(
-                    "unknown export format `{other}`"
-                ))),
-                None => Err(Error::invalid_input("usage: /export <md|json>")),
-            }),
-        )
-        .aliases(vec!["exp"])
-        .arguments(vec![ArgumentSpec::required(
-            "format",
-            "Export format (`md` or `json`).",
-        )])
-        .category(CommandCategory::Workspace)
-        .availability(CommandAvailability::Both)
-        .build(),
-    )
-    .ok();
-}
-
 fn is_known_preset(preset: &str) -> bool {
     matches!(preset, "plan" | "agent" | "unrestricted")
 }
@@ -486,9 +426,6 @@ mod tests {
             "save",
             "load",
             "quit",
-            "info",
-            "tokens",
-            "export",
             "provider",
             "model",
             "mode",
@@ -566,5 +503,38 @@ mod tests {
             res,
             CommandResult::OpenOverlay(OverlayKind::ProviderPicker)
         ));
+    }
+
+    #[tokio::test]
+    async fn status_document_uses_the_invocation_context() {
+        let r = default_registry();
+        let ctx = CommandContextBuilder::default()
+            .provider("anthropic")
+            .model("claude-test")
+            .mode("plan")
+            .build();
+        let res = r.dispatch("/status", &ctx, true).await.unwrap();
+        let CommandResult::RenderDocument(document) = res else {
+            panic!("status should return a structured document");
+        };
+        assert_eq!(document.title, "Pleiades Status");
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| { section.heading == "Provider" && section.body == "anthropic" })
+        );
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "Model" && section.body == "claude-test")
+        );
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "Mode" && section.body == "plan")
+        );
     }
 }

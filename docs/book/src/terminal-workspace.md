@@ -32,7 +32,17 @@ Completed operations collapse into one-line activity records. Failures and appro
 | `F1` | Search help |
 | `Ctrl+Q` | Save and exit |
 
-The slash commands `/mode`, `/provider`, `/model`, `/files`, `/sessions`, `/diff`, `/output`, `/doctor`, `/config`, `/clear`, `/save`, and `/quit` provide the same operations.
+Slash commands, searchable help, the command palette, and nested completion are
+generated from one typed command registry. Typing `/` and pressing `Tab` lists
+root commands; typing a family followed by a space, such as `/mode `, lists its
+registered subcommands. Palette selections and typed slash commands both travel
+through the runtime command channel and return structured UI events—neither path
+executes provider or tool logic in the TUI.
+
+The currently implemented workspace commands include `/help`, `/status`,
+`/mode`, `/provider`, `/model`, `/files`, `/sessions`, `/load`, `/diff`,
+`/output`, `/doctor`, `/config`, `/clear`, `/save`, and `/quit`. Provider,
+model, and plugin management subcommands will expand during Release 2.1.
 
 ## Terminal compatibility
 

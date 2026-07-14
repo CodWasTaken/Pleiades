@@ -253,8 +253,8 @@ tracked as a GitHub issue under the matching milestone.
 In progress. Items (GitHub issues):
 
 - [x] 1. Shared command registry (`pleiades-agent-commands` crate, ADR 0001)
-- [ ] 2. Dynamic help and command palette from the registry
-- [ ] 3. Nested slash-command autocomplete
+- [x] 2. Dynamic help and command palette from the registry
+- [x] 3. Nested slash-command autocomplete
 - [ ] 4. CLI/TUI service unification (application services layer)
 - [ ] 5. `/provider` and `/model` workspace managers
 - [ ] 6. `/plugins` workspace manager + native overlay

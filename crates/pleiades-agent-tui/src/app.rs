@@ -155,7 +155,10 @@ impl TuiApp {
                         None => quit = true,
                     }
                 }
-                Some(event) = agent.events.recv() => app.apply_agent(event),
+                Some(event) = agent.events.recv() => {
+                    app.apply_agent(event);
+                    quit = app.quit_requested;
+                }
                 Some(files) = file_receiver.recv() => app.file_options = files,
                 _ = render_tick.tick() => {}
             }

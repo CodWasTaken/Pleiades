@@ -15,14 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   live-workspace default commands — the single source of truth for slash
   commands, the command palette, help, and autocomplete. See
   `docs/adr/0001-command-registry-and-application-services.md`.
-- Added 30 unit tests + 1 doctest for command registration, alias collisions,
+- Added registry, runtime, and reducer coverage for command registration, alias collisions,
   nested subcommand lookup, deepest-path resolution, palette filtering, slash
-  autocomplete, help document generation, and the default registry.
+  autocomplete, help document generation, typed command events, and live model-state updates.
 
 ### Changed
 
 - The Cargo workspace now includes `crates/pleiades-agent-commands`. Workspace
-  fmt, clippy (deny warnings), and tests remain green (147 passing).
+  formatting, Clippy with warnings denied, and tests remain green.
+- Slash input, command-palette selections, help, and completion now derive from
+  the shared registry. Command results cross the runtime boundary as typed
+  overlay, notification, document, effect, and shutdown events.
 
 ## [2.0.0] - 2026-07-13
 
