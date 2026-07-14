@@ -1492,9 +1492,12 @@ name = "pleiades-agent-commands"
 version = "2.0.0"
 dependencies = [
  "async-trait",
+ "pleiades-agent-config",
  "pleiades-agent-core",
+ "pleiades-agent-services",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
