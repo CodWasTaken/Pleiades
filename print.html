@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4f8e2638.js";
+            window.path_to_searchindex_js = "searchindex-6f12bce3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c70dd295.js"></script>
+        <script src="toc-1ea7e559.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -831,6 +831,48 @@ process. Runtime save calls become no-ops until <code>/session ephemeral off</co
 used or the process exits.</p>
 <p>The headless CLI does not persist an ephemeral preference because the mode is
 intended to be process-local. Use the live workspace command when you need it.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="memory"><a class="header" href="#memory">Memory</a></h1>
+<p>Memory stores reusable context outside the active transcript. Pleiades keeps
+separate session, project, and user tiers and exposes them through the live
+workspace and CLI.</p>
+<pre><code class="language-text">/memory show
+/memory search &lt;query&gt;
+/memory add &lt;text&gt;
+/memory forget &lt;id&gt;
+/memory refresh
+/memory sources
+/memory clear
+</code></pre>
+<p>CLI equivalents:</p>
+<pre><code class="language-bash">pleiades memory show
+pleiades memory search nextest
+pleiades memory add "Prefer cargo nextest for Rust tests"
+pleiades memory forget &lt;id&gt;
+pleiades memory sources
+pleiades memory clear
+</code></pre>
+<p>Memory entries include:</p>
+<ul>
+<li>source;</li>
+<li>scope;</li>
+<li>creation time;</li>
+<li>confidence;</li>
+<li>last-used time when available;</li>
+<li>project association;</li>
+<li>whether the entry was generated or user-authored.</li>
+</ul>
+<p><code>memory forget</code> accepts a full id or a unique prefix. If a prefix is ambiguous,
+Pleiades refuses the deletion.</p>
+<h2 id="persistence"><a class="header" href="#persistence">Persistence</a></h2>
+<p>Persistent memory is stored below the platform data directory:</p>
+<pre><code class="language-text">pleiades/memory/session
+pleiades/memory/project
+pleiades/memory/user
+</code></pre>
+<p><code>/memory refresh</code> rebuilds the runtime engine and reloads persistent memory
+from disk. <code>/memory clear</code> clears all tiers and should be treated as a
+destructive action.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="workflows"><a class="header" href="#workflows">Workflows</a></h1>
 <p>Workflow definitions may be TOML, YAML, or JSON and are discovered in <code>.pleiades/workflows</code> and the global Pleiades configuration directory.</p>
