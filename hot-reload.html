@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Configuration reference - Pleiades User Guide</title>
+        <title>Hot reload - Pleiades User Guide</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/CodWasTaken/Pleiades" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/CodWasTaken/Pleiades/edit/master/docs/book/src/configuration.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/CodWasTaken/Pleiades/edit/master/docs/book/src/hot-reload.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,110 +180,42 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="configuration-reference"><a class="header" href="#configuration-reference">Configuration reference</a></h1>
-<p>Configuration is merged in this order: built-in defaults, global configuration, project configuration, environment variables, then CLI flags. Global files live under <code>~/.config/pleiades</code>; project files live under <code>.pleiades</code>. TOML, JSON, and YAML are supported. <code>${NAME}</code> interpolates an environment variable.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Key</th><th>Type</th><th>Default</th></tr>
-</thead>
-<tbody>
-<tr><td><code>core.default_provider</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>core.default_model</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>core.theme</code></td><td>string?</td><td><code>seven-sisters</code></td></tr>
-<tr><td><code>core.verbose</code>, <code>core.debug</code></td><td>boolean</td><td><code>false</code></td></tr>
-<tr><td><code>core.max_tokens</code></td><td>integer?</td><td><code>4096</code></td></tr>
-<tr><td><code>core.temperature</code></td><td>float?</td><td><code>0.7</code></td></tr>
-<tr><td><code>core.auto_update</code></td><td>boolean</td><td><code>true</code></td></tr>
-<tr><td><code>core.log_level</code></td><td>string</td><td><code>info</code></td></tr>
-<tr><td><code>providers.&lt;name&gt;.api_key</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>providers.&lt;name&gt;.base_url</code></td><td>string?</td><td>provider default</td></tr>
-<tr><td><code>providers.&lt;name&gt;.headers</code></td><td>string map</td><td>empty</td></tr>
-<tr><td><code>providers.&lt;name&gt;.organization_id</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>providers.&lt;name&gt;.max_retries</code></td><td>integer</td><td><code>3</code></td></tr>
-<tr><td><code>providers.&lt;name&gt;.timeout_secs</code></td><td>integer</td><td><code>120</code></td></tr>
-<tr><td><code>models.aliases</code></td><td>string map</td><td>empty</td></tr>
-<tr><td><code>models.default</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>plugins.enabled</code></td><td>string list</td><td>empty</td></tr>
-<tr><td><code>plugins.paths</code></td><td>string list</td><td><code>~/.pleiades/plugins</code></td></tr>
-<tr><td><code>plugins.settings</code></td><td>nested string map</td><td>empty</td></tr>
-<tr><td><code>plugins.sandbox</code></td><td>boolean</td><td><code>false</code> (reserved for a future sandbox runtime)</td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.transport</code></td><td><code>stdio</code>, <code>http</code>, or <code>streamable-http</code></td><td>required per server</td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.command</code></td><td>string</td><td>required for <code>stdio</code></td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.args</code></td><td>string list</td><td>empty</td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.env</code></td><td>string map</td><td>empty</td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.url</code></td><td>string</td><td>required for remote transports</td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.auth</code></td><td>auth source</td><td>unset</td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.enabled</code></td><td>boolean</td><td><code>true</code></td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.timeout_secs</code></td><td>integer</td><td><code>30</code></td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.tool_allowlist</code></td><td>string list</td><td>empty</td></tr>
-<tr><td><code>mcp.servers.&lt;id&gt;.tool_denylist</code></td><td>string list</td><td>empty</td></tr>
-<tr><td><code>permissions.always_allow</code></td><td>string list</td><td>empty</td></tr>
-<tr><td><code>permissions.always_deny</code></td><td>string list</td><td>empty</td></tr>
-<tr><td><code>permissions.rules</code></td><td>array of permission rules</td><td>empty</td></tr>
-<tr><td><code>permissions.ask_always</code></td><td>boolean</td><td><code>true</code></td></tr>
-<tr><td><code>permissions.grant_duration_minutes</code></td><td>integer</td><td><code>60</code></td></tr>
-<tr><td><code>session.context_size</code></td><td>integer</td><td><code>100</code></td></tr>
-<tr><td><code>session.auto_save_interval_secs</code></td><td>integer?</td><td><code>60</code></td></tr>
-<tr><td><code>session.history_dir</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>session.max_concurrent</code></td><td>integer</td><td><code>10</code></td></tr>
-<tr><td><code>session.compress_history</code></td><td>boolean</td><td><code>false</code></td></tr>
-<tr><td><code>display.style</code></td><td><code>plain</code>, <code>rich</code>, or <code>minimal</code></td><td><code>rich</code></td></tr>
-<tr><td><code>display.syntax_highlighting</code></td><td>boolean</td><td><code>true</code></td></tr>
-<tr><td><code>display.show_token_usage</code>, <code>display.show_timing</code></td><td>boolean</td><td><code>false</code></td></tr>
-<tr><td><code>display.output_width</code></td><td>integer</td><td><code>0</code> (automatic)</td></tr>
-<tr><td><code>display.show_progress</code></td><td>boolean</td><td><code>true</code></td></tr>
-<tr><td><code>agent.default_persona</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>agent.system_prompt_prefix</code></td><td>string?</td><td>unset</td></tr>
-<tr><td><code>agent.default_tools</code></td><td>string list</td><td>empty</td></tr>
-<tr><td><code>agent.max_tool_iterations</code></td><td>integer</td><td><code>25</code></td></tr>
-<tr><td><code>agent.max_repeats</code></td><td>integer</td><td><code>3</code></td></tr>
-<tr><td><code>agent.auto_edit</code></td><td>boolean</td><td><code>false</code></td></tr>
-</tbody>
-</table>
-</div>
-<p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
-<p>MCP servers are configured under <code>mcp.servers</code>. Stdio servers define a command,
-arguments, and optional environment variables:</p>
-<pre><code class="language-toml">[mcp.servers.filesystem]
-transport = "stdio"
-command = "mcp-server-filesystem"
-args = ["."]
-timeout_secs = 30
-tool_allowlist = ["read_file", "list_directory"]
+                        <h1 id="hot-reload"><a class="header" href="#hot-reload">Hot reload</a></h1>
+<p>The live workspace can reload extension definitions without restarting the
+terminal session.</p>
+<p>Reload currently refreshes:</p>
+<ul>
+<li>custom commands from <code>.pleiades/commands/*.toml</code> and global command files</li>
+<li>skill definitions from <code>.pleiades/skills/*.toml</code> and global skill files</li>
+<li>MCP configuration read by workspace commands</li>
+<li>plugin reports and trust metadata exposed through workspace commands</li>
+<li>prompt files discovered by command services</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-text">/plugins reload
+/mcp reload
+/skills reload
 </code></pre>
-<p>Remote servers use <code>http</code> or <code>streamable-http</code> and may point authentication at
-environment variables. Pleiades stores the variable names, not token values:</p>
-<pre><code class="language-toml">[mcp.servers.remote-docs]
-transport = "streamable-http"
-url = "https://example.test/mcp"
-timeout_secs = 30
-
-[mcp.servers.remote-docs.auth]
-type = "bearer"
-token_env = "REMOTE_DOCS_MCP_TOKEN"
-</code></pre>
-<p>The special <code>providers.openai-subscription</code> entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with <code>pleiades auth status</code>. Run <code>pleiades setup</code> instead of editing this entry manually.</p>
-<p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|auto|yolo</code> or <code>/mode plan|agent|auto|yolo</code>. <code>agent</code> is the default.
-<code>auto</code> runs without prompts inside the workspace. <code>yolo</code> removes workspace
-isolation after explicit confirmation and should only be used in an already
-isolated environment. The old <code>unrestricted</code> spelling remains accepted as a
-compatibility alias for <code>yolo</code>.</p>
-<p>Structured permission rules have <code>tool</code>, <code>pattern</code>, and <code>action</code> fields, plus
-optional <code>cwd</code>, <code>network</code>, <code>mcp_server</code>, and <code>mcp_tool</code> matchers. <code>action</code> is
-<code>allow</code>, <code>ask</code>, or <code>deny</code>. Rules can be edited directly or managed with
-<code>pleiades permissions allow|ask|deny|show|test|reset</code>.</p>
-<p>Built-in themes are <code>seven-sisters</code>, <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code>. Legacy <code>catppuccin-mocha</code>, <code>dracula</code>, and <code>tokyo-night</code> values remain accepted as compatibility aliases.</p>
+<p>Each command emits a typed reload event. The runtime rebuilds its command
+registry, and the TUI rebuilds its autocomplete and command-palette registry.
+This means a newly created custom command can appear in slash completion after a
+reload without restarting Pleiades.</p>
+<p>Misconfigured extension files are skipped by registration paths and surfaced by
+their service reports where available. They must not crash the workspace.</p>
+<h2 id="limits"><a class="header" href="#limits">Limits</a></h2>
+<p>Hot reload does not replace a currently running provider request, tool
+execution, plugin hook process, or MCP server process. Running work keeps the
+state it started with; new commands use the reloaded registry.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="packages.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="custom-commands.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="providers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="prompts.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -293,11 +225,11 @@ optional <code>cwd</code>, <code>network</code>, <code>mcp_server</code>, and <c
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="packages.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="custom-commands.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="providers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="prompts.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

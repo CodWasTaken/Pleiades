@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1e336222.js";
+            window.path_to_searchindex_js = "searchindex-0f5956e1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4f6d2d0f.js"></script>
+        <script src="toc-1bc6abed.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -747,6 +747,33 @@ prompt = "Prepare {{version}}"
 <p>Custom commands are prompt templates. They do not bypass permissions and do not
 execute shell commands directly. If a rendered prompt causes the agent to use a
 tool, the active mode and permission engine decide whether that tool may run.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="hot-reload"><a class="header" href="#hot-reload">Hot reload</a></h1>
+<p>The live workspace can reload extension definitions without restarting the
+terminal session.</p>
+<p>Reload currently refreshes:</p>
+<ul>
+<li>custom commands from <code>.pleiades/commands/*.toml</code> and global command files</li>
+<li>skill definitions from <code>.pleiades/skills/*.toml</code> and global skill files</li>
+<li>MCP configuration read by workspace commands</li>
+<li>plugin reports and trust metadata exposed through workspace commands</li>
+<li>prompt files discovered by command services</li>
+</ul>
+<p>Run:</p>
+<pre><code class="language-text">/plugins reload
+/mcp reload
+/skills reload
+</code></pre>
+<p>Each command emits a typed reload event. The runtime rebuilds its command
+registry, and the TUI rebuilds its autocomplete and command-palette registry.
+This means a newly created custom command can appear in slash completion after a
+reload without restarting Pleiades.</p>
+<p>Misconfigured extension files are skipped by registration paths and surfaced by
+their service reports where available. They must not crash the workspace.</p>
+<h2 id="limits"><a class="header" href="#limits">Limits</a></h2>
+<p>Hot reload does not replace a currently running provider request, tool
+execution, plugin hook process, or MCP server process. Running work keeps the
+state it started with; new commands use the reloaded registry.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="prompt-templates"><a class="header" href="#prompt-templates">Prompt templates</a></h1>
 <p>Pleiades ships assistant, summarizer, review, commit, PR summary, diff explanation, refactoring, and test-generation templates. Templates substitute <code>{{name}}</code>; <code>{{name|default}}</code> supplies a fallback.</p>
