@@ -102,6 +102,10 @@ enum Commands {
     #[command(subcommand)]
     Session(SessionCommand),
 
+    /// Inspect and control memory
+    #[command(subcommand)]
+    Memory(MemoryCommand),
+
     /// Manage and execute tools
     #[command(subcommand)]
     Tool(ToolCommand),
@@ -406,6 +410,33 @@ enum SessionCommand {
         /// on or off
         state: String,
     },
+}
+
+#[derive(Subcommand)]
+enum MemoryCommand {
+    /// Show recent memory entries
+    Show,
+    /// Search memory entries
+    Search {
+        /// Query text
+        query: String,
+    },
+    /// Add user-authored memory
+    Add {
+        /// Memory text
+        text: String,
+    },
+    /// Forget one memory entry by id
+    Forget {
+        /// Memory entry id
+        id: String,
+    },
+    /// Refresh persistent memory view
+    Refresh,
+    /// Show memory sources
+    Sources,
+    /// Clear all memory tiers
+    Clear,
 }
 
 #[derive(Subcommand)]
@@ -1831,6 +1862,92 @@ fn handle_session_ephemeral(state: &str) {
 
 fn short_id(id: &str) -> &str {
     id.get(..8).unwrap_or(id)
+}
+
+fn memory_manager() -> pleiades_agent_engine::MemoryManager {
+    pleiades_agent_engine::MemoryManager::persisted(pleiades_agent_memory::FileStore::default_dir())
+}
+
+fn print_memory_records(records: &[pleiades_agent_engine::memory::MemoryRecord]) {
+    if records.is_empty() {
+        println!("No memory entries.");
+        return;
+    }
+    for record in records {
+        let entry = &record.entry;
+        println!(
+            "{}  {}  {}",
+            short_id(&entry.id),
+            record.tier,
+            entry.content
+        );
+        println!(
+            "    source: {} | scope: {} | type: {} | confidence: {:.2} | generated: {}",
+            entry.source,
+            if entry.scope.is_empty() {
+                record.tier.as_str()
+            } else {
+                entry.scope.as_str()
+            },
+            if entry.uitype.is_empty() {
+                "text"
+            } else {
+                entry.uitype.as_str()
+            },
+            entry.confidence,
+            entry.generated
+        );
+        if let Some(project) = &entry.project {
+            println!("    project: {project}");
+        }
+    }
+}
+
+fn handle_memory_command(command: MemoryCommand) {
+    let manager = memory_manager();
+    match command {
+        MemoryCommand::Show => match manager.recent(20) {
+            Ok(records) => print_memory_records(&records),
+            Err(error) => exit_error(&format!("Error: {error}")),
+        },
+        MemoryCommand::Search { query } => match manager.search(&query, 20) {
+            Ok(records) => print_memory_records(&records),
+            Err(error) => exit_error(&format!("Error: {error}")),
+        },
+        MemoryCommand::Add { text } => match manager.add_user(&text) {
+            Ok(()) => println!("Memory added"),
+            Err(error) => exit_error(&format!("Error: {error}")),
+        },
+        MemoryCommand::Forget { id } => match manager.forget(&id) {
+            Ok(true) => println!("Forgot memory {id}"),
+            Ok(false) => exit_error(&format!("Error: memory `{id}` not found")),
+            Err(error) => exit_error(&format!("Error: {error}")),
+        },
+        MemoryCommand::Refresh => {
+            let _ = memory_manager();
+            println!("Memory refreshed from persistent storage");
+        }
+        MemoryCommand::Sources => match manager.sources() {
+            Ok(sources) => {
+                for source in sources {
+                    println!("{}: {} entries", source.tier, source.count);
+                    for value in source.sources {
+                        println!("  {value}");
+                    }
+                }
+            }
+            Err(error) => exit_error(&format!("Error: {error}")),
+        },
+        MemoryCommand::Clear => match manager.clear_all() {
+            Ok(()) => println!("Memory cleared"),
+            Err(error) => exit_error(&format!("Error: {error}")),
+        },
+    }
+}
+
+fn exit_error(message: &str) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1);
 }
 
 fn handle_session_export(loader: &ConfigLoader, id: &str, format: &str, output: Option<String>) {
@@ -3567,6 +3684,7 @@ fn main() {
             SessionCommand::Path => handle_session_path(&loader),
             SessionCommand::Ephemeral { state } => handle_session_ephemeral(&state),
         },
+        Some(Commands::Memory(cmd)) => handle_memory_command(cmd),
         Some(Commands::Tool(cmd)) => match cmd {
             ToolCommand::List => handle_tool_list(&loader),
             ToolCommand::Info { name } => handle_tool_info(&loader, &name),

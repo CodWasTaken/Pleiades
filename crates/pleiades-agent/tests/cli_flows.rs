@@ -327,6 +327,48 @@ fn session_cli_search_rename_fork_and_resume() {
 }
 
 #[test]
+fn memory_cli_add_search_sources_and_forget() {
+    let workspace = tempfile::tempdir().unwrap();
+    let data = workspace.path().join("data");
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .env("XDG_DATA_HOME", &data)
+        .args(["memory", "add", "Prefer cargo nextest for Rust tests"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Memory added"));
+
+    let output = command(workspace.path())
+        .current_dir(workspace.path())
+        .env("XDG_DATA_HOME", &data)
+        .args(["memory", "search", "nextest"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("Prefer cargo nextest"));
+    let id = text.split_whitespace().next().unwrap().to_string();
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .env("XDG_DATA_HOME", &data)
+        .args(["memory", "sources"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("user"))
+        .stdout(predicate::str::contains("user"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .env("XDG_DATA_HOME", &data)
+        .args(["memory", "forget", &id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Forgot memory"));
+}
+
+#[test]
 fn workflow_create_validate_list_and_run() {
     let workspace = tempfile::tempdir().unwrap();
     command(workspace.path())

@@ -106,6 +106,20 @@ pub enum AppEffect {
     ContextUnpin(String),
     /// Show files and tool sources represented in context.
     ContextSources,
+    /// Show recent memory entries.
+    MemoryShow,
+    /// Search memory entries.
+    MemorySearch(String),
+    /// Add user-authored memory.
+    MemoryAdd(String),
+    /// Delete a memory entry by id.
+    MemoryForget(String),
+    /// Refresh memory views from persistent storage.
+    MemoryRefresh,
+    /// Show memory sources.
+    MemorySources,
+    /// Clear all memory tiers.
+    MemoryClear,
     /// Run a full definition-of-done verification plan.
     Verify,
     /// Run project test commands only.

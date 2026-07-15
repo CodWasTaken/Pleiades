@@ -626,6 +626,7 @@ pub fn default_registry_with_services(
     register_permissions_family(&mut r);
     register_checkpoint_family(&mut r);
     register_context_family(&mut r);
+    register_memory_family(&mut r);
     register_verification_family(&mut r);
     register_git_family(&mut r);
     register_lsp_family(&mut r);
@@ -2391,6 +2392,136 @@ fn register_context_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 }
 
+fn register_memory_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["memory"],
+            "Show recent memory entries",
+            handler(|_| Ok(CommandResult::effects([AppEffect::MemoryShow]))),
+        )
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["memory", "show"],
+            "Show recent memory entries",
+            handler(|_| Ok(CommandResult::effects([AppEffect::MemoryShow]))),
+        )
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["memory", "search"],
+            "Search memory entries",
+            handler(|args| {
+                if args.is_empty() {
+                    return Err(Error::invalid_input("usage: /memory search <query>"));
+                }
+                Ok(CommandResult::effects([AppEffect::MemorySearch(
+                    args.join(" "),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "query",
+            "Text matched against memory content and metadata.",
+        )])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["memory", "add"],
+            "Add user-authored memory",
+            handler(|args| {
+                if args.is_empty() {
+                    return Err(Error::invalid_input("usage: /memory add <text>"));
+                }
+                Ok(CommandResult::effects([AppEffect::MemoryAdd(
+                    args.join(" "),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "text",
+            "Memory text to store in the user tier.",
+        )])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["memory", "forget"],
+            "Delete a memory entry",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::MemoryForget(
+                    id.clone(),
+                )])),
+                None => Err(Error::invalid_input("usage: /memory forget <id>")),
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "id",
+            "Memory entry id or unique prefix.",
+        )])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["memory", "refresh"],
+            "Refresh memory from persistent storage",
+            handler(|_| Ok(CommandResult::effects([AppEffect::MemoryRefresh]))),
+        )
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["memory", "sources"],
+            "Show memory sources",
+            handler(|_| Ok(CommandResult::effects([AppEffect::MemorySources]))),
+        )
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["memory", "clear"],
+            "Clear all memory tiers",
+            handler(|_| Ok(CommandResult::effects([AppEffect::MemoryClear]))),
+        )
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+}
+
 fn register_verification_family(r: &mut crate::registry::CommandRegistry) {
     r.register(
         CommandSpec::builder(
@@ -3047,6 +3178,14 @@ mod tests {
             "session export",
             "session delete",
             "session ephemeral",
+            "memory",
+            "memory show",
+            "memory search",
+            "memory add",
+            "memory forget",
+            "memory refresh",
+            "memory sources",
+            "memory clear",
             "clear",
             "save",
             "load",
@@ -3435,6 +3574,37 @@ mod tests {
                 .iter()
                 .any(|suggestion| suggestion.label == "context compact")
         );
+    }
+
+    #[tokio::test]
+    async fn memory_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/memory search rust preferences", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::MemorySearch("rust preferences".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/memory add Prefer cargo nextest", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::MemoryAdd("Prefer cargo nextest".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/memory forget mem-1", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::MemoryForget("mem-1".to_string())]
+        ));
     }
 
     #[tokio::test]
