@@ -172,6 +172,9 @@ impl Default for PluginConfig {
 /// Permission configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PermissionConfig {
+    /// Structured permission rules evaluated with deny-first precedence.
+    #[serde(default)]
+    pub rules: Vec<pleiades_agent_permissions::PermissionRule>,
     /// Commands always allowed without confirmation.
     #[serde(default)]
     pub always_allow: Vec<String>,
@@ -193,6 +196,7 @@ fn default_permission_duration() -> u32 {
 impl Default for PermissionConfig {
     fn default() -> Self {
         Self {
+            rules: Vec::new(),
             always_allow: Vec::new(),
             always_deny: Vec::new(),
             ask_always: true,

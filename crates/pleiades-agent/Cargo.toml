@@ -23,6 +23,7 @@ pleiades-agent-tools = { path = "../pleiades-agent-tools", version = "2.0.0" }
 pleiades-agent-providers = { path = "../pleiades-agent-providers", version = "2.0.0" }
 pleiades-agent-plugins = { path = "../pleiades-agent-plugins", version = "2.0.0" }
 pleiades-agent-memory = { path = "../pleiades-agent-memory", version = "2.0.0" }
+pleiades-agent-permissions = { path = "../pleiades-agent-permissions", version = "2.0.0" }
 pleiades-agent-workflow = { path = "../pleiades-agent-workflow", version = "2.0.0" }
 pleiades-agent-git = { path = "../pleiades-agent-git", version = "2.0.0" }
 pleiades-agent-prompts = { path = "../pleiades-agent-prompts", version = "2.0.0" }

@@ -8,6 +8,7 @@ license = "MIT"
 repository = "https://github.com/CodWasTaken/Pleiades"
 
 [dependencies]
+pleiades-agent-permissions = { path = "../pleiades-agent-permissions", version = "2.0.0" }
 pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
 
 serde = { version = "1", features = ["derive"] }

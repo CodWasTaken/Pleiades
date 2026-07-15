@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   with structured executable-hook/tool permission reporting. External plugin
   updates validate staged content before replacing the installed copy and
   preserve the plugin's enable state.
+- Added `pleiades-agent-permissions`, structured `permissions.rules`, runtime
+  rule evaluation, `/permissions show|allow|ask|deny|reset|test`, and matching
+  `pleiades permissions ...` CLI commands. Shell commands are parsed into
+  clauses, deny rules take precedence, command substitution requires review
+  unless denied, and workspace path escapes are blocked in Agent and Auto mode.
+  See `docs/adr/0004-structured-permission-rules.md`.
 
 ### Fixed
 

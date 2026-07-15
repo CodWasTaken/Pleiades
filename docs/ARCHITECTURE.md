@@ -78,7 +78,7 @@ The application keeps five persistent regions and renders permission, palette, p
 - task submissions and queued follow-ups;
 - cancellation;
 - four-way permission decisions;
-- Plan, Agent, and Unrestricted mode changes;
+- Plan, Agent, Auto, and YOLO mode changes;
 - provider/model changes;
 - session load/save/clear;
 - shutdown.
@@ -125,7 +125,7 @@ Agent-mode API-provider commands execute with workspace-write process isolation:
 - macOS: `sandbox-exec`, denying writes outside the workspace and temporary directory;
 - unsupported platform/isolation: refuse the call.
 
-Unrestricted mode uses the ordinary shell only after explicit selection. Child processes are killed when the future is dropped or the configured timeout expires.
+Auto mode keeps the workspace boundary but skips approval prompts unless a rule asks. YOLO uses the ordinary shell only after explicit selection. Child processes are killed when the future is dropped or the configured timeout expires.
 
 ## Rendering and terminal lifecycle
 

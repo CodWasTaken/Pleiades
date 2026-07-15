@@ -14,6 +14,7 @@
 
 use async_trait::async_trait;
 use pleiades_agent_core::Error;
+use pleiades_agent_permissions::{DecisionKind, PermissionAction};
 
 use crate::context::CommandContext;
 use crate::handler::{CommandHandler, HandlerResult};
@@ -432,6 +433,116 @@ impl CommandHandler for PluginMutationHandler {
     }
 }
 
+struct PermissionsShowHandler;
+
+#[async_trait]
+impl CommandHandler for PermissionsShowHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        let report = context.services().permission().show()?;
+        let mut document = crate::result::RenderableDocument::new("Permissions");
+        if report.rules.is_empty() {
+            document.push_section("Rules", "No structured permission rules configured.");
+        } else {
+            for item in report.rules {
+                document.push_section(
+                    format!("Rule {}", item.index),
+                    format!(
+                        "{} {} `{}`",
+                        permission_action_label(item.rule.action),
+                        item.rule.tool,
+                        item.rule.pattern
+                    ),
+                );
+            }
+        }
+        document.push_section(
+            "Legacy always allow",
+            if report.always_allow.is_empty() {
+                "(none)".to_string()
+            } else {
+                report.always_allow.join("\n")
+            },
+        );
+        document.push_section(
+            "Legacy always deny",
+            if report.always_deny.is_empty() {
+                "(none)".to_string()
+            } else {
+                report.always_deny.join("\n")
+            },
+        );
+        Ok(CommandResult::RenderDocument(document))
+    }
+}
+
+struct PermissionAddHandler(PermissionAction);
+
+#[async_trait]
+impl CommandHandler for PermissionAddHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        if args.is_empty() {
+            return Err(Error::invalid_input(
+                "usage: /permissions <allow|ask|deny> <pattern>",
+            ));
+        }
+        let pattern = args.join(" ");
+        context
+            .services()
+            .permission()
+            .add_bash_rule(self.0, &pattern)?;
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!(
+                "Permission rule added: {} bash `{pattern}`",
+                permission_action_label(self.0)
+            ),
+        ))
+    }
+}
+
+struct PermissionResetHandler;
+
+#[async_trait]
+impl CommandHandler for PermissionResetHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        context.services().permission().reset()?;
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            "Permission rules reset",
+        ))
+    }
+}
+
+struct PermissionTestHandler;
+
+#[async_trait]
+impl CommandHandler for PermissionTestHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        if args.is_empty() {
+            return Err(Error::invalid_input("usage: /permissions test <command>"));
+        }
+        let command = args.join(" ");
+        let report = context
+            .services()
+            .permission()
+            .test_bash_command(&command)?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new("Permission test")
+                .section("Command", report.command)
+                .section("Decision", permission_decision_label(report.decision.kind))
+                .section("Reason", report.decision.reason)
+                .section(
+                    "Clauses",
+                    if report.decision.clauses.is_empty() {
+                        "(none)".to_string()
+                    } else {
+                        report.decision.clauses.join("\n")
+                    },
+                ),
+        ))
+    }
+}
+
 /// Build and populate a fresh [`crate::CommandRegistry`] with the default live
 /// workspace commands and return it.
 ///
@@ -446,6 +557,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_model_family(&mut r);
     register_plugin_family(&mut r);
     register_mode_family(&mut r);
+    register_permissions_family(&mut r);
     r
 }
 
@@ -1137,6 +1249,100 @@ fn is_known_preset(preset: &str) -> bool {
     matches!(preset, "plan" | "agent" | "auto" | "yolo")
 }
 
+fn register_permissions_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["permissions"],
+            "Inspect and edit permission rules",
+            PermissionsShowHandler,
+        )
+        .category(CommandCategory::Configuration)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["permissions", "show"],
+            "Show permission rules",
+            PermissionsShowHandler,
+        )
+        .category(CommandCategory::Configuration)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    for (name, action) in [
+        ("allow", PermissionAction::Allow),
+        ("ask", PermissionAction::Ask),
+        ("deny", PermissionAction::Deny),
+    ] {
+        r.register(
+            CommandSpec::builder(
+                vec!["permissions", name],
+                "Add a bash permission rule",
+                PermissionAddHandler(action),
+            )
+            .arguments(vec![ArgumentSpec::required(
+                "pattern",
+                "Glob pattern matched against each shell command clause.",
+            )])
+            .category(CommandCategory::Configuration)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Write)
+            .build(),
+        )
+        .ok();
+    }
+    r.register(
+        CommandSpec::builder(
+            vec!["permissions", "reset"],
+            "Remove configured permission rules",
+            PermissionResetHandler,
+        )
+        .category(CommandCategory::Configuration)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["permissions", "test"],
+            "Evaluate a bash command against configured rules",
+            PermissionTestHandler,
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "command",
+            "Shell command to evaluate.",
+        )])
+        .category(CommandCategory::Configuration)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+}
+
+fn permission_action_label(action: PermissionAction) -> &'static str {
+    match action {
+        PermissionAction::Allow => "allow",
+        PermissionAction::Ask => "ask",
+        PermissionAction::Deny => "deny",
+    }
+}
+
+fn permission_decision_label(kind: DecisionKind) -> &'static str {
+    match kind {
+        DecisionKind::Allow => "allow",
+        DecisionKind::Ask => "ask",
+        DecisionKind::Deny => "deny",
+        DecisionKind::Default => "default",
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -1193,6 +1399,13 @@ mod tests {
             "mode agent",
             "mode auto",
             "mode yolo",
+            "permissions",
+            "permissions show",
+            "permissions allow",
+            "permissions ask",
+            "permissions deny",
+            "permissions reset",
+            "permissions test",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -1330,6 +1543,38 @@ mod tests {
         assert_eq!(
             config.models.aliases.get("fast").map(String::as_str),
             Some("model-x")
+        );
+    }
+
+    #[tokio::test]
+    async fn permissions_commands_use_the_injected_application_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        let ctx = CommandContextBuilder::default()
+            .services(services.clone())
+            .build();
+
+        let result = default_registry()
+            .dispatch("/permissions deny git push *", &ctx, true)
+            .await
+            .unwrap();
+        assert!(matches!(result, CommandResult::Notification(_)));
+
+        let result = default_registry()
+            .dispatch("/permissions test git push origin main", &ctx, true)
+            .await
+            .unwrap();
+        let CommandResult::RenderDocument(document) = result else {
+            panic!("permission test should render a document");
+        };
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "Decision" && section.body == "deny")
         );
     }
 

@@ -24,7 +24,8 @@ This document records implemented behavior rather than planned or competitor cla
 | Agent | Provider-independent activity | Implemented | Typed kinds and lifecycle statuses |
 | Agent | Per-tool modal for API providers | Implemented | Four once/session decisions |
 | Agent | Per-tool modal for delegated Codex calls | Partial | Codex owns internal calls; selected Codex sandbox is the boundary |
-| Safety | Plan / Agent / Unrestricted | Implemented | Mode changes cancel old-boundary work |
+| Safety | Plan / Agent / Auto / YOLO | Implemented | Mode changes cancel old-boundary work |
+| Safety | Structured permission rules | Implemented | Deny-first shell clause evaluation |
 | Safety | Workspace path confinement | Implemented | Traversal and symlink escape tests |
 | Safety | Sandboxed built-in shell | Partial | Bubblewrap on Linux, sandbox-exec on macOS; refused elsewhere in Agent mode |
 | Tools | Read, write, edit, bash, glob, grep, diff | Implemented | Structured inputs/results and permission metadata |

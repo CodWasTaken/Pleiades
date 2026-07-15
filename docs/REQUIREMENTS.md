@@ -40,9 +40,10 @@ The runtime provides:
 
 - Plan mode: inspection without mutating tools;
 - Agent mode: canonical workspace path confinement and guarded commands;
-- Unrestricted mode: ordinary process access only after explicit selection;
+- Auto mode: workspace-confined execution without approval prompts;
+- YOLO mode: ordinary process access only after explicit selection;
 - allow once, allow session, deny once, and deny session modal decisions;
-- persistent allow/deny configuration rules;
+- persistent allow/ask/deny configuration rules;
 - traversal and symlink-escape protection;
 - Agent-mode process write isolation where the platform implementation exists, and refusal otherwise;
 - cancellation-aware timeouts and bounded UTF-8 output.
