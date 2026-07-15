@@ -41,13 +41,23 @@ executes provider or tool logic in the TUI.
 
 The currently implemented workspace commands include `/help`, `/status`,
 `/mode`, `/provider`, `/model`, `/files`, `/sessions`, `/load`, `/diff`,
-`/output`, `/doctor`, `/config`, `/clear`, `/save`, and `/quit`. The provider
-family includes `list`, `use`, `info`, `add`, `remove`, and `reload`. Provider
-reports are obtained through the same application service used by the external
-CLI and always mask credentials. Model and plugin command families are also
-registered with nested completion and structured documents. Provider
-authentication wizards and richer management overlays continue as separate
-Release 2.1 slices.
+`/output`, `/checkpoint`, `/undo`, `/redo`, `/rewind`, `/doctor`, `/config`,
+`/clear`, `/save`, and `/quit`. The provider family includes `list`, `use`,
+`info`, `add`, `remove`, and `reload`. Provider reports are obtained through the
+same application service used by the external CLI and always mask credentials.
+Model and plugin command families are also registered with nested completion
+and structured documents.
+
+## Checkpoints
+
+Use `/checkpoint create [name]` before risky work. A checkpoint stores the
+conversation, active provider/model/mode, Git head and branch, changed files,
+and staged/unstaged tracked diffs. `/checkpoint list` and `/checkpoint show
+<id>` inspect saved records. `/checkpoint restore <id>` shows a preview;
+`/checkpoint restore <id> --confirm` restores the conversation and tracked Git
+diff when the current Git HEAD still matches. Current tracked changes are backed
+up as a patch before restore. New untracked files that were not part of the
+checkpoint block restoration so unrelated user work is not silently removed.
 
 ## Terminal compatibility
 

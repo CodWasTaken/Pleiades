@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod chat;
+pub mod checkpoint;
 pub mod engine;
 pub mod memory;
 pub mod runtime;

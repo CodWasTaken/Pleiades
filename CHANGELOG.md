@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
+  restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
+  `/rewind` entry points. Checkpoints persist conversation state, provider,
+  model, mode, Git head/branch, changed files, and staged/unstaged diffs.
 - Split runtime access control into typed `ApprovalPolicy` and
   `SandboxPolicy` values, and added `auto` and `yolo` mode presets. Auto runs
   without prompts inside the workspace; YOLO is the explicit full-host preset.

@@ -558,6 +558,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_plugin_family(&mut r);
     register_mode_family(&mut r);
     register_permissions_family(&mut r);
+    register_checkpoint_family(&mut r);
     r
 }
 
@@ -1343,6 +1344,143 @@ fn permission_decision_label(kind: DecisionKind) -> &'static str {
     }
 }
 
+fn register_checkpoint_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["checkpoint"],
+            "Create or manage checkpoints",
+            handler(|_| Ok(CommandResult::RenderDocument(checkpoint_help_document()))),
+        )
+        .category(CommandCategory::History)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["checkpoint", "create"],
+            "Create a checkpoint",
+            handler(|args| {
+                let name = if args.is_empty() {
+                    None
+                } else {
+                    Some(args.join(" "))
+                };
+                Ok(CommandResult::effects([AppEffect::CreateCheckpoint(name)]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::optional(
+            "name",
+            "Optional checkpoint label.",
+        )])
+        .category(CommandCategory::History)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["checkpoint", "list"],
+            "List checkpoints",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ListCheckpoints]))),
+        )
+        .category(CommandCategory::History)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["checkpoint", "show"],
+            "Show checkpoint details",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::ShowCheckpoint(
+                    id.clone(),
+                )])),
+                None => Err(Error::invalid_input("usage: /checkpoint show <id>")),
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required("id", "Checkpoint id")])
+        .category(CommandCategory::History)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["checkpoint", "restore"],
+            "Preview or restore a checkpoint",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::RestoreCheckpoint {
+                    id: id.clone(),
+                    confirm: args
+                        .iter()
+                        .any(|arg| arg == "--confirm" || arg == "confirm"),
+                }])),
+                None => Err(Error::invalid_input(
+                    "usage: /checkpoint restore <id> [--confirm]",
+                )),
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Checkpoint id"),
+            ArgumentSpec::optional("--confirm", "Apply the restore after previewing."),
+        ])
+        .category(CommandCategory::History)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["checkpoint", "delete"],
+            "Delete a checkpoint",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::DeleteCheckpoint(
+                    id.clone(),
+                )])),
+                None => Err(Error::invalid_input("usage: /checkpoint delete <id>")),
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required("id", "Checkpoint id")])
+        .category(CommandCategory::History)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    for name in ["undo", "redo", "rewind"] {
+        r.register(
+            CommandSpec::builder(
+                vec![name],
+                "Open checkpoint history",
+                handler(|_| Ok(CommandResult::RenderDocument(checkpoint_help_document()))),
+            )
+            .category(CommandCategory::History)
+            .availability(CommandAvailability::Interactive)
+            .permission(PermissionRequirement::Read)
+            .build(),
+        )
+        .ok();
+    }
+}
+
+fn checkpoint_help_document() -> crate::result::RenderableDocument {
+    crate::result::RenderableDocument::new("Checkpoints")
+        .section("Create", "/checkpoint create [name]")
+        .section("List", "/checkpoint list")
+        .section("Inspect", "/checkpoint show <id>")
+        .section(
+            "Restore",
+            "/checkpoint restore <id> previews; /checkpoint restore <id> --confirm applies.",
+        )
+        .section("Delete", "/checkpoint delete <id>")
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -1406,6 +1544,15 @@ mod tests {
             "permissions deny",
             "permissions reset",
             "permissions test",
+            "checkpoint",
+            "checkpoint create",
+            "checkpoint list",
+            "checkpoint show",
+            "checkpoint restore",
+            "checkpoint delete",
+            "undo",
+            "redo",
+            "rewind",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -1575,6 +1722,37 @@ mod tests {
                 .sections
                 .iter()
                 .any(|section| section.heading == "Decision" && section.body == "deny")
+        );
+    }
+
+    #[tokio::test]
+    async fn checkpoint_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/checkpoint create before edit", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("checkpoint create should emit an effect");
+        };
+        assert_eq!(
+            effects,
+            vec![AppEffect::CreateCheckpoint(Some("before edit".to_string()))]
+        );
+
+        let result = default_registry()
+            .dispatch("/checkpoint restore abc --confirm", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("checkpoint restore should emit an effect");
+        };
+        assert_eq!(
+            effects,
+            vec![AppEffect::RestoreCheckpoint {
+                id: "abc".to_string(),
+                confirm: true
+            }]
         );
     }
 

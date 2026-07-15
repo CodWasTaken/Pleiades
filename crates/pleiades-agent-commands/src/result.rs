@@ -68,6 +68,16 @@ pub enum AppEffect {
     LoadSession(String),
     /// Save the current session.
     SaveSession,
+    /// Create a checkpoint from the live runtime state.
+    CreateCheckpoint(Option<String>),
+    /// List saved checkpoints.
+    ListCheckpoints,
+    /// Show checkpoint details.
+    ShowCheckpoint(String),
+    /// Restore a checkpoint. `confirm` is false for preview-only calls.
+    RestoreCheckpoint { id: String, confirm: bool },
+    /// Delete a checkpoint.
+    DeleteCheckpoint(String),
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;
