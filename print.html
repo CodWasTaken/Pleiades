@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cc848a35.js";
+            window.path_to_searchindex_js = "searchindex-b469c0d1.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a25795c1.js"></script>
+        <script src="toc-53b50016.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -906,6 +906,50 @@ the same command and working directory.</li>
 interactive terminal.</li>
 <li>Process groups and graceful signal escalation are planned follow-up work.</li>
 <li>Process records live for the current workspace session only.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="browser-verification"><a class="header" href="#browser-verification">Browser verification</a></h1>
+<p>Pleiades can run optional Playwright checks from the live workspace.</p>
+<p>Commands:</p>
+<pre><code class="language-text">/browser open &lt;url&gt;
+/browser screenshot
+/browser inspect
+/browser console
+/browser close
+</code></pre>
+<p>Headless commands exist for discoverability:</p>
+<pre><code class="language-bash">pleiades browser open &lt;url&gt;
+pleiades browser screenshot
+pleiades browser inspect
+pleiades browser console
+pleiades browser close
+</code></pre>
+<p>The live workspace owns browser session state. Headless commands print guidance
+instead of pretending to keep a browser alive after the process exits.</p>
+<h2 id="setup"><a class="header" href="#setup">Setup</a></h2>
+<p>Pleiades does not bundle Node.js, Playwright, or browser binaries. Install them
+in the project or make them resolvable from the workspace:</p>
+<pre><code class="language-bash">npm install -D playwright
+npx playwright install chromium
+</code></pre>
+<h2 id="behavior-1"><a class="header" href="#behavior-1">Behavior</a></h2>
+<ul>
+<li><code>/browser open &lt;url&gt;</code> launches Chromium headlessly through Playwright,
+navigates to the URL, records status/title/HTML size, captures console
+messages, records failed requests, and stores the report in the runtime.</li>
+<li><code>/browser screenshot</code> revisits the last opened URL and writes a PNG below
+<code>.pleiades/browser/screenshots/</code>.</li>
+<li><code>/browser inspect</code> renders the last report.</li>
+<li><code>/browser console</code> renders console messages from the last report.</li>
+<li><code>/browser close</code> clears the stored browser report.</li>
+</ul>
+<h2 id="limits-3"><a class="header" href="#limits-3">Limits</a></h2>
+<ul>
+<li>Browsers are launched per command in this slice; there is no persistent page
+object yet.</li>
+<li>DOM assertions, accessibility inspection, form interaction, and visual
+diffing are planned follow-up work.</li>
+<li>Playwright failures are reported as command errors with setup guidance.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
