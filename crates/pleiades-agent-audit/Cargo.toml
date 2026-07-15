@@ -1,0 +1,20 @@
+[package]
+name = "pleiades-agent-audit"
+version = "2.0.0"
+edition = "2024"
+description = "Secret-redacting audit log for Pleiades"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/CodWasTaken/Pleiades"
+
+[dependencies]
+pleiades-agent-config = { path = "../pleiades-agent-config", version = "2.0.0" }
+
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

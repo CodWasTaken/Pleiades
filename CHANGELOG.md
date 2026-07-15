@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   validation. Token, time, and tool-call budgets stop active tasks with
   evidence; cost remains reported as unavailable until provider pricing data is
   attached to usage events.
+- Added `pleiades-agent-audit`, a secret-redacting JSONL audit log for runtime
+  commands, permission decisions, tool calls, shell/file targets,
+  provider/model/mode changes, checkpoint/session operations, extension reload
+  effects, and task outcomes.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,
