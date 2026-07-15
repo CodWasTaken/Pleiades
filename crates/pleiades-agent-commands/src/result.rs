@@ -96,6 +96,8 @@ pub enum AppEffect {
     Test,
     /// Run an explicit user command and capture evidence.
     RunCommand(String),
+    /// Submit a prompt into the normal agent runtime path.
+    SubmitPrompt(String),
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;

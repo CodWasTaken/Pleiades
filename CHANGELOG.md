@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added reusable skills loaded from global and project-local TOML files, with
   `/skills ...` workspace commands, matching `pleiades skills ...` CLI
   commands, and engine system-prompt injection for enabled skills.
+- Added global and project-local custom command loading from
+  `commands/*.toml`. Valid files register dynamic command specs for help,
+  palette, slash autocomplete, and prompt submission; invalid files are skipped
+  without crashing the workspace.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

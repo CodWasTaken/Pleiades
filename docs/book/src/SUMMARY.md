@@ -11,6 +11,7 @@
 - [Plugins and hooks](plugins.md)
 - [MCP servers](mcp.md)
 - [Skills](skills.md)
+- [Custom commands](custom-commands.md)
 - [Prompt templates](prompts.md)
 - [Workflows](workflows.md)
 - [Git integration](git.md)

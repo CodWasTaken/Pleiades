@@ -15,6 +15,7 @@
 use async_trait::async_trait;
 use pleiades_agent_core::Error;
 use pleiades_agent_permissions::{DecisionKind, PermissionAction};
+use pleiades_agent_services::{ApplicationServices, CustomCommandDefinition};
 
 use crate::context::CommandContext;
 use crate::handler::{CommandHandler, HandlerResult};
@@ -606,6 +607,12 @@ impl CommandHandler for PermissionTestHandler {
 /// `state.rs` so the migration in issue 2.1 ("wire TUI through the
 /// registry") can drop the hand-maintained slash dispatcher one-to-one.
 pub fn default_registry() -> crate::registry::CommandRegistry {
+    default_registry_with_services(&ApplicationServices::new())
+}
+
+pub fn default_registry_with_services(
+    services: &ApplicationServices,
+) -> crate::registry::CommandRegistry {
     let mut r = crate::registry::CommandRegistry::new();
     register_workspace(&mut r);
     register_help(&mut r);
@@ -619,6 +626,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_checkpoint_family(&mut r);
     register_context_family(&mut r);
     register_verification_family(&mut r);
+    register_custom_commands(&mut r, services);
     r
 }
 
@@ -2229,6 +2237,171 @@ fn register_verification_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 }
 
+#[derive(Debug, Clone)]
+struct CustomCommandHandler {
+    definition: CustomCommandDefinition,
+}
+
+#[async_trait]
+impl CommandHandler for CustomCommandHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let prompt = render_custom_prompt(&self.definition, context, args)?;
+        if self.definition.background {
+            return Ok(CommandResult::effects([
+                AppEffect::Status(format!(
+                    "Custom command `{}` requested background execution; running foreground in this release slice.",
+                    self.definition.path.join(" ")
+                )),
+                AppEffect::SubmitPrompt(prompt),
+            ]));
+        }
+        Ok(CommandResult::effects([AppEffect::SubmitPrompt(prompt)]))
+    }
+}
+
+fn register_custom_commands(
+    r: &mut crate::registry::CommandRegistry,
+    services: &ApplicationServices,
+) {
+    let Ok(definitions) = services.custom_command().definitions() else {
+        return;
+    };
+    for definition in definitions {
+        let path = definition
+            .path
+            .iter()
+            .map(|segment| leak(segment.clone()))
+            .collect::<Vec<_>>();
+        let aliases = definition
+            .aliases
+            .iter()
+            .map(|alias| leak(alias.clone()))
+            .collect::<Vec<_>>();
+        let description = if definition.description.trim().is_empty() {
+            format!("Custom command from {}", definition.source.display())
+        } else {
+            definition.description.clone()
+        };
+        let arguments = definition
+            .arguments
+            .iter()
+            .map(|argument| {
+                let mut spec = if argument.required {
+                    ArgumentSpec::required(
+                        leak(argument.name.clone()),
+                        leak(argument.description.clone()),
+                    )
+                } else {
+                    ArgumentSpec::optional(
+                        leak(argument.name.clone()),
+                        leak(argument.description.clone()),
+                    )
+                };
+                spec.completer = CompletionSource::File;
+                spec
+            })
+            .collect();
+        let permission = match definition.permission.as_str() {
+            "none" => PermissionRequirement::None,
+            "write" => PermissionRequirement::Write,
+            "dangerous" => PermissionRequirement::Dangerous,
+            _ => PermissionRequirement::Read,
+        };
+        let spec = CommandSpec::builder(
+            path,
+            leak(description),
+            CustomCommandHandler {
+                definition: definition.clone(),
+            },
+        )
+        .aliases(aliases)
+        .arguments(arguments)
+        .category(CommandCategory::Custom)
+        .availability(CommandAvailability::Both)
+        .permission(permission)
+        .build();
+        let _ = r.register(spec);
+    }
+}
+
+fn render_custom_prompt(
+    definition: &CustomCommandDefinition,
+    context: &CommandContext,
+    args: &[String],
+) -> Result<String, Error> {
+    let mut values = std::collections::HashMap::<String, String>::new();
+    values.insert("args".to_string(), args.join(" "));
+    values.insert("provider".to_string(), context.provider().to_string());
+    values.insert("model".to_string(), context.model().to_string());
+    values.insert("mode".to_string(), context.mode().to_string());
+    values.insert("command".to_string(), definition.path.join(" "));
+    for (index, argument) in definition.arguments.iter().enumerate() {
+        let value = args
+            .get(index)
+            .cloned()
+            .or_else(|| argument.default.clone())
+            .ok_or_else(|| {
+                Error::invalid_input(format!(
+                    "usage: /{} {}",
+                    definition.path.join(" "),
+                    definition
+                        .arguments
+                        .iter()
+                        .map(|arg| if arg.required {
+                            format!("<{}>", arg.name)
+                        } else {
+                            format!("[{}]", arg.name)
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ))
+            })?;
+        values.insert(argument.name.clone(), value);
+    }
+    if args.len() > definition.arguments.len() {
+        values.insert(
+            "extra_args".to_string(),
+            args[definition.arguments.len()..].join(" "),
+        );
+    }
+    render_template(&definition.prompt, &values)
+}
+
+fn render_template(
+    template: &str,
+    values: &std::collections::HashMap<String, String>,
+) -> Result<String, Error> {
+    let mut rendered = String::new();
+    let mut rest = template;
+    while let Some(start) = rest.find("{{") {
+        rendered.push_str(&rest[..start]);
+        let after_start = &rest[start + 2..];
+        let Some(end) = after_start.find("}}") else {
+            return Err(Error::invalid_input("unterminated custom command variable"));
+        };
+        let key = after_start[..end].trim();
+        let (name, default) = key
+            .split_once('|')
+            .map(|(name, default)| (name.trim(), Some(default.trim())))
+            .unwrap_or((key, None));
+        let value = values
+            .get(name)
+            .cloned()
+            .or_else(|| default.map(ToString::to_string))
+            .ok_or_else(|| {
+                Error::invalid_input(format!("missing custom command variable `{name}`"))
+            })?;
+        rendered.push_str(&value);
+        rest = &after_start[end + 2..];
+    }
+    rendered.push_str(rest);
+    Ok(rendered)
+}
+
+fn leak(value: String) -> &'static str {
+    Box::leak(value.into_boxed_str())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -2730,6 +2903,70 @@ mod tests {
             suggestions
                 .iter()
                 .any(|suggestion| suggestion.label == "skills show")
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_commands_register_from_injected_application_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        let commands_dir = temp.path().join("project").join("commands");
+        std::fs::create_dir_all(&commands_dir).unwrap();
+        std::fs::write(
+            commands_dir.join("release.toml"),
+            r#"
+description = "Prepare a release"
+aliases = ["rel"]
+prompt = "Prepare release {{version}} with {{extra_args|no notes}} using {{provider}}/{{model}}"
+
+[[arguments]]
+name = "version"
+description = "Version to release"
+required = true
+"#,
+        )
+        .unwrap();
+        std::fs::write(commands_dir.join("broken.toml"), "description = 1").unwrap();
+
+        let registry = default_registry_with_services(&services);
+        assert!(registry.get("release").is_some());
+        assert!(registry.get("rel").is_some());
+        assert!(registry.get("broken").is_none());
+        assert!(
+            registry
+                .help_document(None, true)
+                .sections
+                .iter()
+                .any(|section| section.heading == "Custom Commands")
+        );
+
+        let context = CommandContextBuilder::default()
+            .provider("openai")
+            .model("gpt-test")
+            .services(services)
+            .build();
+        let result = registry
+            .dispatch("/release 2.1.0 final checks", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("custom command should submit a prompt");
+        };
+        assert_eq!(
+            effects,
+            vec![AppEffect::SubmitPrompt(
+                "Prepare release 2.1.0 with final checks using openai/gpt-test".to_string()
+            )]
+        );
+
+        let suggestions = registry.suggest("/rel", true);
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.label == "release")
         );
     }
 

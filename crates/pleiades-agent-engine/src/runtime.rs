@@ -439,16 +439,21 @@ impl AgentRuntime {
                             }
                         }
                         AgentCommand::DispatchSlash(input) => {
+                            let mut dispatch = SlashDispatchState {
+                                config: &mut config,
+                                mode: &mut mode,
+                                provider_name: &mut provider_name,
+                                model_name: &mut model_name,
+                                context: &mut context,
+                                active: &mut active,
+                                queued: &mut queued,
+                                outcome_tx: &outcome_tx,
+                                events: &events,
+                            };
                             let should_shutdown = dispatch_slash(
                                 &input,
                                 &registry,
-                                &mut config,
-                                &mut mode,
-                                &mut provider_name,
-                                &mut model_name,
-                                &mut context,
-                                &active,
-                                &events,
+                                &mut dispatch,
                             ).await;
                             if should_shutdown {
                                 if let Some(task) = &active {
@@ -1390,67 +1395,62 @@ fn now_ms() -> u128 {
 /// notification / document requests to the frontend as [`AgentEvent`]
 /// variants.  Returns `true` when the runtime should shut down (e.g. the
 /// handler emitted `Quit` / `Shutdown`).
+struct SlashDispatchState<'a> {
+    config: &'a mut Config,
+    mode: &'a mut AgentMode,
+    provider_name: &'a mut String,
+    model_name: &'a mut String,
+    context: &'a mut Option<RuntimeContext>,
+    active: &'a mut Option<ActiveTask>,
+    queued: &'a mut VecDeque<String>,
+    outcome_tx: &'a mpsc::Sender<TaskOutcome>,
+    events: &'a mpsc::Sender<AgentEvent>,
+}
+
 async fn dispatch_slash(
     input: &str,
     registry: &commands::CommandRegistry,
-    config: &mut Config,
-    mode: &mut AgentMode,
-    provider_name: &mut String,
-    model_name: &mut String,
-    context: &mut Option<RuntimeContext>,
-    active: &Option<ActiveTask>,
-    events: &mpsc::Sender<AgentEvent>,
+    state: &mut SlashDispatchState<'_>,
 ) -> bool {
     let ctx = commands::CommandContext::new(
-        provider_name.clone(),
-        model_name.clone(),
-        mode.label().to_string(),
+        state.provider_name.clone(),
+        state.model_name.clone(),
+        state.mode.label().to_string(),
     );
     let result = match registry.dispatch(input, &ctx, true).await {
         Ok(res) => res,
         Err(err) => {
-            send_event(events, AgentEvent::Error(err.to_string())).await;
+            send_event(state.events, AgentEvent::Error(err.to_string())).await;
             return false;
         }
     };
     match result {
         CommandResult::Effects(effects) => {
             for effect in effects {
-                if apply_app_effect(
-                    effect,
-                    config,
-                    mode,
-                    provider_name,
-                    model_name,
-                    context,
-                    active,
-                    events,
-                )
-                .await
-                {
+                if apply_app_effect(effect, state).await {
                     return true;
                 }
             }
         }
         CommandResult::OpenOverlay(kind) => {
-            send_event(events, AgentEvent::OpenOverlay(kind)).await;
+            send_event(state.events, AgentEvent::OpenOverlay(kind)).await;
         }
         CommandResult::Notification(notification) => {
-            send_event(events, AgentEvent::Notify(notification)).await;
+            send_event(state.events, AgentEvent::Notify(notification)).await;
         }
         CommandResult::RenderDocument(document) => {
-            send_event(events, AgentEvent::Document(document)).await;
+            send_event(state.events, AgentEvent::Document(document)).await;
         }
         CommandResult::RuntimeRestart(req) => {
             send_event(
-                events,
+                state.events,
                 AgentEvent::Error(format!("runtime restart requested: {}", req.reason)),
             )
             .await;
         }
         CommandResult::BackgroundTask(handle) => {
             send_event(
-                events,
+                state.events,
                 AgentEvent::Notify(Notification {
                     level: NotificationLevel::Info,
                     message: format!("background task spawned: {}", handle.id),
@@ -1465,60 +1465,51 @@ async fn dispatch_slash(
 
 /// Apply one [`AppEffect`] to the runtime.  Returns `true` when the loop
 /// should shut down afterwards (effects `Quit` and `Shutdown`).
-async fn apply_app_effect(
-    effect: AppEffect,
-    config: &mut Config,
-    mode: &mut AgentMode,
-    provider_name: &mut String,
-    model_name: &mut String,
-    context: &mut Option<RuntimeContext>,
-    active: &Option<ActiveTask>,
-    events: &mpsc::Sender<AgentEvent>,
-) -> bool {
+async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>) -> bool {
     match effect {
         AppEffect::SetMode(name) => {
-            if let Some(task) = active.as_ref() {
+            if let Some(task) = state.active.as_ref() {
                 task.cancellation.cancel();
             }
             let next = AgentMode::parse(&name);
-            *mode = next;
-            if let Some(ctx) = context.as_mut() {
+            *state.mode = next;
+            if let Some(ctx) = state.context.as_mut() {
                 ctx.set_mode(next);
             }
-            send_event(events, AgentEvent::ModeChanged(next)).await;
+            send_event(state.events, AgentEvent::ModeChanged(next)).await;
         }
         AppEffect::SetProvider(name) => {
-            *provider_name = name.clone();
-            config.core.default_provider = Some(name.clone());
-            if let Some(ctx) = context.as_mut() {
-                ctx.set_config(config.clone(), *mode);
+            *state.provider_name = name.clone();
+            state.config.core.default_provider = Some(name.clone());
+            if let Some(ctx) = state.context.as_mut() {
+                ctx.set_config(state.config.clone(), *state.mode);
             }
-            send_event(events, AgentEvent::ProviderChanged(name)).await;
+            send_event(state.events, AgentEvent::ProviderChanged(name)).await;
         }
         AppEffect::SetModel(name) => {
-            *model_name = name.clone();
-            config.core.default_model = Some(name.clone());
-            if let Some(ctx) = context.as_mut() {
-                ctx.set_config(config.clone(), *mode);
+            *state.model_name = name.clone();
+            state.config.core.default_model = Some(name.clone());
+            if let Some(ctx) = state.context.as_mut() {
+                ctx.set_config(state.config.clone(), *state.mode);
             }
-            send_event(events, AgentEvent::ModelChanged(name)).await;
+            send_event(state.events, AgentEvent::ModelChanged(name)).await;
         }
         AppEffect::ClearConversation => {
-            if active.is_none() {
-                if let Some(ctx) = context.as_mut() {
+            if state.active.is_none() {
+                if let Some(ctx) = state.context.as_mut() {
                     ctx.conversation.clear();
-                    send_event(events, AgentEvent::ConversationCleared).await;
+                    send_event(state.events, AgentEvent::ConversationCleared).await;
                 }
             }
         }
         AppEffect::LoadSession(id) => {
-            if active.is_none() {
-                if let Some(ctx) = context.as_mut() {
+            if state.active.is_none() {
+                if let Some(ctx) = state.context.as_mut() {
                     match ctx.session_store.load(&id) {
                         Ok(conv) => {
                             ctx.conversation = conv;
                             send_event(
-                                events,
+                                state.events,
                                 AgentEvent::SessionReady {
                                     id: ctx.conversation.id.clone(),
                                     history: ctx.conversation.messages.clone(),
@@ -1526,38 +1517,38 @@ async fn apply_app_effect(
                             )
                             .await;
                         }
-                        Err(e) => send_event(events, AgentEvent::Error(e.to_string())).await,
+                        Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
                     }
                 }
             }
         }
         AppEffect::SaveSession => {
-            if let Some(ctx) = context.as_ref() {
+            if let Some(ctx) = state.context.as_ref() {
                 match ctx.session_store.save(&ctx.conversation) {
                     Ok(()) => {
                         send_event(
-                            events,
+                            state.events,
                             AgentEvent::SessionSaved(ctx.conversation.id.clone()),
                         )
                         .await;
                     }
-                    Err(e) => send_event(events, AgentEvent::Error(e.to_string())).await,
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
                 }
             }
         }
         AppEffect::CreateCheckpoint(name) => {
-            if active.is_none() {
-                if let Some(ctx) = context.as_ref() {
+            if state.active.is_none() {
+                if let Some(ctx) = state.context.as_ref() {
                     match ctx.checkpoint_store.create(
                         &ctx.conversation,
-                        provider_name,
-                        model_name,
-                        *mode,
+                        state.provider_name,
+                        state.model_name,
+                        *state.mode,
                         name,
                     ) {
                         Ok(record) => {
                             send_event(
-                                events,
+                                state.events,
                                 AgentEvent::Notify(Notification {
                                     level: NotificationLevel::Success,
                                     message: format!(
@@ -1569,14 +1560,14 @@ async fn apply_app_effect(
                             .await;
                         }
                         Err(error) => {
-                            send_event(events, AgentEvent::Error(error.to_string())).await
+                            send_event(state.events, AgentEvent::Error(error.to_string())).await
                         }
                     }
                 }
             }
         }
         AppEffect::ListCheckpoints => {
-            if let Some(ctx) = context.as_ref() {
+            if let Some(ctx) = state.context.as_ref() {
                 match ctx.checkpoint_store.list() {
                     Ok(checkpoints) => {
                         let mut document = RenderableDocument::new("Checkpoints");
@@ -1601,29 +1592,33 @@ async fn apply_app_effect(
                                 );
                             }
                         }
-                        send_event(events, AgentEvent::Document(document)).await;
+                        send_event(state.events, AgentEvent::Document(document)).await;
                     }
-                    Err(error) => send_event(events, AgentEvent::Error(error.to_string())).await,
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
                 }
             }
         }
         AppEffect::ShowCheckpoint(id) => {
-            if let Some(ctx) = context.as_ref() {
+            if let Some(ctx) = state.context.as_ref() {
                 match ctx.checkpoint_store.load(&id) {
                     Ok(record) => {
                         send_event(
-                            events,
+                            state.events,
                             AgentEvent::Document(checkpoint_document(&record, false)),
                         )
                         .await;
                     }
-                    Err(error) => send_event(events, AgentEvent::Error(error.to_string())).await,
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
                 }
             }
         }
         AppEffect::RestoreCheckpoint { id, confirm } => {
-            if active.is_none() {
-                if let Some(ctx) = context.as_mut() {
+            if state.active.is_none() {
+                if let Some(ctx) = state.context.as_mut() {
                     match ctx.checkpoint_store.load(&id) {
                         Ok(record) if confirm => {
                             match ctx.checkpoint_store.restore_workspace(&record) {
@@ -1631,46 +1626,47 @@ async fn apply_app_effect(
                                     ctx.conversation = record.conversation.clone();
                                     let _ = ctx.session_store.save(&ctx.conversation);
                                     send_event(
-                                        events,
+                                        state.events,
                                         AgentEvent::SessionReady {
                                             id: ctx.conversation.id.clone(),
                                             history: ctx.conversation.messages.clone(),
                                         },
                                     )
                                     .await;
-                                    send_event(events, AgentEvent::Notify(Notification {
+                                    send_event(state.events, AgentEvent::Notify(Notification {
                                         level: NotificationLevel::Success,
                                         message: backup
                                             .map(|path| format!("Checkpoint restored; previous diff backed up at {}", path.display()))
                                             .unwrap_or_else(|| "Checkpoint restored".to_string()),
                                     })).await;
-                                    emit_git_state(events).await;
+                                    emit_git_state(state.events).await;
                                 }
                                 Err(error) => {
-                                    send_event(events, AgentEvent::Error(error.to_string())).await
+                                    send_event(state.events, AgentEvent::Error(error.to_string()))
+                                        .await
                                 }
                             }
                         }
                         Ok(record) => {
                             send_event(
-                                events,
+                                state.events,
                                 AgentEvent::Document(checkpoint_document(&record, true)),
                             )
                             .await;
                         }
                         Err(error) => {
-                            send_event(events, AgentEvent::Error(error.to_string())).await
+                            send_event(state.events, AgentEvent::Error(error.to_string())).await
                         }
                     }
                 }
             }
         }
         AppEffect::DeleteCheckpoint(id) => {
-            if let Some(ctx) = context.as_ref() {
+            if let Some(ctx) = state.context.as_ref() {
                 match ctx.checkpoint_store.delete(&id) {
                     Ok(()) => {
                         send_event(
-                            events,
+                            state.events,
                             AgentEvent::Notify(Notification {
                                 level: NotificationLevel::Success,
                                 message: format!("Checkpoint deleted: {id}"),
@@ -1678,36 +1674,38 @@ async fn apply_app_effect(
                         )
                         .await;
                     }
-                    Err(error) => send_event(events, AgentEvent::Error(error.to_string())).await,
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
                 }
             }
         }
         AppEffect::ContextStatus => {
-            if let Some(ctx) = context.as_ref() {
+            if let Some(ctx) = state.context.as_ref() {
                 send_event(
-                    events,
+                    state.events,
                     AgentEvent::Document(context_status_document(&ctx.context_report())),
                 )
                 .await;
             }
         }
         AppEffect::ContextInspect => {
-            if let Some(ctx) = context.as_ref() {
+            if let Some(ctx) = state.context.as_ref() {
                 send_event(
-                    events,
+                    state.events,
                     AgentEvent::Document(context_inspect_document(&ctx.context_report())),
                 )
                 .await;
             }
         }
         AppEffect::ContextCompact => {
-            if active.is_none() {
-                if let Some(ctx) = context.as_mut() {
+            if state.active.is_none() {
+                if let Some(ctx) = state.context.as_mut() {
                     match compact_context(ctx).await {
                         Ok(record) => {
                             let _ = ctx.session_store.save(&ctx.conversation);
                             send_event(
-                                events,
+                                state.events,
                                 AgentEvent::Document(context_compaction_document(
                                     &ctx.context_report(),
                                     &record,
@@ -1716,19 +1714,19 @@ async fn apply_app_effect(
                             .await;
                         }
                         Err(error) => {
-                            send_event(events, AgentEvent::Error(error.to_string())).await
+                            send_event(state.events, AgentEvent::Error(error.to_string())).await
                         }
                     }
                 }
             }
         }
         AppEffect::ContextPin(target) => {
-            if let Some(ctx) = context.as_mut() {
+            if let Some(ctx) = state.context.as_mut() {
                 let id = format!("pin-{}", ctx.context_pins.len() + 1);
                 let pin = make_pin(id.clone(), target);
                 ctx.context_pins.push(pin);
                 send_event(
-                    events,
+                    state.events,
                     AgentEvent::Notify(Notification {
                         level: NotificationLevel::Success,
                         message: format!("Context pin added: {id}"),
@@ -1736,19 +1734,19 @@ async fn apply_app_effect(
                 )
                 .await;
                 send_event(
-                    events,
+                    state.events,
                     AgentEvent::Document(context_status_document(&ctx.context_report())),
                 )
                 .await;
             }
         }
         AppEffect::ContextUnpin(id) => {
-            if let Some(ctx) = context.as_mut() {
+            if let Some(ctx) = state.context.as_mut() {
                 let before = ctx.context_pins.len();
                 ctx.context_pins.retain(|pin| pin.id != id);
                 let removed = before != ctx.context_pins.len();
                 send_event(
-                    events,
+                    state.events,
                     AgentEvent::Notify(Notification {
                         level: if removed {
                             NotificationLevel::Success
@@ -1766,38 +1764,79 @@ async fn apply_app_effect(
             }
         }
         AppEffect::ContextSources => {
-            if let Some(ctx) = context.as_ref() {
+            if let Some(ctx) = state.context.as_ref() {
                 send_event(
-                    events,
+                    state.events,
                     AgentEvent::Document(context_sources_document(&ctx.context_report())),
                 )
                 .await;
             }
         }
         AppEffect::Verify => {
-            start_verification(VerificationScope::Full, None, *mode, events.clone()).await;
+            start_verification(
+                VerificationScope::Full,
+                None,
+                *state.mode,
+                state.events.clone(),
+            )
+            .await;
         }
         AppEffect::Test => {
-            start_verification(VerificationScope::Test, None, *mode, events.clone()).await;
+            start_verification(
+                VerificationScope::Test,
+                None,
+                *state.mode,
+                state.events.clone(),
+            )
+            .await;
         }
         AppEffect::RunCommand(command) => {
-            start_verification(VerificationScope::Run, Some(command), *mode, events.clone()).await;
+            start_verification(
+                VerificationScope::Run,
+                Some(command),
+                *state.mode,
+                state.events.clone(),
+            )
+            .await;
+        }
+        AppEffect::SubmitPrompt(prompt) => {
+            if prompt.trim().is_empty() {
+                send_event(
+                    state.events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Warning,
+                        message: "custom command rendered an empty prompt".to_string(),
+                    }),
+                )
+                .await;
+            } else if state.active.is_some() {
+                state.queued.push_back(prompt);
+                send_event(state.events, AgentEvent::QueueChanged(state.queued.len())).await;
+            } else if let Some(ctx) = state.context.take() {
+                *state.active = Some(launch_task(
+                    ctx,
+                    prompt,
+                    state.provider_name.clone(),
+                    state.events.clone(),
+                    state.outcome_tx.clone(),
+                ));
+            }
         }
         AppEffect::CancelTask => {
-            if let Some(task) = active.as_ref() {
+            if let Some(task) = state.active.as_ref() {
                 task.cancellation.cancel();
             }
         }
         AppEffect::Quit | AppEffect::Shutdown => {
-            if let Some(task) = active.as_ref() {
+            if let Some(task) = state.active.as_ref() {
                 task.cancellation.cancel();
             }
-            send_event(events, AgentEvent::ShuttingDown).await;
+            send_event(state.events, AgentEvent::ShuttingDown).await;
             return true;
         }
         AppEffect::ReloadExtensions => {
             send_event(
-                events,
+                state.events,
                 AgentEvent::Notify(Notification {
                     level: NotificationLevel::Info,
                     message: "Extensions reload requested outside the live workspace lifecycle."
@@ -1808,7 +1847,7 @@ async fn apply_app_effect(
         }
         AppEffect::Status(s) => {
             send_event(
-                events,
+                state.events,
                 AgentEvent::Notify(Notification {
                     level: NotificationLevel::Info,
                     message: s,
@@ -1818,7 +1857,7 @@ async fn apply_app_effect(
         }
         AppEffect::Custom(name) => {
             send_event(
-                events,
+                state.events,
                 AgentEvent::Error(format!(
                     "custom effect `{name}` not implemented in this slice"
                 )),
