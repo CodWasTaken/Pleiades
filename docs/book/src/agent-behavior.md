@@ -11,7 +11,7 @@ Pleiades is designed to finish software-engineering tasks, not merely answer que
 7. review the resulting workspace diff;
 8. report the cause or goal, files changed, decisions, observed checks, and remaining risk.
 
-The agent is explicitly prohibited from claiming a check passed unless it ran and observed that result. Tool and provider activity is normalized into typed events, so the terminal can show what actually happened separately from the final prose response.
+The agent is explicitly prohibited from claiming a check passed unless it ran and observed that result. Use `/verify` to gather explicit definition-of-done evidence: Pleiades detects project tooling, inspects the diff, runs bounded checks, and renders command outcomes. If checks are skipped, blocked, or fail, the report must say so instead of implying the task is fully verified. Tool and provider activity is normalized into typed events, so the terminal can show what actually happened separately from the final prose response.
 
 ## Provider execution paths
 

@@ -11,6 +11,7 @@ pub mod engine;
 pub mod memory;
 pub mod runtime;
 pub mod session;
+pub mod verification;
 
 pub use chat::ChatSession;
 pub use engine::Engine;

@@ -90,6 +90,12 @@ pub enum AppEffect {
     ContextUnpin(String),
     /// Show files and tool sources represented in context.
     ContextSources,
+    /// Run a full definition-of-done verification plan.
+    Verify,
+    /// Run project test commands only.
+    Test,
+    /// Run an explicit user command and capture evidence.
+    RunCommand(String),
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;

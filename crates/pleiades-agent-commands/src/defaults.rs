@@ -560,6 +560,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_permissions_family(&mut r);
     register_checkpoint_family(&mut r);
     register_context_family(&mut r);
+    register_verification_family(&mut r);
     r
 }
 
@@ -1588,6 +1589,68 @@ fn register_context_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 }
 
+fn register_verification_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["verify"],
+            "Run the project definition-of-done verification plan",
+            handler(|_| Ok(CommandResult::effects([AppEffect::Verify]))),
+        )
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["test"],
+            "Run detected project tests and capture evidence",
+            handler(|_| Ok(CommandResult::effects([AppEffect::Test]))),
+        )
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["run"],
+            "Run an explicit command and capture output as verification evidence",
+            handler(|args| {
+                if args.is_empty() {
+                    return Err(Error::invalid_input("usage: /run <command>"));
+                }
+                Ok(CommandResult::effects([AppEffect::RunCommand(
+                    args.join(" "),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "command",
+            "Command to execute in the workspace.",
+        )])
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["review"],
+            "Open the current diff review overlay",
+            handler(|_| Ok(CommandResult::overlay(OverlayKind::Diff))),
+        )
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -1899,6 +1962,42 @@ mod tests {
                 .iter()
                 .any(|suggestion| suggestion.label == "context compact")
         );
+    }
+
+    #[tokio::test]
+    async fn verification_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/verify", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("verify should emit an effect");
+        };
+        assert_eq!(effects, vec![AppEffect::Verify]);
+
+        let result = default_registry()
+            .dispatch("/run cargo test -p pleiades-agent-engine", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("run should emit an effect");
+        };
+        assert_eq!(
+            effects,
+            vec![AppEffect::RunCommand(
+                "cargo test -p pleiades-agent-engine".to_string()
+            )]
+        );
+
+        let result = default_registry()
+            .dispatch("/review", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::OpenOverlay(OverlayKind::Diff)
+        ));
     }
 
     #[tokio::test]

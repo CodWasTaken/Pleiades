@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   commands backed by an engine-owned context accountant. Reports show
   approximate token usage by conversation, tool output, memory, compression
   summaries, pins, and detected sources.
+- Added `/verify`, `/test`, `/run <command>`, and `/review` workspace
+  commands backed by structured verification reports. Verification runs in a
+  background task, captures changed files, diff stats, commands, exit status,
+  stdout/stderr snippets, and refuses to report executed success in Plan mode.
 - Split runtime access control into typed `ApprovalPolicy` and
   `SandboxPolicy` values, and added `auto` and `yolo` mode presets. Auto runs
   without prompts inside the workspace; YOLO is the explicit full-host preset.

@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::checkpoint::{CheckpointRecord, CheckpointStore};
 use crate::context::{CompressionRecord, ContextAccountant, ContextPin, ContextReport, make_pin};
+use crate::verification::{VerificationReport, VerificationScope, VerificationService};
 use crate::{Engine, SessionStore};
 
 const COMMAND_CAPACITY: usize = 64;
@@ -1748,6 +1749,15 @@ async fn apply_app_effect(
                 .await;
             }
         }
+        AppEffect::Verify => {
+            start_verification(VerificationScope::Full, None, *mode, events.clone()).await;
+        }
+        AppEffect::Test => {
+            start_verification(VerificationScope::Test, None, *mode, events.clone()).await;
+        }
+        AppEffect::RunCommand(command) => {
+            start_verification(VerificationScope::Run, Some(command), *mode, events.clone()).await;
+        }
         AppEffect::CancelTask => {
             if let Some(task) = active.as_ref() {
                 task.cancellation.cancel();
@@ -2007,6 +2017,145 @@ async fn compact_context(ctx: &mut RuntimeContext) -> Result<CompressionRecord, 
     };
     ctx.compression_history.push(record.clone());
     Ok(record)
+}
+
+async fn start_verification(
+    scope: VerificationScope,
+    command: Option<String>,
+    mode: AgentMode,
+    events: mpsc::Sender<AgentEvent>,
+) {
+    let workspace = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let title = match scope {
+        VerificationScope::Full => "Running verification",
+        VerificationScope::Test => "Running tests",
+        VerificationScope::Run => "Running command",
+    };
+    let activity_id = format!("verify-{}", now_ms());
+    send_event(
+        &events,
+        AgentEvent::Activity(Activity::new(
+            activity_id.clone(),
+            AgentActivityKind::Testing,
+            title,
+            AgentActivityStatus::Running,
+        )),
+    )
+    .await;
+
+    tokio::spawn(async move {
+        let service = VerificationService::new(workspace);
+        let report = if mode.sandbox_policy() == SandboxPolicy::ReadOnly {
+            let reason =
+                "Plan mode is read-only; verification commands were planned but not executed.";
+            service.plan_only(scope, reason).await
+        } else if let Some(command) = command {
+            service.run_shell(command).await
+        } else {
+            service.verify(scope).await
+        };
+        let status = if report.success() {
+            AgentActivityStatus::Completed
+        } else {
+            AgentActivityStatus::Failed
+        };
+        send_event(
+            &events,
+            AgentEvent::Activity(Activity::new(
+                activity_id,
+                AgentActivityKind::Testing,
+                "Verification finished",
+                status,
+            )),
+        )
+        .await;
+        send_event(
+            &events,
+            AgentEvent::Document(verification_document(&report)),
+        )
+        .await;
+    });
+}
+
+fn verification_document(report: &VerificationReport) -> RenderableDocument {
+    let mut document = RenderableDocument::new(if report.success() {
+        "Verification passed"
+    } else if report.skipped_reason.is_some() {
+        "Verification planned"
+    } else {
+        "Verification failed"
+    });
+    document.push_section("Project", report.project_kind.clone());
+    document.push_section("Diff", report.diff_summary.clone());
+    document.push_section(
+        "Changed files",
+        if report.changed_files.is_empty() {
+            "(none)".to_string()
+        } else {
+            report.changed_files.join("\n")
+        },
+    );
+    document.push_section(
+        "Planned commands",
+        if report.planned_commands.is_empty() {
+            "No project verification commands were detected.".to_string()
+        } else {
+            report
+                .planned_commands
+                .iter()
+                .map(|command| command.display())
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    );
+    if let Some(reason) = &report.skipped_reason {
+        document.push_section("Skipped", reason.clone());
+        return document;
+    }
+    if report.results.is_empty() {
+        document.push_section(
+            "Evidence",
+            "No commands were executed; no success claim can be made.",
+        );
+        return document;
+    }
+    for result in &report.results {
+        document.push_section(
+            format!(
+                "{} · {}",
+                if result.success { "passed" } else { "failed" },
+                result.label
+            ),
+            format!(
+                "Command: {}\nExit: {}\nDuration: {}ms\nstdout:\n{}\nstderr:\n{}",
+                result.command,
+                result
+                    .exit_code
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
+                result.duration_ms,
+                if result.stdout.trim().is_empty() {
+                    "(empty)"
+                } else {
+                    result.stdout.trim()
+                },
+                if result.stderr.trim().is_empty() {
+                    "(empty)"
+                } else {
+                    result.stderr.trim()
+                }
+            ),
+        );
+    }
+    document.push_section(
+        "Conclusion",
+        if report.success() {
+            "All executed verification commands completed successfully."
+        } else {
+            "One or more verification commands failed. Do not report completion as verified until the failures are addressed."
+        },
+    );
+    document
 }
 
 #[cfg(test)]
@@ -2452,6 +2601,63 @@ mod tests {
             section.heading == "Compression history" && section.body.contains("Manually compacted")
         }));
 
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn run_command_records_verification_evidence() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/run rustc --version".into()))
+            .await
+            .unwrap();
+        let document = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Verification passed"
+                    || document.title == "Verification failed"
+                {
+                    break document;
+                }
+            }
+        };
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading.contains("passed")
+                    && section.body.contains("rustc --version"))
+        );
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn plan_mode_verification_reports_planned_commands_without_execution() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) =
+            runtime_with_mock(AgentMode::Plan, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/verify".into()))
+            .await
+            .unwrap();
+        let document = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Verification planned" {
+                    break document;
+                }
+            }
+        };
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "Skipped" && section.body.contains("Plan mode"))
+        );
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }
 
