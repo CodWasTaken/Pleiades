@@ -16,7 +16,7 @@ pleiades-agent-services = { path = "../pleiades-agent-services", version = "2.0.
 
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
-ratatui = "0.28"
+ratatui = "0.30"
 crossterm = { version = "0.28", features = ["event-stream"] }
 tokio = { version = "1", features = ["sync", "rt", "macros", "signal", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }
