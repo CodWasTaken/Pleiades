@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2094cbc4.js";
+            window.path_to_searchindex_js = "searchindex-19975f40.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -224,8 +224,8 @@ through the runtime command channel and return structured UI events—neither pa
 executes provider or tool logic in the TUI.</p>
 <p>The currently implemented workspace commands include <code>/help</code>, <code>/status</code>,
 <code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/load</code>, <code>/diff</code>,
-<code>/output</code>, <code>/checkpoint</code>, <code>/undo</code>, <code>/redo</code>, <code>/rewind</code>, <code>/doctor</code>, <code>/config</code>,
-<code>/clear</code>, <code>/save</code>, and <code>/quit</code>. The provider family includes <code>list</code>, <code>use</code>,
+<code>/output</code>, <code>/checkpoint</code>, <code>/context</code>, <code>/undo</code>, <code>/redo</code>, <code>/rewind</code>, <code>/doctor</code>,
+<code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. The provider family includes <code>list</code>, <code>use</code>,
 <code>info</code>, <code>add</code>, <code>remove</code>, and <code>reload</code>. Provider reports are obtained through the
 same application service used by the external CLI and always mask credentials.
 Model and plugin command families are also registered with nested completion
@@ -238,6 +238,18 @@ and staged/unstaged tracked diffs. <code>/checkpoint list</code> and <code>/chec
 diff when the current Git HEAD still matches. Current tracked changes are backed
 up as a patch before restore. New untracked files that were not part of the
 checkpoint block restoration so unrelated user work is not silently removed.</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Use <code>/context status</code> to inspect approximate context usage. The report splits
+tokens across conversation messages, tool output, memory context, compression
+summaries, and pinned items. <code>/context inspect</code> adds pins, compression history,
+and detected sources. <code>/context sources</code> lists file paths, URLs, searches, and
+tool inputs represented in the current conversation.</p>
+<p>Use <code>/context pin &lt;file-or-message&gt;</code> to mark a file path, message id, or short
+note as important. <code>/context unpin &lt;id&gt;</code> removes a pin. Pins are runtime state
+in this release. <code>/context compact</code> summarizes older non-system messages and
+records before/after token estimates. Token counts use a deterministic
+four-characters-per-token approximation until provider-specific tokenizers are
+integrated.</p>
 <h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
 <p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
 <p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>
