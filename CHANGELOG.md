@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added optional Playwright-backed browser verification foundations with
   `/browser open`, `screenshot`, `inspect`, `console`, and `close`, structured
   reports, console/network capture, and screenshot output under `.pleiades/`.
+- Added project command recipes with `/project detect`, `/project commands`,
+  `/project run <recipe>`, and `/project verify`. Recipes are detected from
+  Rust and Node project markers and can be overridden in
+  `.pleiades/project.toml`.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

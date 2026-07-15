@@ -2020,6 +2020,57 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
             )
             .await;
         }
+        AppEffect::ProjectDetect => {
+            let service = pleiades_agent_services::ApplicationServices::new().project();
+            send_event(
+                state.events,
+                AgentEvent::Document(project_detection_document(&service.detect())),
+            )
+            .await;
+        }
+        AppEffect::ProjectCommands => {
+            let service = pleiades_agent_services::ApplicationServices::new().project();
+            match service.commands() {
+                Ok(commands) => {
+                    send_event(
+                        state.events,
+                        AgentEvent::Document(project_commands_document(&commands)),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
+        AppEffect::ProjectRun(name) => {
+            let service = pleiades_agent_services::ApplicationServices::new().project();
+            match service.command(&name) {
+                Ok(recipe) => {
+                    start_verification(
+                        VerificationScope::Run,
+                        Some(recipe.command),
+                        *state.mode,
+                        state.events.clone(),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
+        AppEffect::ProjectVerify => {
+            let service = pleiades_agent_services::ApplicationServices::new().project();
+            match service.verify_command() {
+                Ok(recipe) => {
+                    start_verification(
+                        VerificationScope::Run,
+                        Some(recipe.command),
+                        *state.mode,
+                        state.events.clone(),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
         AppEffect::SubmitPrompt(prompt) => {
             if prompt.trim().is_empty() {
                 send_event(
@@ -2333,6 +2384,48 @@ fn browser_console_document(lines: &[String]) -> RenderableDocument {
             lines.join("\n")
         },
     )
+}
+
+fn project_detection_document(
+    report: &pleiades_agent_services::ProjectDetectionReport,
+) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Project detection").section(
+        "Markers",
+        if report.markers.is_empty() {
+            "(none)".to_string()
+        } else {
+            report.markers.join("\n")
+        },
+    );
+    if report.suggested.is_empty() {
+        document.push_section("Recipes", "No recipes detected.");
+    }
+    for recipe in &report.suggested {
+        document.push_section(
+            format!("{} · {}", recipe.name, recipe.source),
+            &recipe.command,
+        );
+    }
+    document
+}
+
+fn project_commands_document(
+    commands: &[pleiades_agent_services::ProjectCommandReport],
+) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Project commands");
+    if commands.is_empty() {
+        document.push_section(
+            "No recipes",
+            "Create .pleiades/project.toml with [project.commands].",
+        );
+    }
+    for recipe in commands {
+        document.push_section(
+            format!("{} · {}", recipe.name, recipe.source),
+            &recipe.command,
+        );
+    }
+    document
 }
 
 fn checkpoint_label(record: &CheckpointRecord) -> String {

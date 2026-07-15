@@ -9,6 +9,7 @@ mod mcp;
 mod models;
 mod permissions;
 mod plugins;
+mod project;
 mod providers;
 mod skills;
 
@@ -23,6 +24,7 @@ pub use permissions::{
     PermissionReport, PermissionRuleReport, PermissionService, PermissionTestReport,
 };
 pub use plugins::{PluginInstallReport, PluginReport, PluginService, PluginUpdateReport};
+pub use project::{ProjectCommandReport, ProjectDetectionReport, ProjectService};
 pub use providers::{ProviderFactory, ProviderReport, ProviderService, ProviderTestReport};
 pub use skills::{SkillReport, SkillService};
 
@@ -84,6 +86,13 @@ impl ApplicationServices {
         CustomCommandService::new(
             self.global_config_dir.join("commands"),
             self.project_config_dir.join("commands"),
+        )
+    }
+
+    pub fn project(&self) -> ProjectService {
+        ProjectService::new(
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            self.project_config_dir.clone(),
         )
     }
 

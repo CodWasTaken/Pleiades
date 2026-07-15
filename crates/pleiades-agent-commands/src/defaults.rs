@@ -630,6 +630,7 @@ pub fn default_registry_with_services(
     register_lsp_family(&mut r);
     register_process_family(&mut r);
     register_browser_family(&mut r);
+    register_project_family(&mut r);
     register_custom_commands(&mut r, services);
     r
 }
@@ -2567,6 +2568,80 @@ fn register_browser_family(r: &mut crate::registry::CommandRegistry) {
     }
 }
 
+fn register_project_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["project"],
+            "Detect project recipes",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ProjectDetect]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["project", "detect"],
+            "Detect likely project commands",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ProjectDetect]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["project", "commands"],
+            "List project command recipes",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ProjectCommands]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["project", "run"],
+            "Run a project command recipe",
+            handler(|args| {
+                let name = args
+                    .first()
+                    .ok_or_else(|| Error::invalid_input("usage: /project run <recipe>"))?;
+                Ok(CommandResult::effects([AppEffect::ProjectRun(
+                    name.clone(),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "recipe",
+            "Recipe name from /project commands.",
+        )])
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["project", "verify"],
+            "Run the project verify recipe",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ProjectVerify]))),
+        )
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+}
+
 #[derive(Debug, Clone)]
 struct CustomCommandHandler {
     definition: CustomCommandDefinition,
@@ -2856,6 +2931,11 @@ mod tests {
             "browser inspect",
             "browser console",
             "browser close",
+            "project",
+            "project detect",
+            "project commands",
+            "project run",
+            "project verify",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -3225,6 +3305,28 @@ mod tests {
         assert!(matches!(
             result,
             CommandResult::Effects(effects) if effects == vec![AppEffect::BrowserScreenshot]
+        ));
+    }
+
+    #[tokio::test]
+    async fn project_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/project run test", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::ProjectRun("test".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/project verify", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::ProjectVerify]
         ));
     }
 

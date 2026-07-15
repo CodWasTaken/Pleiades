@@ -1608,6 +1608,7 @@ dependencies = [
  "pleiades-agent-process",
  "pleiades-agent-prompts",
  "pleiades-agent-providers",
+ "pleiades-agent-services",
  "pleiades-agent-tools",
  "serde",
  "serde_json",

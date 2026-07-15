@@ -20,6 +20,7 @@ pleiades-agent-permissions = { path = "../pleiades-agent-permissions", version =
 pleiades-agent-git = { path = "../pleiades-agent-git", version = "2.0.0" }
 pleiades-agent-lsp = { path = "../pleiades-agent-lsp", version = "2.0.0" }
 pleiades-agent-process = { path = "../pleiades-agent-process", version = "2.0.0" }
+pleiades-agent-services = { path = "../pleiades-agent-services", version = "2.0.0" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
