@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b469c0d1.js";
+            window.path_to_searchindex_js = "searchindex-b1d5eccc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-53b50016.js"></script>
+        <script src="toc-9b3b6a39.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -951,6 +951,47 @@ object yet.</li>
 diffing are planned follow-up work.</li>
 <li>Playwright failures are reported as command errors with setup guidance.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="project-recipes"><a class="header" href="#project-recipes">Project recipes</a></h1>
+<p>Project recipes give Pleiades a shared way to detect, list, and run common
+project commands from both the live workspace and the headless CLI.</p>
+<pre><code class="language-text">/project detect
+/project commands
+/project run &lt;recipe&gt;
+/project verify
+</code></pre>
+<p>Headless equivalents are available through:</p>
+<pre><code class="language-bash">pleiades project detect
+pleiades project commands
+pleiades project run &lt;recipe&gt;
+pleiades project verify
+</code></pre>
+<h2 id="detection"><a class="header" href="#detection">Detection</a></h2>
+<p>Pleiades currently detects:</p>
+<ul>
+<li>Rust workspaces from <code>Cargo.toml</code>, suggesting <code>format</code>, <code>lint</code>, <code>test</code>, and
+<code>verify</code>.</li>
+<li>Node projects from <code>package.json</code>, suggesting <code>dev</code> and <code>test</code>.</li>
+</ul>
+<p>Detected recipes are conservative defaults. Project configuration can override
+them.</p>
+<h2 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h2>
+<p>Define project-local recipes in <code>.pleiades/project.toml</code>:</p>
+<pre><code class="language-toml">[project.commands]
+dev = "cargo run"
+test = "cargo test --workspace"
+lint = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+format = "cargo fmt --all -- --check"
+verify = "cargo fmt --all -- --check &amp;&amp; cargo clippy --workspace --all-targets --all-features -- -D warnings &amp;&amp; cargo test --workspace"
+</code></pre>
+<p>Configured recipes with the same name as detected recipes take precedence.</p>
+<h2 id="verification-1"><a class="header" href="#verification-1">Verification</a></h2>
+<p><code>/project verify</code> runs the configured <code>verify</code> recipe when present. If no
+explicit <code>verify</code> recipe exists, Pleiades composes one from available <code>format</code>,
+<code>lint</code>, and <code>test</code> recipes.</p>
+<p>Live workspace project commands run through the same verification runtime as
+<code>/run</code>, so their output is captured as structured activity instead of being
+printed directly by the TUI.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
 <p>Pleiades is a Rust 2024 Cargo workspace organized around stable provider, tool, conversation, event, and error types. Tokio owns asynchronous execution; Ratatui and Crossterm own the live terminal frontend.</p>
