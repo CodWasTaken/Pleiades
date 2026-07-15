@@ -142,6 +142,50 @@ fn permissions_cli_add_show_and_test_rules() {
 }
 
 #[test]
+fn mcp_cli_lists_redacted_config_and_tool_filters() {
+    let workspace = tempfile::tempdir().unwrap();
+    let project_config = workspace.path().join(".pleiades");
+    fs::create_dir_all(&project_config).unwrap();
+    fs::write(
+        project_config.join("config.toml"),
+        r#"
+[core]
+
+[mcp.servers.docs]
+transport = "http"
+url = "https://example.test/mcp?token=secret"
+tool_allowlist = ["search"]
+"#,
+    )
+    .unwrap();
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["mcp", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("docs"))
+        .stdout(predicate::str::contains("token=REDACTED"))
+        .stdout(predicate::str::contains("secret").not());
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["mcp", "info", "docs"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Allow:     search"))
+        .stdout(predicate::str::contains("secret").not());
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["mcp", "tool-info", "docs", "search"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Exposed: true"))
+        .stdout(predicate::str::contains("Schema:  false"));
+}
+
+#[test]
 fn workflow_create_validate_list_and_run() {
     let workspace = tempfile::tempdir().unwrap();
     command(workspace.path())

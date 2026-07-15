@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   protocol types, stdio client primitives, redacted server status reporting,
   auth-source metadata, tool filtering, and validation for invalid server
   definitions. See `docs/adr/0009-mcp-client-foundation.md`.
+- Added shared `McpService`, `/mcp` workspace commands, `pleiades mcp`
+  headless commands, and a native MCP manager overlay entry point. Configured
+  server reports are redacted, enable/disable/remove persist through the shared
+  service layer, and tool commands report configured exposure filters without
+  claiming live schema discovery.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

@@ -56,6 +56,7 @@ pub enum Overlay {
     },
     Configuration,
     Diagnostics,
+    McpManager,
     /// Structured document rendered by a slash/palette command (e.g. `/status`,
     /// `/info`).  We keep the title visible for this slice; richer overlay
     /// rendering lands with item 3 / the unified inspector panel (3.0).
@@ -737,6 +738,7 @@ impl AppState {
                     })
             }
             OverlayKind::Diagnostics => Some(Overlay::Diagnostics),
+            OverlayKind::McpManager => Some(Overlay::McpManager),
             OverlayKind::Configuration => Some(Overlay::Configuration),
             OverlayKind::FilePicker => {
                 self.open_picker(PickerKind::File);

@@ -537,6 +537,47 @@ fn render_overlay(frame: &mut Frame<'_>, app: &AppState, overlay: Overlay) {
             ];
             render_modal(frame, area, " Diagnostics  ·  Esc close ", text, theme);
         }
+        Overlay::McpManager => {
+            let text = vec![
+                Line::from(Span::styled(
+                    format!("{} MCP manager", theme.symbols.agent),
+                    theme.title(),
+                )),
+                Line::default(),
+                Line::from("Configured servers are managed through the shared command registry."),
+                Line::from(
+                    "Runtime connections, live logs, and schema discovery land in the next MCP slice.",
+                ),
+                Line::default(),
+                field("/mcp list", "show configured servers", theme),
+                field(
+                    "/mcp info <id>",
+                    "inspect redacted server configuration",
+                    theme,
+                ),
+                field("/mcp enable <id>", "enable a configured server", theme),
+                field("/mcp disable <id>", "disable a configured server", theme),
+                field(
+                    "/mcp remove <id>",
+                    "remove a server from project config",
+                    theme,
+                ),
+                field(
+                    "/mcp tools <id>",
+                    "show configured tool exposure filters",
+                    theme,
+                ),
+                field(
+                    "/mcp tool-info <server> <tool>",
+                    "inspect a tool filter decision",
+                    theme,
+                ),
+                field("/mcp reload", "reload extension sources", theme),
+                Line::default(),
+                Line::from(Span::styled("Esc close", theme.muted())),
+            ];
+            render_modal(frame, area, " MCP manager  ·  Esc close ", text, theme);
+        }
         Overlay::Document(document) => {
             let mut text = Vec::new();
             for section in document.sections {

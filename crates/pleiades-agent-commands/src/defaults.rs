@@ -556,6 +556,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_provider_family(&mut r);
     register_model_family(&mut r);
     register_plugin_family(&mut r);
+    register_mcp_family(&mut r);
     register_mode_family(&mut r);
     register_permissions_family(&mut r);
     register_checkpoint_family(&mut r);
@@ -1178,6 +1179,316 @@ fn register_plugin_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 }
 
+struct McpListHandler;
+
+#[async_trait]
+impl CommandHandler for McpListHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        let servers = context.services().mcp().list()?;
+        let mut document = crate::result::RenderableDocument::new("MCP Servers");
+        if servers.is_empty() {
+            document.push_section(
+                "No MCP servers configured",
+                "Use /mcp add to open the MCP manager, or edit mcp.servers in configuration.",
+            );
+        }
+        for server in servers {
+            document.push_section(
+                server.id,
+                format!(
+                    "Enabled: {}\nTransport: {}\nHealth: {}\nTimeout: {}s\nTools: {}\nAllow: {}\nDeny: {}",
+                    server.enabled,
+                    server.transport,
+                    server.health,
+                    server.timeout_secs,
+                    server
+                        .tool_count
+                        .map(|count| count.to_string())
+                        .unwrap_or_else(|| "not discovered".to_string()),
+                    list_or_all(&server.allowlist),
+                    list_or_none(&server.denylist)
+                ),
+            );
+        }
+        Ok(CommandResult::RenderDocument(document))
+    }
+}
+
+struct McpInfoHandler;
+
+#[async_trait]
+impl CommandHandler for McpInfoHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let id = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /mcp info <id>"))?;
+        let server = context.services().mcp().info(id)?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new(format!("MCP Server: {}", server.id))
+                .section("Enabled", server.enabled.to_string())
+                .section("Transport", server.transport)
+                .section("Health", server.health)
+                .section("Timeout", format!("{}s", server.timeout_secs))
+                .section(
+                    "Tools",
+                    server
+                        .tool_count
+                        .map(|count| count.to_string())
+                        .unwrap_or_else(|| "not discovered".to_string()),
+                )
+                .section("Allowlist", list_or_all(&server.allowlist))
+                .section("Denylist", list_or_none(&server.denylist))
+                .section(
+                    "Last error",
+                    server.last_error.as_deref().unwrap_or("(none)"),
+                ),
+        ))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum McpMutation {
+    Remove,
+    Enable,
+    Disable,
+}
+
+struct McpMutationHandler(McpMutation);
+
+#[async_trait]
+impl CommandHandler for McpMutationHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let id = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /mcp remove|enable|disable <id>"))?;
+        match self.0 {
+            McpMutation::Remove => context.services().mcp().remove(id)?,
+            McpMutation::Enable => context.services().mcp().enable(id)?,
+            McpMutation::Disable => context.services().mcp().disable(id)?,
+        }
+        let action = match self.0 {
+            McpMutation::Remove => "removed",
+            McpMutation::Enable => "enabled",
+            McpMutation::Disable => "disabled",
+        };
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!("MCP server `{id}` {action}"),
+        ))
+    }
+}
+
+struct McpToolsHandler;
+
+#[async_trait]
+impl CommandHandler for McpToolsHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let id = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /mcp tools <id>"))?;
+        let tools = context.services().mcp().tools(id)?;
+        let mut document = crate::result::RenderableDocument::new(format!("MCP Tools: {id}"));
+        if tools.is_empty() {
+            document.push_section(
+                "No configured filters",
+                "Live tool discovery is not connected yet; no allowlist or denylist entries are configured.",
+            );
+        }
+        for tool in tools {
+            document.push_section(
+                tool.tool,
+                format!(
+                    "Exposed: {}\nSchema available: {}\n{}",
+                    tool.exposed, tool.schema_available, tool.notes
+                ),
+            );
+        }
+        Ok(CommandResult::RenderDocument(document))
+    }
+}
+
+struct McpToolInfoHandler;
+
+#[async_trait]
+impl CommandHandler for McpToolInfoHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let server = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /mcp tool-info <server> <tool>"))?;
+        let tool = args
+            .get(1)
+            .ok_or_else(|| Error::invalid_input("usage: /mcp tool-info <server> <tool>"))?;
+        let report = context.services().mcp().tool_info(server, tool)?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new(format!(
+                "MCP Tool: {}/{}",
+                report.server, report.tool
+            ))
+            .section("Exposed by filters", report.exposed.to_string())
+            .section("Schema available", report.schema_available.to_string())
+            .section("Notes", report.notes),
+        ))
+    }
+}
+
+fn register_mcp_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(vec!["mcp"], "Manage MCP servers", McpListHandler)
+            .category(CommandCategory::Mcp)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(vec!["mcp", "list"], "List MCP servers", McpListHandler)
+            .category(CommandCategory::Mcp)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(vec!["mcp", "info"], "Inspect an MCP server", McpInfoHandler)
+            .arguments(vec![
+                ArgumentSpec::required("id", "MCP server id")
+                    .with_completer(CompletionSource::McpServer),
+            ])
+            .category(CommandCategory::Mcp)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["mcp", "add"],
+            "Open the MCP server manager",
+            handler(|_| Ok(CommandResult::overlay(OverlayKind::McpManager))),
+        )
+        .category(CommandCategory::Mcp)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    for (name, description, mutation) in [
+        ("remove", "Remove an MCP server", McpMutation::Remove),
+        ("enable", "Enable an MCP server", McpMutation::Enable),
+        ("disable", "Disable an MCP server", McpMutation::Disable),
+    ] {
+        r.register(
+            CommandSpec::builder(vec!["mcp", name], description, McpMutationHandler(mutation))
+                .arguments(vec![
+                    ArgumentSpec::required("id", "MCP server id")
+                        .with_completer(CompletionSource::McpServer),
+                ])
+                .category(CommandCategory::Mcp)
+                .availability(CommandAvailability::Both)
+                .permission(PermissionRequirement::Write)
+                .build(),
+        )
+        .ok();
+    }
+    for name in ["auth", "logout"] {
+        r.register(
+            CommandSpec::builder(
+                vec!["mcp", name],
+                "Open MCP authentication details",
+                handler(|_| Ok(CommandResult::overlay(OverlayKind::McpManager))),
+            )
+            .arguments(vec![ArgumentSpec::optional(
+                "id",
+                "MCP server id; if omitted, opens the manager.",
+            )])
+            .category(CommandCategory::Mcp)
+            .availability(CommandAvailability::Interactive)
+            .permission(PermissionRequirement::Dangerous)
+            .build(),
+        )
+        .ok();
+    }
+    r.register(
+        CommandSpec::builder(
+            vec!["mcp", "tools"],
+            "List MCP tool filters",
+            McpToolsHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "MCP server id")
+                .with_completer(CompletionSource::McpServer),
+        ])
+        .category(CommandCategory::Mcp)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["mcp", "tool-info"],
+            "Inspect an MCP tool exposure rule",
+            McpToolInfoHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("server", "MCP server id")
+                .with_completer(CompletionSource::McpServer),
+            ArgumentSpec::required("tool", "MCP tool name"),
+        ])
+        .category(CommandCategory::Mcp)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["mcp", "reload"],
+            "Reload MCP configuration",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ReloadExtensions]))),
+        )
+        .category(CommandCategory::Mcp)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    for name in ["restart", "logs", "debug"] {
+        r.register(
+            CommandSpec::builder(
+                vec!["mcp", name],
+                "Open MCP manager diagnostics",
+                handler(|_| Ok(CommandResult::overlay(OverlayKind::McpManager))),
+            )
+            .arguments(vec![ArgumentSpec::optional(
+                "id",
+                "MCP server id; if omitted, opens the manager.",
+            )])
+            .category(CommandCategory::Mcp)
+            .availability(CommandAvailability::Interactive)
+            .permission(PermissionRequirement::Read)
+            .build(),
+        )
+        .ok();
+    }
+}
+
+fn list_or_all(values: &[String]) -> String {
+    if values.is_empty() {
+        "all non-denied tools".to_string()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn list_or_none(values: &[String]) -> String {
+    if values.is_empty() {
+        "(none)".to_string()
+    } else {
+        values.join(", ")
+    }
+}
+
 fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
     // /mode [preset]
     r.register(
@@ -1702,6 +2013,21 @@ mod tests {
             "plugins disable",
             "plugins permissions",
             "plugins reload",
+            "mcp",
+            "mcp list",
+            "mcp info",
+            "mcp add",
+            "mcp remove",
+            "mcp enable",
+            "mcp disable",
+            "mcp auth",
+            "mcp logout",
+            "mcp tools",
+            "mcp tool-info",
+            "mcp reload",
+            "mcp restart",
+            "mcp logs",
+            "mcp debug",
             "mode",
             "mode plan",
             "mode agent",
@@ -2018,6 +2344,70 @@ mod tests {
         assert!(document.sections.iter().any(|section| {
             section.heading == "pleiades-agent-core-builtin" && section.body.contains("enabled")
         }));
+    }
+
+    #[tokio::test]
+    async fn mcp_commands_use_the_injected_application_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        let mut config = pleiades_agent_config::Config::default();
+        config.mcp.servers.insert(
+            "docs".to_string(),
+            pleiades_agent_config::McpServerConfig {
+                transport: pleiades_agent_config::McpTransportConfig::Http {
+                    url: "https://example.test/mcp?token=secret".to_string(),
+                    auth: None,
+                },
+                tool_allowlist: vec!["search".to_string()],
+                ..pleiades_agent_config::McpServerConfig::default()
+            },
+        );
+        services.loader().save_project(&config).unwrap();
+        let context = CommandContextBuilder::default()
+            .services(services.clone())
+            .build();
+
+        let result = default_registry()
+            .dispatch("/mcp list", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::RenderDocument(document) = result else {
+            panic!("mcp list should render a document");
+        };
+        assert!(document.sections.iter().any(|section| {
+            section.heading == "docs" && section.body.contains("token=REDACTED")
+        }));
+
+        let result = default_registry()
+            .dispatch("/mcp disable docs", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(result, CommandResult::Notification(_)));
+        assert!(!services.mcp().info("docs").unwrap().enabled);
+
+        let result = default_registry()
+            .dispatch("/mcp tool-info docs search", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::RenderDocument(document) = result else {
+            panic!("mcp tool-info should render a document");
+        };
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "Exposed by filters" && section.body == "true")
+        );
+
+        let suggestions = default_registry().suggest("/mcp ", true);
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.label == "mcp tool-info")
+        );
     }
 
     #[tokio::test]

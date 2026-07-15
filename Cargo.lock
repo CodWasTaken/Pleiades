@@ -1692,6 +1692,7 @@ version = "2.0.0"
 dependencies = [
  "pleiades-agent-config",
  "pleiades-agent-core",
+ "pleiades-agent-mcp",
  "pleiades-agent-permissions",
  "pleiades-agent-plugins",
  "pleiades-agent-providers",
