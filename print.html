@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6a09b304.js";
+            window.path_to_searchindex_js = "searchindex-2094cbc4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -253,13 +253,20 @@ through the runtime command channel and return structured UI events—neither pa
 executes provider or tool logic in the TUI.</p>
 <p>The currently implemented workspace commands include <code>/help</code>, <code>/status</code>,
 <code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/load</code>, <code>/diff</code>,
-<code>/output</code>, <code>/doctor</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. The provider
-family includes <code>list</code>, <code>use</code>, <code>info</code>, <code>add</code>, <code>remove</code>, and <code>reload</code>. Provider
-reports are obtained through the same application service used by the external
-CLI and always mask credentials. Model and plugin command families are also
-registered with nested completion and structured documents. Provider
-authentication wizards and richer management overlays continue as separate
-Release 2.1 slices.</p>
+<code>/output</code>, <code>/checkpoint</code>, <code>/undo</code>, <code>/redo</code>, <code>/rewind</code>, <code>/doctor</code>, <code>/config</code>,
+<code>/clear</code>, <code>/save</code>, and <code>/quit</code>. The provider family includes <code>list</code>, <code>use</code>,
+<code>info</code>, <code>add</code>, <code>remove</code>, and <code>reload</code>. Provider reports are obtained through the
+same application service used by the external CLI and always mask credentials.
+Model and plugin command families are also registered with nested completion
+and structured documents.</p>
+<h2 id="checkpoints"><a class="header" href="#checkpoints">Checkpoints</a></h2>
+<p>Use <code>/checkpoint create [name]</code> before risky work. A checkpoint stores the
+conversation, active provider/model/mode, Git head and branch, changed files,
+and staged/unstaged tracked diffs. <code>/checkpoint list</code> and <code>/checkpoint show &lt;id&gt;</code> inspect saved records. <code>/checkpoint restore &lt;id&gt;</code> shows a preview;
+<code>/checkpoint restore &lt;id&gt; --confirm</code> restores the conversation and tracked Git
+diff when the current Git HEAD still matches. Current tracked changes are backed
+up as a patch before restore. New untracked files that were not part of the
+checkpoint block restoration so unrelated user work is not silently removed.</p>
 <h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
 <p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
 <p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>
