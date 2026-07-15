@@ -134,6 +134,14 @@ pub enum AppEffect {
     BrowserConsole,
     /// Clear the runtime browser session.
     BrowserClose,
+    /// Render detected project recipes.
+    ProjectDetect,
+    /// Render configured and detected project commands.
+    ProjectCommands,
+    /// Run one project recipe as verification evidence.
+    ProjectRun(String),
+    /// Run the project verify recipe.
+    ProjectVerify,
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;

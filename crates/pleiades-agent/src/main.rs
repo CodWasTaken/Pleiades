@@ -146,6 +146,10 @@ enum Commands {
     #[command(subcommand)]
     Browser(BrowserCommand),
 
+    /// Detect and run project command recipes
+    #[command(subcommand)]
+    Project(ProjectCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -708,6 +712,18 @@ enum BrowserCommand {
     Console,
     /// Clear browser session state
     Close,
+}
+
+#[derive(Subcommand)]
+enum ProjectCommand {
+    /// Detect likely project commands
+    Detect,
+    /// List configured and detected project commands
+    Commands,
+    /// Run one project recipe
+    Run { recipe: String },
+    /// Run the project verify recipe
+    Verify,
 }
 
 fn get_config_dirs() -> (PathBuf, PathBuf) {
@@ -2370,6 +2386,85 @@ fn handle_browser_command(command: BrowserCommand) {
     }
 }
 
+fn project_service(loader: &ConfigLoader) -> pleiades_agent_services::ProjectService {
+    pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    )
+    .project()
+}
+
+fn handle_project_command(loader: &ConfigLoader, command: ProjectCommand) {
+    let service = project_service(loader);
+    match command {
+        ProjectCommand::Detect => {
+            let report = service.detect();
+            println!("Markers: {}", cli_list_or_none(&report.markers));
+            for recipe in report.suggested {
+                println!(
+                    "  {:<12} {:<18} {}",
+                    recipe.name, recipe.source, recipe.command
+                );
+            }
+        }
+        ProjectCommand::Commands => match service.commands() {
+            Ok(commands) => {
+                if commands.is_empty() {
+                    println!("No project commands found.");
+                }
+                for recipe in commands {
+                    println!(
+                        "  {:<12} {:<24} {}",
+                        recipe.name, recipe.source, recipe.command
+                    );
+                }
+            }
+            Err(error) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+                std::process::exit(1);
+            }
+        },
+        ProjectCommand::Run { recipe } => match service.command(&recipe) {
+            Ok(recipe) => run_project_recipe(&recipe),
+            Err(error) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+                std::process::exit(1);
+            }
+        },
+        ProjectCommand::Verify => match service.verify_command() {
+            Ok(recipe) => run_project_recipe(&recipe),
+            Err(error) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+                std::process::exit(1);
+            }
+        },
+    }
+}
+
+fn run_project_recipe(recipe: &pleiades_agent_services::ProjectCommandReport) {
+    println!(
+        "Running project recipe `{}`: {}",
+        recipe.name, recipe.command
+    );
+    let status = if cfg!(windows) {
+        std::process::Command::new("cmd")
+            .args(["/C", &recipe.command])
+            .status()
+    } else {
+        std::process::Command::new("sh")
+            .args(["-c", &recipe.command])
+            .status()
+    };
+    match status {
+        Ok(status) if status.success() => {}
+        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m failed to run recipe: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn print_lsp_status(report: &pleiades_agent_lsp::LspStatusReport) {
     println!("Workspace: {}", report.workspace.display());
     if report.servers.is_empty() {
@@ -3392,6 +3487,7 @@ fn main() {
         Some(Commands::Lsp(cmd)) => handle_lsp_command(&loader, cmd),
         Some(Commands::Process(cmd)) => handle_process_command(cmd),
         Some(Commands::Browser(cmd)) => handle_browser_command(cmd),
+        Some(Commands::Project(cmd)) => handle_project_command(&loader, cmd),
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {
                 Ok(c) => c,

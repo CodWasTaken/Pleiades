@@ -239,6 +239,33 @@ fn lsp_cli_searches_rust_symbols() {
 }
 
 #[test]
+fn project_cli_lists_and_runs_configured_recipes() {
+    let workspace = tempfile::tempdir().unwrap();
+    let config = workspace.path().join(".pleiades");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(
+        config.join("project.toml"),
+        "[project.commands]\nsmoke = \"echo smoke-ok\"\n",
+    )
+    .unwrap();
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["project", "commands"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("smoke"))
+        .stdout(predicate::str::contains("echo smoke-ok"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["project", "run", "smoke"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("smoke-ok"));
+}
+
+#[test]
 fn workflow_create_validate_list_and_run() {
     let workspace = tempfile::tempdir().unwrap();
     command(workspace.path())

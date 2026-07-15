@@ -20,4 +20,5 @@
 - [Language services](lsp.md)
 - [Background processes](processes.md)
 - [Browser verification](browser.md)
+- [Project recipes](project-recipes.md)
 - [Architecture](architecture.md)
