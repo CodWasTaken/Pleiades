@@ -1531,6 +1531,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pleiades-agent-audit"
+version = "2.0.0"
+dependencies = [
+ "chrono",
+ "dirs 6.0.0",
+ "pleiades-agent-config",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "pleiades-agent-browser"
 version = "2.0.0"
 dependencies = [
@@ -1598,6 +1611,7 @@ dependencies = [
  "dirs 6.0.0",
  "futures",
  "lsp-types",
+ "pleiades-agent-audit",
  "pleiades-agent-browser",
  "pleiades-agent-commands",
  "pleiades-agent-config",

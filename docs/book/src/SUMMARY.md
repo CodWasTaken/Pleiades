@@ -17,6 +17,7 @@
 - [Sessions](sessions.md)
 - [Memory](memory.md)
 - [Usage and budgets](budgets.md)
+- [Audit log](audit-log.md)
 - [Workflows](workflows.md)
 - [Git integration](git.md)
 - [Diff review](diff-review.md)

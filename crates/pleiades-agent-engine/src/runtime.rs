@@ -7,6 +7,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
+use pleiades_agent_audit::{AuditKind, AuditLogger};
 use pleiades_agent_commands::{
     self as commands, AppEffect, CommandResult, Notification, NotificationLevel, OverlayKind,
     RenderableDocument,
@@ -373,6 +374,13 @@ impl AgentRuntime {
                                 queued.push_back(task);
                                 send_event(&events, AgentEvent::QueueChanged(queued.len())).await;
                             } else if let Some(ctx) = context.take() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Command,
+                                    "submit",
+                                    Some("user task".to_string()),
+                                    serde_json::json!({"queued": false}),
+                                );
                                 active = Some(launch_task(
                                     ctx,
                                     task,
@@ -399,6 +407,19 @@ impl AgentRuntime {
                             if let Some(task) = &active {
                                 task.cancellation.cancel();
                             }
+                            if let Some(ctx) = context.as_ref() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Mode,
+                                    "set",
+                                    Some(next.label().to_string()),
+                                    serde_json::json!({
+                                        "approval_policy": next.approval_policy(),
+                                        "sandbox_policy": next.sandbox_policy(),
+                                        "yolo": next == AgentMode::Yolo
+                                    }),
+                                );
+                            }
                             mode = next;
                             if let Some(ctx) = context.as_mut() {
                                 ctx.set_mode(next);
@@ -406,6 +427,15 @@ impl AgentRuntime {
                             send_event(&events, AgentEvent::ModeChanged(next)).await;
                         }
                         AgentCommand::SetProvider(provider) => {
+                            if let Some(ctx) = context.as_ref() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Provider,
+                                    "set",
+                                    Some(provider.clone()),
+                                    serde_json::json!({}),
+                                );
+                            }
                             provider_name = provider.clone();
                             config.core.default_provider = Some(provider.clone());
                             if let Some(ctx) = context.as_mut() {
@@ -414,6 +444,15 @@ impl AgentRuntime {
                             send_event(&events, AgentEvent::ProviderChanged(provider)).await;
                         }
                         AgentCommand::SetModel(model) => {
+                            if let Some(ctx) = context.as_ref() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Model,
+                                    "set",
+                                    Some(model.clone()),
+                                    serde_json::json!({}),
+                                );
+                            }
                             model_name = model.clone();
                             config.core.default_model = Some(model.clone());
                             if let Some(ctx) = context.as_mut() {
@@ -423,12 +462,26 @@ impl AgentRuntime {
                         }
                         AgentCommand::ClearConversation if active.is_none() => {
                             if let Some(ctx) = context.as_mut() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Session,
+                                    "clear-conversation",
+                                    Some(ctx.conversation.id.clone()),
+                                    serde_json::json!({"messages": ctx.conversation.messages.len()}),
+                                );
                                 ctx.conversation.clear();
                                 send_event(&events, AgentEvent::ConversationCleared).await;
                             }
                         }
                         AgentCommand::LoadSession(id) if active.is_none() => {
                             if let Some(ctx) = context.as_mut() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Session,
+                                    "load",
+                                    Some(id.clone()),
+                                    serde_json::json!({}),
+                                );
                                 match ctx.session_store.load(&id) {
                                     Ok(conversation) => {
                                         ctx.conversation = conversation;
@@ -443,6 +496,13 @@ impl AgentRuntime {
                         }
                         AgentCommand::SaveSession => {
                             if let Some(ctx) = context.as_ref() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Session,
+                                    "save",
+                                    Some(ctx.conversation.id.clone()),
+                                    serde_json::json!({"messages": ctx.conversation.messages.len()}),
+                                );
                                 match ctx.session_store.save(&ctx.conversation) {
                                     Ok(()) => send_event(
                                         &events,
@@ -453,6 +513,15 @@ impl AgentRuntime {
                             }
                         }
                         AgentCommand::DispatchSlash(input) => {
+                            if let Some(ctx) = context.as_ref() {
+                                audit(
+                                    &ctx.audit,
+                                    AuditKind::Command,
+                                    "slash",
+                                    Some(input.clone()),
+                                    serde_json::json!({"active_task": active.is_some()}),
+                                );
+                            }
                             let mut dispatch = SlashDispatchState {
                                 config: &mut config,
                                 mode: &mut mode,
@@ -525,6 +594,7 @@ struct RuntimeContext {
     context_pins: Vec<ContextPin>,
     compression_history: Vec<CompressionRecord>,
     budget: BudgetService,
+    audit: AuditLogger,
     allowed_session: HashSet<String>,
     denied_session: HashSet<String>,
 }
@@ -540,6 +610,7 @@ impl RuntimeContext {
         let engine =
             engine_override.unwrap_or_else(|| Engine::configured(config.clone(), mode.sandbox()));
         let checkpoint_store = CheckpointStore::from_config(&config);
+        let audit = AuditLogger::from_config(&config);
         Self {
             engine,
             config,
@@ -550,6 +621,7 @@ impl RuntimeContext {
             context_pins: Vec::new(),
             compression_history: Vec::new(),
             budget: BudgetService::new(),
+            audit,
             allowed_session: HashSet::new(),
             denied_session: HashSet::new(),
         }
@@ -561,6 +633,7 @@ impl RuntimeContext {
 
     fn set_config(&mut self, config: Config, mode: AgentMode) {
         self.engine = Engine::configured(config.clone(), mode.sandbox());
+        self.audit = AuditLogger::from_config(&config);
         self.config = config;
         self.mode = mode;
     }
@@ -625,6 +698,17 @@ async fn execute_task(
     cancellation: CancellationToken,
 ) -> RuntimeContext {
     let started = Instant::now();
+    audit(
+        &context.audit,
+        AuditKind::Task,
+        "started",
+        Some(provider_name.clone()),
+        serde_json::json!({
+            "mode": context.mode.label(),
+            "model": context.config.core.default_model,
+            "conversation_id": context.conversation.id,
+        }),
+    );
     context.conversation.add_message(Message::user(&task));
     send_event(&events, AgentEvent::UserMessage(task.clone())).await;
     send_event(
@@ -685,6 +769,13 @@ async fn execute_task(
             Ok(stream) => stream,
             Err(error) => {
                 fail_activity(&events, &planning_id, error.to_string()).await;
+                audit(
+                    &context.audit,
+                    AuditKind::Task,
+                    "failed",
+                    Some("provider stream".to_string()),
+                    serde_json::json!({"error": error.to_string()}),
+                );
                 send_event(
                     &events,
                     AgentEvent::TaskFailed {
@@ -821,6 +912,13 @@ async fn execute_task(
             return context;
         }
         if let Some(message) = stream_failed {
+            audit(
+                &context.audit,
+                AuditKind::Task,
+                "failed",
+                Some("provider stream".to_string()),
+                serde_json::json!({"error": &message}),
+            );
             send_event(&events, AgentEvent::TaskFailed { message }).await;
             return context;
         }
@@ -854,6 +952,13 @@ async fn execute_task(
             .await;
             send_event(&events, AgentEvent::DiffUpdated(diff)).await;
             let _ = context.session_store.save(&context.conversation);
+            audit(
+                &context.audit,
+                AuditKind::Task,
+                "completed",
+                Some(context.conversation.id.clone()),
+                serde_json::json!({"elapsed_ms": started.elapsed().as_millis() as u64}),
+            );
             send_event(
                 &events,
                 AgentEvent::TaskCompleted {
@@ -883,6 +988,16 @@ async fn execute_task(
         });
 
         for call in tool_calls {
+            audit(
+                &context.audit,
+                AuditKind::Tool,
+                "requested",
+                Some(call.name.clone()),
+                serde_json::json!({
+                    "id": &call.id,
+                    "input": &call.input,
+                }),
+            );
             let kind = activity_kind_for_tool(&call.name);
             let target = permission_target(&call.input);
             send_event(
@@ -915,6 +1030,13 @@ async fn execute_task(
             };
 
             if !allowed {
+                audit(
+                    &context.audit,
+                    AuditKind::Permission,
+                    "denied",
+                    Some(call.name.clone()),
+                    serde_json::json!({"id": &call.id, "target": &target}),
+                );
                 fail_activity(&events, &call.id, "Denied by permission policy").await;
                 add_tool_result(
                     &mut context.conversation,
@@ -936,6 +1058,27 @@ async fn execute_task(
             )
             .await;
             let tool_started = Instant::now();
+            if call.name == "bash" {
+                audit(
+                    &context.audit,
+                    AuditKind::Shell,
+                    "execute",
+                    call.input
+                        .get("command")
+                        .and_then(|value| value.as_str())
+                        .map(ToString::to_string),
+                    serde_json::json!({"workdir": call.input.get("workdir")}),
+                );
+            }
+            for path in collect_target_paths(&call.input) {
+                audit(
+                    &context.audit,
+                    AuditKind::File,
+                    "tool-target",
+                    Some(path.display().to_string()),
+                    serde_json::json!({"tool": &call.name, "id": &call.id}),
+                );
+            }
             let result = tokio::select! {
                 _ = cancellation.cancelled() => {
                     cancel_activity(&events, &call.id).await;
@@ -975,6 +1118,16 @@ async fn execute_task(
                     )
                     .await;
                     if result.success {
+                        audit(
+                            &context.audit,
+                            AuditKind::Tool,
+                            "completed",
+                            Some(call.name.clone()),
+                            serde_json::json!({
+                                "id": &call.id,
+                                "duration_ms": tool_started.elapsed().as_millis() as u64,
+                            }),
+                        );
                         let mut activity = Activity::new(
                             &call.id,
                             kind,
@@ -985,6 +1138,16 @@ async fn execute_task(
                         activity.duration_ms = Some(tool_started.elapsed().as_millis() as u64);
                         send_event(&events, AgentEvent::Activity(activity)).await;
                     } else {
+                        audit(
+                            &context.audit,
+                            AuditKind::Tool,
+                            "failed",
+                            Some(call.name.clone()),
+                            serde_json::json!({
+                                "id": &call.id,
+                                "duration_ms": tool_started.elapsed().as_millis() as u64,
+                            }),
+                        );
                         fail_activity(&events, &call.id, raw.clone()).await;
                     }
                     let failure_text = (!result.success).then(|| raw.clone());
@@ -997,6 +1160,13 @@ async fn execute_task(
                         }) else {
                             continue;
                         };
+                        audit(
+                            &context.audit,
+                            AuditKind::Task,
+                            "failed",
+                            Some("doom-loop".to_string()),
+                            serde_json::json!({"reason": &reason}),
+                        );
                         send_event(&events, AgentEvent::TaskFailed { message: reason }).await;
                         let _ = context.session_store.save(&context.conversation);
                         return context;
@@ -1016,6 +1186,13 @@ async fn execute_task(
                         return context;
                     }
                     let error = error.to_string();
+                    audit(
+                        &context.audit,
+                        AuditKind::Tool,
+                        "failed",
+                        Some(call.name.clone()),
+                        serde_json::json!({"id": &call.id, "error": &error}),
+                    );
                     fail_activity(&events, &call.id, error.clone()).await;
                     add_tool_result(
                         &mut context.conversation,
@@ -1028,6 +1205,13 @@ async fn execute_task(
                         target: target.clone(),
                         error,
                     }) {
+                        audit(
+                            &context.audit,
+                            AuditKind::Task,
+                            "failed",
+                            Some("doom-loop".to_string()),
+                            serde_json::json!({"reason": &reason}),
+                        );
                         send_event(&events, AgentEvent::TaskFailed { message: reason }).await;
                         let _ = context.session_store.save(&context.conversation);
                         return context;
@@ -1045,6 +1229,13 @@ async fn execute_task(
         },
     )
     .await;
+    audit(
+        &context.audit,
+        AuditKind::Task,
+        "failed",
+        Some("max-iterations".to_string()),
+        serde_json::json!({"max_iterations": max_iterations}),
+    );
     context
 }
 
@@ -1162,13 +1353,45 @@ async fn request_permission_if_needed(
             continue;
         }
         return match response.decision {
-            PermissionDecision::AllowOnce => PermissionOutcome::Allowed,
+            PermissionDecision::AllowOnce => {
+                audit(
+                    &context.audit,
+                    AuditKind::Permission,
+                    "allow-once",
+                    Some(call.name.clone()),
+                    serde_json::json!({"id": &call.id, "input": &call.input}),
+                );
+                PermissionOutcome::Allowed
+            }
             PermissionDecision::AllowSession => {
+                audit(
+                    &context.audit,
+                    AuditKind::Permission,
+                    "allow-session",
+                    Some(call.name.clone()),
+                    serde_json::json!({"id": &call.id, "input": &call.input}),
+                );
                 context.allowed_session.insert(call.name.clone());
                 PermissionOutcome::Allowed
             }
-            PermissionDecision::DenyOnce => PermissionOutcome::Denied,
+            PermissionDecision::DenyOnce => {
+                audit(
+                    &context.audit,
+                    AuditKind::Permission,
+                    "deny-once",
+                    Some(call.name.clone()),
+                    serde_json::json!({"id": &call.id, "input": &call.input}),
+                );
+                PermissionOutcome::Denied
+            }
             PermissionDecision::DenySession => {
+                audit(
+                    &context.audit,
+                    AuditKind::Permission,
+                    "deny-session",
+                    Some(call.name.clone()),
+                    serde_json::json!({"id": &call.id, "input": &call.input}),
+                );
                 context.denied_session.insert(call.name.clone());
                 PermissionOutcome::Denied
             }
@@ -1460,6 +1683,83 @@ async fn send_event(events: &mpsc::Sender<AgentEvent>, event: AgentEvent) {
     let _ = events.send(event).await;
 }
 
+fn audit(
+    logger: &AuditLogger,
+    kind: AuditKind,
+    action: impl Into<String>,
+    target: Option<String>,
+    details: serde_json::Value,
+) {
+    let _ = logger.log(kind, action, target, details);
+}
+
+fn audit_effect_kind(effect: &AppEffect) -> AuditKind {
+    match effect {
+        AppEffect::SetProvider(_) => AuditKind::Provider,
+        AppEffect::SetModel(_) => AuditKind::Model,
+        AppEffect::SetMode(_) => AuditKind::Mode,
+        AppEffect::CreateCheckpoint(_)
+        | AppEffect::ListCheckpoints
+        | AppEffect::ShowCheckpoint(_)
+        | AppEffect::RestoreCheckpoint { .. }
+        | AppEffect::DeleteCheckpoint(_) => AuditKind::Checkpoint,
+        AppEffect::LoadSession(_)
+        | AppEffect::SaveSession
+        | AppEffect::ListSessions
+        | AppEffect::SearchSessions(_)
+        | AppEffect::ShowSession(_)
+        | AppEffect::RenameSession { .. }
+        | AppEffect::ForkSession(_)
+        | AppEffect::DeleteSession(_)
+        | AppEffect::ExportSession { .. }
+        | AppEffect::SetEphemeralSession(_) => AuditKind::Session,
+        AppEffect::ReloadExtensions => AuditKind::Plugin,
+        AppEffect::RunCommand(_) | AppEffect::ProjectRun(_) | AppEffect::ProjectVerify => {
+            AuditKind::Shell
+        }
+        _ => AuditKind::Command,
+    }
+}
+
+fn audit_effect_target(effect: &AppEffect) -> Option<String> {
+    match effect {
+        AppEffect::SetMode(value)
+        | AppEffect::SetProvider(value)
+        | AppEffect::SetModel(value)
+        | AppEffect::LoadSession(value)
+        | AppEffect::SearchSessions(value)
+        | AppEffect::ShowSession(value)
+        | AppEffect::DeleteSession(value)
+        | AppEffect::CreateCheckpoint(Some(value))
+        | AppEffect::ShowCheckpoint(value)
+        | AppEffect::DeleteCheckpoint(value)
+        | AppEffect::ContextPin(value)
+        | AppEffect::ContextUnpin(value)
+        | AppEffect::MemorySearch(value)
+        | AppEffect::MemoryAdd(value)
+        | AppEffect::MemoryForget(value)
+        | AppEffect::BudgetCost(value)
+        | AppEffect::BudgetTime(value)
+        | AppEffect::RunCommand(value)
+        | AppEffect::SubmitPrompt(value)
+        | AppEffect::LspSymbols(value)
+        | AppEffect::ProcessStart(value)
+        | AppEffect::ProcessLogs(value)
+        | AppEffect::ProcessStop(value)
+        | AppEffect::ProcessRestart(value)
+        | AppEffect::ProcessAttach(value)
+        | AppEffect::BrowserOpen(value)
+        | AppEffect::ProjectRun(value)
+        | AppEffect::Custom(value) => Some(value.clone()),
+        AppEffect::RenameSession { id, .. } => Some(id.clone()),
+        AppEffect::ForkSession(id) => id.clone(),
+        AppEffect::ExportSession { id, .. } => Some(id.clone()),
+        AppEffect::RestoreCheckpoint { id, .. } => Some(id.clone()),
+        AppEffect::BudgetTokens(value) | AppEffect::BudgetTools(value) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
 fn now_ms() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1543,6 +1843,15 @@ async fn dispatch_slash(input: &str, state: &mut SlashDispatchState<'_>) -> bool
 /// Apply one [`AppEffect`] to the runtime.  Returns `true` when the loop
 /// should shut down afterwards (effects `Quit` and `Shutdown`).
 async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>) -> bool {
+    if let Some(ctx) = state.context.as_ref() {
+        audit(
+            &ctx.audit,
+            audit_effect_kind(&effect),
+            "app-effect",
+            audit_effect_target(&effect),
+            serde_json::json!({"effect": format!("{effect:?}")}),
+        );
+    }
     match effect {
         AppEffect::SetMode(name) => {
             if let Some(task) = state.active.as_ref() {
@@ -4113,6 +4422,35 @@ mod tests {
         assert!(message.contains("Token budget exceeded"));
 
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn audit_log_redacts_secret_payloads() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (temp, runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash(
+                "/run echo sk-proj-never-write-this-secret".into(),
+            ))
+            .await
+            .unwrap();
+        loop {
+            match next_event(&mut handle.events).await {
+                AgentEvent::Document(_) | AgentEvent::Notify(_) | AgentEvent::Error(_) => break,
+                _ => {}
+            }
+        }
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+
+        let audit_path = temp.path().join("audit/audit.jsonl");
+        let content = std::fs::read_to_string(audit_path).unwrap();
+        assert!(!content.contains("sk-proj-never-write-this-secret"));
+        assert!(content.contains("[REDACTED]"));
+        assert!(content.contains("app-effect"));
     }
 
     #[tokio::test]
