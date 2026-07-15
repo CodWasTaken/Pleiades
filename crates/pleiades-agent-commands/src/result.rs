@@ -98,6 +98,10 @@ pub enum AppEffect {
     RunCommand(String),
     /// Submit a prompt into the normal agent runtime path.
     SubmitPrompt(String),
+    /// Render a structured working-tree or staged diff review.
+    ReviewDiff { staged: bool },
+    /// Render `git status --short --branch`.
+    GitStatus,
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;
