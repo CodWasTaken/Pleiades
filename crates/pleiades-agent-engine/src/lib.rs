@@ -4,6 +4,7 @@
 //! dispatches tools, and handles the core AI interaction loop.
 
 pub mod agent;
+pub mod budget;
 pub mod chat;
 pub mod checkpoint;
 pub mod context;
@@ -14,6 +15,7 @@ pub mod runtime;
 pub mod session;
 pub mod verification;
 
+pub use budget::{BudgetLimits, BudgetReport, BudgetService, UsageTotals};
 pub use chat::ChatSession;
 pub use engine::Engine;
 pub use memory::MemoryManager;

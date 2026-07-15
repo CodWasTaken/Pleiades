@@ -267,6 +267,34 @@ fn project_cli_lists_and_runs_configured_recipes() {
 }
 
 #[test]
+fn budget_cli_validates_inputs_and_points_to_live_workspace() {
+    let workspace = tempfile::tempdir().unwrap();
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["budget", "show"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage and budgets"))
+        .stdout(predicate::str::contains("/budget ..."));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["budget", "time", "10m"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Parsed duration: 600s"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["budget", "tokens", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "token budget must be greater than 0",
+        ));
+}
+
+#[test]
 fn session_cli_search_rename_fork_and_resume() {
     let workspace = tempfile::tempdir().unwrap();
     let sessions = workspace.path().join("sessions");

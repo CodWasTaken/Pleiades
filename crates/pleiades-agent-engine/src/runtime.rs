@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use crate::budget::{BudgetReport, BudgetService};
 use crate::checkpoint::{CheckpointRecord, CheckpointStore};
 use crate::context::{CompressionRecord, ContextAccountant, ContextPin, ContextReport, make_pin};
 use crate::loop_detector::{DoomLoopDetector, LoopSignal};
@@ -523,6 +524,7 @@ struct RuntimeContext {
     checkpoint_store: CheckpointStore,
     context_pins: Vec<ContextPin>,
     compression_history: Vec<CompressionRecord>,
+    budget: BudgetService,
     allowed_session: HashSet<String>,
     denied_session: HashSet<String>,
 }
@@ -547,6 +549,7 @@ impl RuntimeContext {
             checkpoint_store,
             context_pins: Vec::new(),
             compression_history: Vec::new(),
+            budget: BudgetService::new(),
             allowed_session: HashSet::new(),
             denied_session: HashSet::new(),
         }
@@ -646,6 +649,17 @@ async fn execute_task(
     let max_iterations = context.config.agent.max_tool_iterations;
     let mut loop_detector = DoomLoopDetector::new(context.config.agent.max_repeats as usize);
     for iteration in 0..max_iterations {
+        if let Err(breach) = context.budget.check() {
+            send_event(
+                &events,
+                AgentEvent::TaskFailed {
+                    message: breach.message,
+                },
+            )
+            .await;
+            let _ = context.session_store.save(&context.conversation);
+            return context;
+        }
         let planning_id = format!("planning-{iteration}");
         send_event(
             &events,
@@ -662,6 +676,7 @@ async fn execute_task(
         )
         .await;
 
+        let provider_started = Instant::now();
         let mut stream = match context
             .engine
             .chat_stream(&mut context.conversation, &provider_name)
@@ -755,6 +770,18 @@ async fn execute_task(
                 }
                 StreamEvent::Done { usage, .. } => {
                     if let Some(usage) = usage {
+                        if let Err(breach) = context.budget.record_usage(&usage) {
+                            send_event(&events, AgentEvent::Usage(usage)).await;
+                            send_event(
+                                &events,
+                                AgentEvent::TaskFailed {
+                                    message: breach.message,
+                                },
+                            )
+                            .await;
+                            let _ = context.session_store.save(&context.conversation);
+                            return context;
+                        }
                         send_event(&events, AgentEvent::Usage(usage)).await;
                     }
                     break;
@@ -778,6 +805,20 @@ async fn execute_task(
                 None,
             )
             .await;
+        }
+        if let Err(breach) = context
+            .budget
+            .record_provider_latency(provider_started.elapsed())
+        {
+            send_event(
+                &events,
+                AgentEvent::TaskFailed {
+                    message: breach.message,
+                },
+            )
+            .await;
+            let _ = context.session_store.save(&context.conversation);
+            return context;
         }
         if let Some(message) = stream_failed {
             send_event(&events, AgentEvent::TaskFailed { message }).await;
@@ -906,6 +947,18 @@ async fn execute_task(
 
             match result {
                 Ok(result) => {
+                    if let Err(breach) = context.budget.record_tool_call(tool_started.elapsed()) {
+                        fail_activity(&events, &call.id, breach.message.clone()).await;
+                        send_event(
+                            &events,
+                            AgentEvent::TaskFailed {
+                                message: breach.message,
+                            },
+                        )
+                        .await;
+                        let _ = context.session_store.save(&context.conversation);
+                        return context;
+                    }
                     let raw = if result.success {
                         result.content
                     } else {
@@ -950,6 +1003,18 @@ async fn execute_task(
                     }
                 }
                 Err(error) => {
+                    if let Err(breach) = context.budget.record_tool_call(tool_started.elapsed()) {
+                        fail_activity(&events, &call.id, breach.message.clone()).await;
+                        send_event(
+                            &events,
+                            AgentEvent::TaskFailed {
+                                message: breach.message,
+                            },
+                        )
+                        .await;
+                        let _ = context.session_store.save(&context.conversation);
+                        return context;
+                    }
                     let error = error.to_string();
                     fail_activity(&events, &call.id, error.clone()).await;
                     add_tool_result(
@@ -2058,6 +2123,124 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
                 }
             }
         }
+        AppEffect::BudgetShow => {
+            if let Some(ctx) = state.context.as_ref() {
+                send_event(
+                    state.events,
+                    AgentEvent::Document(budget_document(&ctx.budget.report())),
+                )
+                .await;
+            }
+        }
+        AppEffect::BudgetTokens(limit) => {
+            if let Some(ctx) = state.context.as_mut() {
+                ctx.budget.set_token_limit(limit);
+                send_event(
+                    state.events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Success,
+                        message: format!("Token budget set to {limit}"),
+                    }),
+                )
+                .await;
+                send_event(
+                    state.events,
+                    AgentEvent::Document(budget_document(&ctx.budget.report())),
+                )
+                .await;
+            }
+        }
+        AppEffect::BudgetCost(value) => {
+            if let Some(ctx) = state.context.as_mut() {
+                match value.parse::<f64>() {
+                    Ok(limit) if limit > 0.0 => {
+                        ctx.budget.set_cost_limit_usd(limit);
+                        send_event(
+                            state.events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Warning,
+                                message: "Cost budget recorded; enforcement waits for provider pricing data.".to_string(),
+                            }),
+                        )
+                        .await;
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(budget_document(&ctx.budget.report())),
+                        )
+                        .await;
+                    }
+                    _ => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Error("cost budget must be a positive number".to_string()),
+                        )
+                        .await;
+                    }
+                }
+            }
+        }
+        AppEffect::BudgetTime(value) => {
+            if let Some(ctx) = state.context.as_mut() {
+                match parse_budget_duration(&value) {
+                    Ok(duration) => {
+                        ctx.budget.set_time_limit(duration);
+                        send_event(
+                            state.events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Success,
+                                message: format!(
+                                    "Time budget set to {}s",
+                                    duration.as_secs().max(1)
+                                ),
+                            }),
+                        )
+                        .await;
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(budget_document(&ctx.budget.report())),
+                        )
+                        .await;
+                    }
+                    Err(error) => send_event(state.events, AgentEvent::Error(error)).await,
+                }
+            }
+        }
+        AppEffect::BudgetTools(limit) => {
+            if let Some(ctx) = state.context.as_mut() {
+                ctx.budget.set_tool_limit(limit);
+                send_event(
+                    state.events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Success,
+                        message: format!("Tool-call budget set to {limit}"),
+                    }),
+                )
+                .await;
+                send_event(
+                    state.events,
+                    AgentEvent::Document(budget_document(&ctx.budget.report())),
+                )
+                .await;
+            }
+        }
+        AppEffect::BudgetReset => {
+            if let Some(ctx) = state.context.as_mut() {
+                ctx.budget.reset();
+                send_event(
+                    state.events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Success,
+                        message: "Budget limits and usage totals reset".to_string(),
+                    }),
+                )
+                .await;
+                send_event(
+                    state.events,
+                    AgentEvent::Document(budget_document(&ctx.budget.report())),
+                )
+                .await;
+            }
+        }
         AppEffect::Verify => {
             start_verification(
                 VerificationScope::Full,
@@ -2998,6 +3181,61 @@ fn memory_sources_document(sources: &[MemorySourceReport]) -> RenderableDocument
     document
 }
 
+fn budget_document(report: &BudgetReport) -> RenderableDocument {
+    let limit = |value: Option<u64>, unit: &str| {
+        value
+            .map(|value| format!("{value} {unit}"))
+            .unwrap_or_else(|| "none".to_string())
+    };
+    RenderableDocument::new("Usage and budgets")
+        .section(
+            "Usage",
+            format!(
+                "Input tokens: {}\nOutput tokens: {}\nCache read tokens: {}\nCache write tokens: {}\nTotal tokens: {}\nTool calls: {}\nProvider latency: {}ms\nTool time: {}ms\nElapsed: {}s",
+                report.totals.input_tokens,
+                report.totals.output_tokens,
+                report.totals.cache_read_tokens,
+                report.totals.cache_write_tokens,
+                report.totals.total_tokens(),
+                report.totals.tool_calls,
+                report.totals.provider_latency_ms,
+                report.totals.tool_time_ms,
+                report.elapsed_secs
+            ),
+        )
+        .section(
+            "Limits",
+            format!(
+                "Tokens: {}\nCost: {}\nTime: {}\nTools: {}",
+                limit(report.limits.token_limit, "tokens"),
+                report
+                    .limits
+                    .cost_limit_usd
+                    .map(|value| format!("${value:.4}"))
+                    .unwrap_or_else(|| "none".to_string()),
+                limit(report.limits.time_limit_secs, "seconds"),
+                limit(report.limits.tool_limit, "calls")
+            ),
+        )
+        .section(
+            "Cost estimate",
+            report
+                .estimated_cost_usd
+                .map(|value| format!("${value:.6}"))
+                .unwrap_or_else(|| {
+                    "Unavailable: provider usage events do not include enough pricing data yet."
+                        .to_string()
+                }),
+        )
+        .section(
+            "Rate limits",
+            report
+                .rate_limit
+                .clone()
+                .unwrap_or_else(|| "No rate-limit event recorded.".to_string()),
+        )
+}
+
 fn context_compaction_document(
     report: &ContextReport,
     record: &CompressionRecord,
@@ -3012,6 +3250,31 @@ fn context_compaction_document(
         ),
     );
     document
+}
+
+fn parse_budget_duration(value: &str) -> Result<Duration, String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err("duration cannot be empty".to_string());
+    }
+    let (number, multiplier) = match value.chars().last() {
+        Some('s') | Some('S') => (&value[..value.len() - 1], 1),
+        Some('m') | Some('M') => (&value[..value.len() - 1], 60),
+        Some('h') | Some('H') => (&value[..value.len() - 1], 60 * 60),
+        Some('d') | Some('D') => (&value[..value.len() - 1], 24 * 60 * 60),
+        Some(_) => (value, 1),
+        None => return Err("duration cannot be empty".to_string()),
+    };
+    let parsed = number
+        .parse::<u64>()
+        .map_err(|_| "duration must look like 30s, 10m, or 1h".to_string())?;
+    if parsed == 0 {
+        return Err("duration must be greater than 0".to_string());
+    }
+    let seconds = parsed
+        .checked_mul(multiplier)
+        .ok_or_else(|| "duration is too large".to_string())?;
+    Ok(Duration::from_secs(seconds))
 }
 
 async fn compact_context(ctx: &mut RuntimeContext) -> Result<CompressionRecord, String> {
@@ -3243,6 +3506,7 @@ mod tests {
     enum MockBehavior {
         ToolThenFinish,
         RepeatedFailingTool,
+        UsageThenFinish,
         Slow,
     }
 
@@ -3335,6 +3599,24 @@ mod tests {
                         .send(StreamEvent::Done {
                             finish_reason: "tool_use".to_string(),
                             usage: None,
+                        })
+                        .await
+                        .unwrap();
+                }
+                MockBehavior::UsageThenFinish => {
+                    sender
+                        .send(StreamEvent::Token("usage-heavy response".into()))
+                        .await
+                        .unwrap();
+                    sender
+                        .send(StreamEvent::Done {
+                            finish_reason: "stop".to_string(),
+                            usage: Some(Usage {
+                                input_tokens: 75,
+                                output_tokens: 50,
+                                cache_read_tokens: Some(0),
+                                cache_write_tokens: Some(0),
+                            }),
                         })
                         .await
                         .unwrap();
@@ -3791,6 +4073,44 @@ mod tests {
         assert!(inspect.sections.iter().any(|section| {
             section.heading == "Compression history" && section.body.contains("Manually compacted")
         }));
+
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn budget_commands_report_and_cancel_on_token_breach() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) =
+            runtime_with_mock(AgentMode::Auto, MockBehavior::UsageThenFinish, executions);
+        let mut handle = runtime.spawn();
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/budget tokens 100".into()))
+            .await
+            .unwrap();
+        let document = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Usage and budgets" {
+                    break document;
+                }
+            }
+        };
+        assert!(document.sections.iter().any(|section| {
+            section.heading == "Limits" && section.body.contains("Tokens: 100 tokens")
+        }));
+
+        handle
+            .commands
+            .send(AgentCommand::Submit("trigger usage".into()))
+            .await
+            .unwrap();
+        let message = loop {
+            if let AgentEvent::TaskFailed { message } = next_event(&mut handle.events).await {
+                break message;
+            }
+        };
+        assert!(message.contains("Token budget exceeded"));
 
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }

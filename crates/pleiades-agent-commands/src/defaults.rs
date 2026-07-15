@@ -52,6 +52,30 @@ where
     FnHandler { f }
 }
 
+fn parse_duration_secs(value: &str) -> Result<u64, Error> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(Error::invalid_input("duration cannot be empty"));
+    }
+    let (number, multiplier) = match value.chars().last() {
+        Some('s') | Some('S') => (&value[..value.len() - 1], 1),
+        Some('m') | Some('M') => (&value[..value.len() - 1], 60),
+        Some('h') | Some('H') => (&value[..value.len() - 1], 60 * 60),
+        Some('d') | Some('D') => (&value[..value.len() - 1], 24 * 60 * 60),
+        Some(_) => (value, 1),
+        None => return Err(Error::invalid_input("duration cannot be empty")),
+    };
+    let parsed = number
+        .parse::<u64>()
+        .map_err(|_| Error::invalid_input("duration must look like 30s, 10m, or 1h"))?;
+    if parsed == 0 {
+        return Err(Error::invalid_input("duration must be greater than 0"));
+    }
+    parsed
+        .checked_mul(multiplier)
+        .ok_or_else(|| Error::invalid_input("duration is too large"))
+}
+
 struct StatusHandler;
 
 #[async_trait]
@@ -627,6 +651,7 @@ pub fn default_registry_with_services(
     register_checkpoint_family(&mut r);
     register_context_family(&mut r);
     register_memory_family(&mut r);
+    register_budget_family(&mut r);
     register_verification_family(&mut r);
     register_git_family(&mut r);
     register_lsp_family(&mut r);
@@ -2522,6 +2547,147 @@ fn register_memory_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 }
 
+fn register_budget_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["budget"],
+            "Show usage and active budget limits",
+            handler(|_| Ok(CommandResult::effects([AppEffect::BudgetShow]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["budget", "show"],
+            "Show usage and active budget limits",
+            handler(|_| Ok(CommandResult::effects([AppEffect::BudgetShow]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["budget", "tokens"],
+            "Set a token budget",
+            handler(|args| {
+                let value = args
+                    .first()
+                    .ok_or_else(|| Error::invalid_input("usage: /budget tokens <count>"))?
+                    .parse::<u64>()
+                    .map_err(|_| Error::invalid_input("token budget must be a positive integer"))?;
+                if value == 0 {
+                    return Err(Error::invalid_input("token budget must be greater than 0"));
+                }
+                Ok(CommandResult::effects([AppEffect::BudgetTokens(value)]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "count",
+            "Maximum total input/output/cache tokens before cancellation.",
+        )])
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["budget", "cost"],
+            "Set a cost budget in USD",
+            handler(|args| {
+                let value = args
+                    .first()
+                    .ok_or_else(|| Error::invalid_input("usage: /budget cost <amount>"))?;
+                let parsed = value
+                    .parse::<f64>()
+                    .map_err(|_| Error::invalid_input("cost budget must be a positive number"))?;
+                if parsed <= 0.0 {
+                    return Err(Error::invalid_input("cost budget must be greater than 0"));
+                }
+                Ok(CommandResult::effects([AppEffect::BudgetCost(
+                    value.clone(),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "amount",
+            "Maximum estimated USD cost before cancellation.",
+        )])
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["budget", "time"],
+            "Set a wall-clock task budget",
+            handler(|args| {
+                let value = args
+                    .first()
+                    .ok_or_else(|| Error::invalid_input("usage: /budget time <duration>"))?;
+                parse_duration_secs(value)?;
+                Ok(CommandResult::effects([AppEffect::BudgetTime(
+                    value.clone(),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "duration",
+            "Duration such as 30s, 10m, or 1h.",
+        )])
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["budget", "tools"],
+            "Set a tool-call budget",
+            handler(|args| {
+                let value = args
+                    .first()
+                    .ok_or_else(|| Error::invalid_input("usage: /budget tools <count>"))?
+                    .parse::<u64>()
+                    .map_err(|_| Error::invalid_input("tool budget must be a positive integer"))?;
+                Ok(CommandResult::effects([AppEffect::BudgetTools(value)]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "count",
+            "Maximum tool calls before cancellation.",
+        )])
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["budget", "reset"],
+            "Reset usage totals and budget limits",
+            handler(|_| Ok(CommandResult::effects([AppEffect::BudgetReset]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+}
+
 fn register_verification_family(r: &mut crate::registry::CommandRegistry) {
     r.register(
         CommandSpec::builder(
@@ -3186,6 +3352,13 @@ mod tests {
             "memory refresh",
             "memory sources",
             "memory clear",
+            "budget",
+            "budget show",
+            "budget tokens",
+            "budget cost",
+            "budget time",
+            "budget tools",
+            "budget reset",
             "clear",
             "save",
             "load",
@@ -3605,6 +3778,53 @@ mod tests {
             result,
             CommandResult::Effects(effects) if effects == vec![AppEffect::MemoryForget("mem-1".to_string())]
         ));
+    }
+
+    #[tokio::test]
+    async fn budget_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/budget tokens 1000", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::BudgetTokens(1000)]
+        ));
+
+        let result = default_registry()
+            .dispatch("/budget cost 1.25", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::BudgetCost("1.25".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/budget time 10m", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::BudgetTime("10m".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/budget tools 3", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::BudgetTools(3)]
+        ));
+
+        let suggestions = default_registry().suggest("/budget ", true);
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.label == "budget reset")
+        );
     }
 
     #[tokio::test]
