@@ -238,6 +238,9 @@ pub enum AgentEvent {
     /// the active panel.  Forwarded verbatim from a
     /// [`CommandResult::RenderDocument`].
     Document(RenderableDocument),
+    /// Extension sources were reloaded and frontends should rebuild their
+    /// command registry, picker data, and cached extension views.
+    ExtensionsReloaded,
     /// Runtime has decided to shut down (e.g. the user typed `/quit`).  The
     /// frontend treats this as a request to leave the workspace and clean up
     /// its terminal state.  Sent before the runtime task exits; once it
@@ -322,7 +325,7 @@ impl AgentRuntime {
             mut mode,
             session_store,
             engine_override,
-            registry,
+            mut registry,
         } = self;
         config.core.default_provider = Some(provider_name.clone());
         config.core.default_model = Some(model_name.clone());
@@ -449,12 +452,9 @@ impl AgentRuntime {
                                 queued: &mut queued,
                                 outcome_tx: &outcome_tx,
                                 events: &events,
+                                registry: &mut registry,
                             };
-                            let should_shutdown = dispatch_slash(
-                                &input,
-                                &registry,
-                                &mut dispatch,
-                            ).await;
+                            let should_shutdown = dispatch_slash(&input, &mut dispatch).await;
                             if should_shutdown {
                                 if let Some(task) = &active {
                                     task.cancellation.cancel();
@@ -1405,19 +1405,16 @@ struct SlashDispatchState<'a> {
     queued: &'a mut VecDeque<String>,
     outcome_tx: &'a mpsc::Sender<TaskOutcome>,
     events: &'a mpsc::Sender<AgentEvent>,
+    registry: &'a mut commands::CommandRegistry,
 }
 
-async fn dispatch_slash(
-    input: &str,
-    registry: &commands::CommandRegistry,
-    state: &mut SlashDispatchState<'_>,
-) -> bool {
+async fn dispatch_slash(input: &str, state: &mut SlashDispatchState<'_>) -> bool {
     let ctx = commands::CommandContext::new(
         state.provider_name.clone(),
         state.model_name.clone(),
         state.mode.label().to_string(),
     );
-    let result = match registry.dispatch(input, &ctx, true).await {
+    let result = match state.registry.dispatch(input, &ctx, true).await {
         Ok(res) => res,
         Err(err) => {
             send_event(state.events, AgentEvent::Error(err.to_string())).await;
@@ -1835,12 +1832,13 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
             return true;
         }
         AppEffect::ReloadExtensions => {
+            *state.registry = commands::defaults::default_registry();
+            send_event(state.events, AgentEvent::ExtensionsReloaded).await;
             send_event(
                 state.events,
                 AgentEvent::Notify(Notification {
-                    level: NotificationLevel::Info,
-                    message: "Extensions reload requested outside the live workspace lifecycle."
-                        .to_string(),
+                    level: NotificationLevel::Success,
+                    message: "Extensions reloaded".to_string(),
                 }),
             )
             .await;
@@ -2537,6 +2535,39 @@ mod tests {
                 .any(|section| section.heading == "Model" && section.body == "mock-2")
         );
 
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reload_extensions_emits_typed_reload_event() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/skills reload".into()))
+            .await
+            .unwrap();
+
+        let mut saw_reload = false;
+        let mut saw_notify = false;
+        for _ in 0..5 {
+            match next_event(&mut handle.events).await {
+                AgentEvent::ExtensionsReloaded => saw_reload = true,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Success,
+                    message,
+                }) if message == "Extensions reloaded" => saw_notify = true,
+                _ => {}
+            }
+            if saw_reload && saw_notify {
+                break;
+            }
+        }
+
+        assert!(saw_reload);
+        assert!(saw_notify);
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }
 
