@@ -112,6 +112,18 @@ pub enum AppEffect {
     LspDiagnostics,
     /// Search workspace symbols.
     LspSymbols(String),
+    /// List runtime-managed background processes.
+    ProcessList,
+    /// Start a runtime-managed background process.
+    ProcessStart(String),
+    /// Show process logs.
+    ProcessLogs(String),
+    /// Stop a background process.
+    ProcessStop(String),
+    /// Restart a background process.
+    ProcessRestart(String),
+    /// Attach to a background process output view.
+    ProcessAttach(String),
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;
