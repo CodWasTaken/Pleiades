@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c2ef9ac2.js";
+            window.path_to_searchindex_js = "searchindex-6a09b304.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -205,7 +205,7 @@ pleiades
 <p>For ChatGPT subscription access, install the official Codex CLI; Pleiades delegates <code>codex login</code> and never reads its token cache. For API access, setup stores <code>${OPENAI_API_KEY}</code> and asks you to export a newly created Platform API key. ChatGPT and API billing are separate.</p>
 <p>Use <code>pleiades --help</code> for the complete command tree. Running <code>pleiades</code> or <code>pleiades chat</code> starts the live full-screen coding workspace once configured, <code>pleiades "your task"</code> runs an autonomous task once, and <code>pleiades chat --session ID</code> resumes a saved session.</p>
 <p>The directory where Pleiades starts is the workspace root. Sessions default to <code>agent</code> mode. Use <code>/mode plan</code> for read-only analysis or start with <code>--permission-mode plan</code>. Press <code>F1</code> inside the workspace for searchable keyboard help.</p>
-<p>On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (<code>bwrap</code>) for write isolation. On macOS they use <code>sandbox-exec</code>. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation; <code>unrestricted</code> remains an explicit opt-in.</p>
+<p>On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (<code>bwrap</code>) for write isolation. On macOS they use <code>sandbox-exec</code>. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation. Use <code>/mode auto</code> for workspace-confined unattended work and <code>/mode yolo</code> only after explicit full-host confirmation.</p>
 
                     </main>
 

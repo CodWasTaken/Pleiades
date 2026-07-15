@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c2ef9ac2.js";
+            window.path_to_searchindex_js = "searchindex-6a09b304.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -209,15 +209,22 @@ command lists and numeric palette dispatch.</p>
 <li><code>pleiades-agent-commands</code> — command specifications, parsing, discovery,
 autocomplete, help generation, and typed command results.</li>
 <li><code>pleiades-agent-services</code> — terminal-independent provider, model, plugin,
-configuration, and extension operations shared by CLI and live commands.</li>
+permission, configuration, and extension operations shared by CLI and live commands.</li>
 <li><code>pleiades-agent-engine</code> — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.</li>
+<li><code>pleiades-agent-permissions</code> — structured permission rules, shell command
+clause parsing, path escape checks, and deny-first decisions.</li>
 <li><code>pleiades-agent-tui</code> — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.</li>
 <li><code>pleiades-agent-providers</code> — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.</li>
 <li><code>pleiades-agent-tools</code> — confined filesystem/search/diff tools and sandboxed command execution.</li>
 <li>remaining crates — plugins, prompts, memory, workflows, Git automation, SDK, and CLI packaging.</li>
 </ul>
 <h2 id="safety-layers"><a class="header" href="#safety-layers">Safety layers</a></h2>
-<p>Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Shell writes use Bubblewrap on Linux or <code>sandbox-exec</code> on macOS, refusing execution when an Agent-mode boundary cannot be provided. Unrestricted mode removes that process boundary only after an explicit user choice.</p>
+<p>Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Auto mode keeps the workspace boundary but skips prompts unless a rule says to ask. YOLO removes that process boundary only after an explicit user choice. Shell writes use Bubblewrap on Linux or <code>sandbox-exec</code> on macOS when Agent-mode process isolation is required, refusing execution when that boundary cannot be provided.</p>
+<p>Structured permission rules are evaluated before mode defaults. Deny rules win
+over ask and allow, and every parsed shell clause in a compound command must be
+covered before a command is automatically allowed. Agent and Auto canonicalize
+working directories, redirection targets, explicit tool paths, and symlinks
+against the workspace boundary.</p>
 <p>The ChatGPT subscription adapter delegates execution to the official Codex CLI and maps modes to Codex sandboxes. API-provider tool calls execute in Pleiades and use Pleiades permission modals.</p>
 <h2 id="reliability"><a class="header" href="#reliability">Reliability</a></h2>
 <p>Bounded channels, output caps, a moving transcript window, and background repository file discovery keep redraw work predictable. A terminal guard restores raw mode, the alternate screen, cursor, mouse capture, and bracketed paste on normal and panic exits. Mock-provider tests cover permission waits, Plan denial, queued follow-ups, cancellation, and mode changes; Ratatui snapshots and resize tests cover the frontend.</p>

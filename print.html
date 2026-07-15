@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c2ef9ac2.js";
+            window.path_to_searchindex_js = "searchindex-6a09b304.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -207,7 +207,7 @@ pleiades
 <p>For ChatGPT subscription access, install the official Codex CLI; Pleiades delegates <code>codex login</code> and never reads its token cache. For API access, setup stores <code>${OPENAI_API_KEY}</code> and asks you to export a newly created Platform API key. ChatGPT and API billing are separate.</p>
 <p>Use <code>pleiades --help</code> for the complete command tree. Running <code>pleiades</code> or <code>pleiades chat</code> starts the live full-screen coding workspace once configured, <code>pleiades "your task"</code> runs an autonomous task once, and <code>pleiades chat --session ID</code> resumes a saved session.</p>
 <p>The directory where Pleiades starts is the workspace root. Sessions default to <code>agent</code> mode. Use <code>/mode plan</code> for read-only analysis or start with <code>--permission-mode plan</code>. Press <code>F1</code> inside the workspace for searchable keyboard help.</p>
-<p>On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (<code>bwrap</code>) for write isolation. On macOS they use <code>sandbox-exec</code>. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation; <code>unrestricted</code> remains an explicit opt-in.</p>
+<p>On Linux, built-in API-provider shell commands in Agent mode require Bubblewrap (<code>bwrap</code>) for write isolation. On macOS they use <code>sandbox-exec</code>. If an Agent-mode sandbox is unavailable, Pleiades refuses the shell call instead of silently running it without isolation. Use <code>/mode auto</code> for workspace-confined unattended work and <code>/mode yolo</code> only after explicit full-host confirmation.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="live-terminal-workspace"><a class="header" href="#live-terminal-workspace">Live terminal workspace</a></h1>
 <p>Running <code>pleiades</code> opens a full-screen Ratatui workspace. It is a persistent application, not a prompt/read/print loop: terminal input, model streams, agent events, background work, and a 20 FPS render tick are selected concurrently. Long model requests, commands, and permission decisions therefore do not stop input or redraws.</p>
@@ -347,6 +347,7 @@ Release 2.1 slices.</p>
 <tr><td><code>plugins.sandbox</code></td><td>boolean</td><td><code>false</code> (reserved for a future sandbox runtime)</td></tr>
 <tr><td><code>permissions.always_allow</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.always_deny</code></td><td>string list</td><td>empty</td></tr>
+<tr><td><code>permissions.rules</code></td><td>array of permission rules</td><td>empty</td></tr>
 <tr><td><code>permissions.ask_always</code></td><td>boolean</td><td><code>true</code></td></tr>
 <tr><td><code>permissions.grant_duration_minutes</code></td><td>integer</td><td><code>60</code></td></tr>
 <tr><td><code>session.context_size</code></td><td>integer</td><td><code>100</code></td></tr>
@@ -369,7 +370,15 @@ Release 2.1 slices.</p>
 </div>
 <p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
 <p>The special <code>providers.openai-subscription</code> entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with <code>pleiades auth status</code>. Run <code>pleiades setup</code> instead of editing this entry manually.</p>
-<p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|unrestricted</code> or <code>/mode plan|agent|unrestricted</code>. <code>agent</code> is the default and maps to Codex’s workspace-write sandbox. <code>unrestricted</code> removes workspace isolation and should only be used in an already isolated environment.</p>
+<p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|auto|yolo</code> or <code>/mode plan|agent|auto|yolo</code>. <code>agent</code> is the default.
+<code>auto</code> runs without prompts inside the workspace. <code>yolo</code> removes workspace
+isolation after explicit confirmation and should only be used in an already
+isolated environment. The old <code>unrestricted</code> spelling remains accepted as a
+compatibility alias for <code>yolo</code>.</p>
+<p>Structured permission rules have <code>tool</code>, <code>pattern</code>, and <code>action</code> fields, plus
+optional <code>cwd</code>, <code>network</code>, <code>mcp_server</code>, and <code>mcp_tool</code> matchers. <code>action</code> is
+<code>allow</code>, <code>ask</code>, or <code>deny</code>. Rules can be edited directly or managed with
+<code>pleiades permissions allow|ask|deny|show|test|reset</code>.</p>
 <p>Built-in themes are <code>seven-sisters</code>, <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code>. Legacy <code>catppuccin-mocha</code>, <code>dracula</code>, and <code>tokyo-night</code> values remain accepted as compatibility aliases.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="providers-and-models"><a class="header" href="#providers-and-models">Providers and models</a></h1>
@@ -410,7 +419,12 @@ credentials.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tools-and-permissions"><a class="header" href="#tools-and-permissions">Tools and permissions</a></h1>
 <p>The built-in tools are read, write, edit, bash, glob, grep, diff, search, and fetch. Inspect them with <code>pleiades tool list</code> and <code>pleiades tool info NAME</code>.</p>
-<p>Tools declare read-only, workspace-write, or dangerous permission levels. <code>permissions.always_allow</code> and <code>always_deny</code> provide durable decisions. Interactive permission requests are keyboard-driven Ratatui modals showing the operation, target, reason, and risk, with allow-once, allow-session, deny-once, and deny-session decisions. The live workspace never falls back to a blocking stdin question.</p>
+<p>Tools declare read-only, workspace-write, or dangerous permission levels.
+Structured permission rules provide durable allow, ask, and deny decisions.
+Interactive permission requests are keyboard-driven Ratatui modals showing the
+operation, target, reason, and risk, with allow-once, allow-session, deny-once,
+and deny-session decisions. The live workspace never falls back to a blocking
+stdin question.</p>
 <h2 id="agent-access-modes"><a class="header" href="#agent-access-modes">Agent access modes</a></h2>
 <p>Approval behavior and sandbox boundaries are independent runtime policies,
 presented through four access-mode presets:</p>
@@ -425,6 +439,37 @@ or launch with <code>--permission-mode MODE</code>. The old <code>unrestricted</
 accepted as a compatibility alias for <code>yolo</code>.</p>
 <p>Built-in filesystem tools resolve relative paths against the selected workspace. They reject <code>..</code> traversal, absolute paths outside the workspace, and symlinks that resolve outside it. Agent-mode shell execution uses a platform sandbox to keep writes inside the workspace; if isolation is unavailable, the call is refused. Plan mode rejects every mutating tool before prompting.</p>
 <p>With API-key providers, Pleiades runs built-in tools through the modal permission system above. With <code>openai-subscription</code>, Pleiades delegates the task to the official Codex CLI and maps these modes to Codex’s read-only, workspace-write, and danger-full-access sandboxes. Codex owns individual delegated tool calls, so Pleiades’s own permission modal applies only to tools executed by the Pleiades runtime. The workspace is the launch directory. ChatGPT credentials remain managed by Codex and are never copied into Pleiades.</p>
+<h2 id="structured-rules"><a class="header" href="#structured-rules">Structured rules</a></h2>
+<p>Use <code>/permissions show</code>, <code>/permissions allow PATTERN</code>, <code>/permissions ask PATTERN</code>, <code>/permissions deny PATTERN</code>, <code>/permissions reset</code>, and
+<code>/permissions test COMMAND</code> inside the live workspace. The same operations are
+available from the CLI as <code>pleiades permissions ...</code>.</p>
+<p>The current command form creates bash rules. Patterns are glob expressions
+matched against each parsed shell command clause, not a raw command prefix.
+Compound commands are evaluated clause by clause, so every clause must match an
+allow rule before the whole command is allowed. Deny rules take precedence over
+ask and allow rules.</p>
+<pre><code class="language-toml">[[permissions.rules]]
+tool = "bash"
+pattern = "cargo test *"
+action = "allow"
+
+[[permissions.rules]]
+tool = "bash"
+pattern = "git push *"
+action = "ask"
+
+[[permissions.rules]]
+tool = "bash"
+pattern = "rm -rf *"
+action = "deny"
+</code></pre>
+<p>The engine parses shell operators, pipelines, redirection, quoted arguments,
+and command substitution. Redirection targets and explicit tool paths are
+canonicalized against the workspace in Agent and Auto modes; symlink escapes,
+<code>..</code> traversal, and outside working directories are denied before a rule can
+allow the operation. Command substitution falls back to ask unless an explicit
+deny rule matches. YOLO removes workspace confinement but still evaluates
+configured deny rules.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="plugins-and-hooks"><a class="header" href="#plugins-and-hooks">Plugins and hooks</a></h1>
 <p>Plugins are directories containing <code>plugin.json</code>. Install a local plugin with <code>pleiades plugin install PATH</code>, then use <code>plugin list</code>, <code>enable</code>, <code>disable</code>, and <code>uninstall</code>.</p>
@@ -504,15 +549,22 @@ command lists and numeric palette dispatch.</p>
 <li><code>pleiades-agent-commands</code> — command specifications, parsing, discovery,
 autocomplete, help generation, and typed command results.</li>
 <li><code>pleiades-agent-services</code> — terminal-independent provider, model, plugin,
-configuration, and extension operations shared by CLI and live commands.</li>
+permission, configuration, and extension operations shared by CLI and live commands.</li>
 <li><code>pleiades-agent-engine</code> — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.</li>
+<li><code>pleiades-agent-permissions</code> — structured permission rules, shell command
+clause parsing, path escape checks, and deny-first decisions.</li>
 <li><code>pleiades-agent-tui</code> — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.</li>
 <li><code>pleiades-agent-providers</code> — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.</li>
 <li><code>pleiades-agent-tools</code> — confined filesystem/search/diff tools and sandboxed command execution.</li>
 <li>remaining crates — plugins, prompts, memory, workflows, Git automation, SDK, and CLI packaging.</li>
 </ul>
 <h2 id="safety-layers"><a class="header" href="#safety-layers">Safety layers</a></h2>
-<p>Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Shell writes use Bubblewrap on Linux or <code>sandbox-exec</code> on macOS, refusing execution when an Agent-mode boundary cannot be provided. Unrestricted mode removes that process boundary only after an explicit user choice.</p>
+<p>Plan mode denies mutating tools. Agent mode confines filesystem paths to the canonical workspace and guards sensitive operations through permission events. Auto mode keeps the workspace boundary but skips prompts unless a rule says to ask. YOLO removes that process boundary only after an explicit user choice. Shell writes use Bubblewrap on Linux or <code>sandbox-exec</code> on macOS when Agent-mode process isolation is required, refusing execution when that boundary cannot be provided.</p>
+<p>Structured permission rules are evaluated before mode defaults. Deny rules win
+over ask and allow, and every parsed shell clause in a compound command must be
+covered before a command is automatically allowed. Agent and Auto canonicalize
+working directories, redirection targets, explicit tool paths, and symlinks
+against the workspace boundary.</p>
 <p>The ChatGPT subscription adapter delegates execution to the official Codex CLI and maps modes to Codex sandboxes. API-provider tool calls execute in Pleiades and use Pleiades permission modals.</p>
 <h2 id="reliability"><a class="header" href="#reliability">Reliability</a></h2>
 <p>Bounded channels, output caps, a moving transcript window, and background repository file discovery keep redraw work predictable. A terminal guard restores raw mode, the alternate screen, cursor, mouse capture, and bracketed paste on normal and panic exits. Mock-provider tests cover permission waits, Plan denial, queued follow-ups, cancellation, and mode changes; Ratatui snapshots and resize tests cover the frontend.</p>
