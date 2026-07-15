@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2ba6d8aa.js";
+            window.path_to_searchindex_js = "searchindex-275f7afb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4fe40847.js"></script>
@@ -550,18 +550,44 @@ configured deny rules.</p>
 /plugins disable &lt;id&gt;
 /plugins update &lt;id&gt;
 /plugins permissions &lt;id&gt;
+/plugins trust &lt;id&gt;
+/plugins untrust &lt;id&gt;
 /plugins reload
 </code></pre>
 <p>These commands call the same application service as the Clap commands.
 Information and permission documents include the plugin source, executable
-hooks, and the permission boundary requested by each tool.</p>
+hooks, lifecycle commands, tools, custom commands, requested permissions,
+accessible paths declared by the manifest, network declaration, environment
+variables, checksum, and signature when provided.</p>
+<p>External plugins install disabled and must be explicitly trusted before they
+can be enabled:</p>
+<pre><code class="language-bash">pleiades plugin install ./my-plugin
+pleiades plugin info my-plugin-external
+pleiades plugin trust my-plugin-external
+pleiades plugin enable my-plugin-external
+</code></pre>
+<p>In the live workspace, <code>/plugins enable &lt;id&gt;</code> renders the trust report instead
+of enabling an untrusted external plugin. After review, run <code>/plugins trust &lt;id&gt;</code> and then enable it. <code>/plugins untrust &lt;id&gt;</code> revokes trust and disables
+the plugin.</p>
 <p>External plugins installed from local directories remember their canonical
 source path. <code>pleiades plugin update ID</code> and <code>/plugins update ID</code> validate a
 fresh copy in a staging directory before replacing the installed version. A
 malformed source leaves the active copy unchanged. Plugins installed before
 source tracking was introduced must be reinstalled once before they can be
 updated.</p>
-<p>The current runtime supports shell hooks for <code>PreToolUse</code>, <code>PostToolUse</code>, and <code>PostToolUseFailure</code>. Hook input is provided as JSON on standard input with contextual environment variables. Treat third-party hook commands as executable code and inspect them before installation.</p>
+<p>Plugin manifests may declare optional trust metadata:</p>
+<pre><code class="language-json">{
+  "requestedPaths": ["./src", "~/.config/example"],
+  "envVars": ["EXAMPLE_TOKEN"],
+  "network": "api.example.com",
+  "checksum": "sha256:...",
+  "signature": "minisign:..."
+}
+</code></pre>
+<p>The current runtime supports shell hooks for <code>PreToolUse</code>, <code>PostToolUse</code>, and
+<code>PostToolUseFailure</code>. Hook input is provided as JSON on standard input with
+contextual environment variables. Treat third-party hook commands as executable
+code and inspect them before installation.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="mcp-servers"><a class="header" href="#mcp-servers">MCP servers</a></h1>
 <p>Pleiades has a shared MCP management layer used by the CLI and live workspace.
