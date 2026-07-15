@@ -629,6 +629,7 @@ pub fn default_registry_with_services(
     register_git_family(&mut r);
     register_lsp_family(&mut r);
     register_process_family(&mut r);
+    register_browser_family(&mut r);
     register_custom_commands(&mut r, services);
     r
 }
@@ -2493,6 +2494,79 @@ fn register_process_family(r: &mut crate::registry::CommandRegistry) {
     }
 }
 
+fn register_browser_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["browser"],
+            "Open the browser verification overlay",
+            handler(|_| Ok(CommandResult::overlay(OverlayKind::Browser))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["browser", "open"],
+            "Open a URL through Playwright",
+            handler(|args| {
+                let url = args
+                    .first()
+                    .ok_or_else(|| Error::invalid_input("usage: /browser open <url>"))?;
+                Ok(CommandResult::effects([AppEffect::BrowserOpen(
+                    url.clone(),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "url",
+            "HTTP or HTTPS URL to verify.",
+        )])
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    for (path, description, effect) in [
+        (
+            "screenshot",
+            "Capture a screenshot of the last opened URL",
+            AppEffect::BrowserScreenshot,
+        ),
+        (
+            "inspect",
+            "Inspect the last browser report",
+            AppEffect::BrowserInspect,
+        ),
+        (
+            "console",
+            "Show browser console output",
+            AppEffect::BrowserConsole,
+        ),
+        (
+            "close",
+            "Close the browser session",
+            AppEffect::BrowserClose,
+        ),
+    ] {
+        r.register(
+            CommandSpec::builder(
+                vec!["browser", path],
+                description,
+                handler(move |_| Ok(CommandResult::effects([effect.clone()]))),
+            )
+            .category(CommandCategory::Verification)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+        )
+        .ok();
+    }
+}
+
 #[derive(Debug, Clone)]
 struct CustomCommandHandler {
     definition: CustomCommandDefinition,
@@ -2776,6 +2850,12 @@ mod tests {
             "process stop",
             "process restart",
             "process attach",
+            "browser",
+            "browser open",
+            "browser screenshot",
+            "browser inspect",
+            "browser console",
+            "browser close",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -3123,6 +3203,28 @@ mod tests {
         assert!(matches!(
             result,
             CommandResult::Effects(effects) if effects == vec![AppEffect::ProcessLogs("proc-1".to_string())]
+        ));
+    }
+
+    #[tokio::test]
+    async fn browser_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/browser open https://example.com", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::BrowserOpen("https://example.com".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/browser screenshot", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::BrowserScreenshot]
         ));
     }
 

@@ -42,6 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added a runtime-owned background process manager with `/process list`,
   `start`, `logs`, `stop`, `restart`, and `attach` commands plus bounded
   stdout/stderr capture for dev servers and watchers.
+- Added optional Playwright-backed browser verification foundations with
+  `/browser open`, `screenshot`, `inspect`, `console`, and `close`, structured
+  reports, console/network capture, and screenshot output under `.pleiades/`.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

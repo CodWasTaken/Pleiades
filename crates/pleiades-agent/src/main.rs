@@ -142,6 +142,10 @@ enum Commands {
     #[command(subcommand)]
     Process(ProcessCommand),
 
+    /// Run browser verification from the live workspace
+    #[command(subcommand)]
+    Browser(BrowserCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -690,6 +694,20 @@ enum ProcessCommand {
     Restart { id: String },
     /// Attach to process output in the live workspace
     Attach { id: String },
+}
+
+#[derive(Subcommand)]
+enum BrowserCommand {
+    /// Open a URL through the live workspace browser integration
+    Open { url: String },
+    /// Capture a screenshot of the last opened URL
+    Screenshot,
+    /// Inspect the last browser report
+    Inspect,
+    /// Show browser console output
+    Console,
+    /// Clear browser session state
+    Close,
 }
 
 fn get_config_dirs() -> (PathBuf, PathBuf) {
@@ -2329,6 +2347,29 @@ fn handle_process_command(command: ProcessCommand) {
     }
 }
 
+fn handle_browser_command(command: BrowserCommand) {
+    match command {
+        BrowserCommand::Open { url } => {
+            println!(
+                "Run browser verification from the live workspace so the browser session can be reused."
+            );
+            println!("Run `pleiades`, then `/browser open {url}`.");
+        }
+        BrowserCommand::Screenshot => {
+            println!("Run `pleiades`, then `/browser screenshot` after `/browser open <url>`.");
+        }
+        BrowserCommand::Inspect => {
+            println!("Run `pleiades`, then `/browser inspect` after `/browser open <url>`.");
+        }
+        BrowserCommand::Console => {
+            println!("Run `pleiades`, then `/browser console` after `/browser open <url>`.");
+        }
+        BrowserCommand::Close => {
+            println!("Run `pleiades`, then `/browser close`.");
+        }
+    }
+}
+
 fn print_lsp_status(report: &pleiades_agent_lsp::LspStatusReport) {
     println!("Workspace: {}", report.workspace.display());
     if report.servers.is_empty() {
@@ -3350,6 +3391,7 @@ fn main() {
         }
         Some(Commands::Lsp(cmd)) => handle_lsp_command(&loader, cmd),
         Some(Commands::Process(cmd)) => handle_process_command(cmd),
+        Some(Commands::Browser(cmd)) => handle_browser_command(cmd),
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {
                 Ok(c) => c,

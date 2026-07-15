@@ -124,6 +124,16 @@ pub enum AppEffect {
     ProcessRestart(String),
     /// Attach to a background process output view.
     ProcessAttach(String),
+    /// Navigate a Playwright browser to a URL.
+    BrowserOpen(String),
+    /// Capture a screenshot of the last opened page.
+    BrowserScreenshot,
+    /// Inspect the last browser report.
+    BrowserInspect,
+    /// Show browser console messages from the last report.
+    BrowserConsole,
+    /// Clear the runtime browser session.
+    BrowserClose,
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;
