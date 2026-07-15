@@ -4,6 +4,7 @@
 //! Ratatui widgets, or parse Clap arguments. The CLI and live workspace can
 //! therefore present the same operation without duplicating business logic.
 
+mod mcp;
 mod models;
 mod permissions;
 mod plugins;
@@ -11,6 +12,7 @@ mod providers;
 
 use std::path::PathBuf;
 
+pub use mcp::{McpServerReport, McpService, McpToolReport};
 pub use models::{ModelDiscoveryReport, ModelPreferences, ModelProviderResult, ModelService};
 pub use permissions::{
     PermissionReport, PermissionRuleReport, PermissionService, PermissionTestReport,
@@ -55,6 +57,10 @@ impl ApplicationServices {
 
     pub fn model(&self) -> ModelService {
         ModelService::new(self.loader())
+    }
+
+    pub fn mcp(&self) -> McpService {
+        McpService::new(self.loader())
     }
 
     pub fn permission(&self) -> PermissionService {

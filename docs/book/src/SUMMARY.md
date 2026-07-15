@@ -9,6 +9,7 @@
 - [Providers and models](providers.md)
 - [Tools and permissions](tools.md)
 - [Plugins and hooks](plugins.md)
+- [MCP servers](mcp.md)
 - [Prompt templates](prompts.md)
 - [Workflows](workflows.md)
 - [Git integration](git.md)

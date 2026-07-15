@@ -110,6 +110,10 @@ enum Commands {
     #[command(subcommand)]
     Plugin(PluginCommand),
 
+    /// Manage MCP servers
+    #[command(subcommand)]
+    Mcp(McpCommand),
+
     /// Manage permission rules
     #[command(subcommand)]
     Permissions(PermissionsCommand),
@@ -411,6 +415,86 @@ enum PluginCommand {
     Update {
         /// Plugin ID
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpCommand {
+    /// List configured MCP servers
+    List,
+
+    /// Show MCP server details
+    Info {
+        /// MCP server ID
+        id: String,
+    },
+
+    /// Open the live MCP manager for interactive setup
+    Add,
+
+    /// Remove an MCP server from project configuration
+    Remove {
+        /// MCP server ID
+        id: String,
+    },
+
+    /// Enable an MCP server
+    Enable {
+        /// MCP server ID
+        id: String,
+    },
+
+    /// Disable an MCP server
+    Disable {
+        /// MCP server ID
+        id: String,
+    },
+
+    /// Show configured tool exposure filters
+    Tools {
+        /// MCP server ID
+        id: String,
+    },
+
+    /// Inspect one configured tool exposure decision
+    ToolInfo {
+        /// MCP server ID
+        server: String,
+        /// MCP tool name
+        tool: String,
+    },
+
+    /// Reload extension sources
+    Reload,
+
+    /// Show live-workspace-only MCP auth guidance
+    Auth {
+        /// Optional MCP server ID
+        id: Option<String>,
+    },
+
+    /// Show live-workspace-only MCP logout guidance
+    Logout {
+        /// Optional MCP server ID
+        id: Option<String>,
+    },
+
+    /// Show live-workspace-only restart guidance
+    Restart {
+        /// Optional MCP server ID
+        id: Option<String>,
+    },
+
+    /// Show live-workspace-only logs guidance
+    Logs {
+        /// Optional MCP server ID
+        id: Option<String>,
+    },
+
+    /// Show live-workspace-only debug guidance
+    Debug {
+        /// Optional MCP server ID
+        id: Option<String>,
     },
 }
 
@@ -1761,6 +1845,168 @@ fn handle_plugin_update(loader: &ConfigLoader, id: &str) {
     }
 }
 
+fn mcp_service(loader: &ConfigLoader) -> pleiades_agent_services::McpService {
+    pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    )
+    .mcp()
+}
+
+fn handle_mcp_list(loader: &ConfigLoader) {
+    match mcp_service(loader).list() {
+        Ok(servers) => {
+            if servers.is_empty() {
+                println!("No MCP servers configured.");
+                return;
+            }
+            for server in servers {
+                let status = if server.enabled {
+                    "\x1b[1;32menabled\x1b[0m"
+                } else {
+                    "\x1b[2mdisabled\x1b[0m"
+                };
+                println!(
+                    "  {:<24}  {:<8}  {:<12}  {}",
+                    server.id, status, server.health, server.transport
+                );
+            }
+        }
+        Err(error) => {
+            eprintln!("Error listing MCP servers: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_mcp_info(loader: &ConfigLoader, id: &str) {
+    match mcp_service(loader).info(id) {
+        Ok(server) => {
+            println!("MCP server: {}", server.id);
+            println!("  Enabled:   {}", server.enabled);
+            println!("  Transport: {}", server.transport);
+            println!("  Health:    {}", server.health);
+            println!("  Timeout:   {}s", server.timeout_secs);
+            println!(
+                "  Tools:     {}",
+                server
+                    .tool_count
+                    .map(|count| count.to_string())
+                    .unwrap_or_else(|| "not discovered".to_string())
+            );
+            println!("  Allow:     {}", cli_list_or_all(&server.allowlist));
+            println!("  Deny:      {}", cli_list_or_none(&server.denylist));
+            println!(
+                "  Error:     {}",
+                server.last_error.as_deref().unwrap_or("(none)")
+            );
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_mcp_remove(loader: &ConfigLoader, id: &str) {
+    match mcp_service(loader).remove(id) {
+        Ok(()) => println!("\x1b[1;32m✓\x1b[0m MCP server removed: {id}"),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Remove failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_mcp_enable(loader: &ConfigLoader, id: &str) {
+    match mcp_service(loader).enable(id) {
+        Ok(()) => println!("\x1b[1;32m✓\x1b[0m MCP server enabled: {id}"),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Enable failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_mcp_disable(loader: &ConfigLoader, id: &str) {
+    match mcp_service(loader).disable(id) {
+        Ok(()) => println!("\x1b[1;32m✓\x1b[0m MCP server disabled: {id}"),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Disable failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_mcp_tools(loader: &ConfigLoader, id: &str) {
+    match mcp_service(loader).tools(id) {
+        Ok(tools) => {
+            if tools.is_empty() {
+                println!("No configured tool filters for MCP server `{id}`.");
+                println!("Live schema discovery is not connected yet.");
+                return;
+            }
+            for tool in tools {
+                println!(
+                    "  {:<30}  exposed={}  schema={}  {}",
+                    tool.tool, tool.exposed, tool.schema_available, tool.notes
+                );
+            }
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_mcp_tool_info(loader: &ConfigLoader, server: &str, tool: &str) {
+    match mcp_service(loader).tool_info(server, tool) {
+        Ok(report) => {
+            println!("MCP tool: {}/{}", report.server, report.tool);
+            println!("  Exposed: {}", report.exposed);
+            println!("  Schema:  {}", report.schema_available);
+            println!("  Notes:   {}", report.notes);
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_mcp_reload() {
+    println!("MCP configuration will be reloaded by the live workspace runtime.");
+    println!("For headless commands, each invocation reads the latest configuration.");
+}
+
+fn handle_mcp_live_only(action: &str, id: Option<&str>) {
+    match id {
+        Some(id) => println!(
+            "`pleiades mcp {action} {id}` is managed from the live workspace overlay. Run `pleiades`, then `/mcp {action} {id}`."
+        ),
+        None => println!(
+            "`pleiades mcp {action}` is managed from the live workspace overlay. Run `pleiades`, then `/mcp {action}`."
+        ),
+    }
+}
+
+fn cli_list_or_all(values: &[String]) -> String {
+    if values.is_empty() {
+        "all non-denied tools".to_string()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn cli_list_or_none(values: &[String]) -> String {
+    if values.is_empty() {
+        "(none)".to_string()
+    } else {
+        values.join(", ")
+    }
+}
+
 fn permission_service(loader: &ConfigLoader) -> pleiades_agent_services::PermissionService {
     pleiades_agent_services::ApplicationServices::with_config_dirs(
         loader.global_dir().to_path_buf(),
@@ -2634,6 +2880,22 @@ fn main() {
             PluginCommand::Enable { id } => handle_plugin_enable(&loader, &id),
             PluginCommand::Disable { id } => handle_plugin_disable(&loader, &id),
             PluginCommand::Update { id } => handle_plugin_update(&loader, &id),
+        },
+        Some(Commands::Mcp(cmd)) => match cmd {
+            McpCommand::List => handle_mcp_list(&loader),
+            McpCommand::Info { id } => handle_mcp_info(&loader, &id),
+            McpCommand::Add => handle_mcp_live_only("add", None),
+            McpCommand::Remove { id } => handle_mcp_remove(&loader, &id),
+            McpCommand::Enable { id } => handle_mcp_enable(&loader, &id),
+            McpCommand::Disable { id } => handle_mcp_disable(&loader, &id),
+            McpCommand::Tools { id } => handle_mcp_tools(&loader, &id),
+            McpCommand::ToolInfo { server, tool } => handle_mcp_tool_info(&loader, &server, &tool),
+            McpCommand::Reload => handle_mcp_reload(),
+            McpCommand::Auth { id } => handle_mcp_live_only("auth", id.as_deref()),
+            McpCommand::Logout { id } => handle_mcp_live_only("logout", id.as_deref()),
+            McpCommand::Restart { id } => handle_mcp_live_only("restart", id.as_deref()),
+            McpCommand::Logs { id } => handle_mcp_live_only("logs", id.as_deref()),
+            McpCommand::Debug { id } => handle_mcp_live_only("debug", id.as_deref()),
         },
         Some(Commands::Permissions(cmd)) => match cmd {
             PermissionsCommand::Show => handle_permissions_show(&loader),
