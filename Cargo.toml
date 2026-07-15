@@ -6,6 +6,7 @@ members = [
     "crates/pleiades-agent-commands",
     "crates/pleiades-agent-services",
     "crates/pleiades-agent-permissions",
+    "crates/pleiades-agent-mcp",
     "crates/pleiades-agent-config",
     "crates/pleiades-agent-engine",
     "crates/pleiades-agent-tui",

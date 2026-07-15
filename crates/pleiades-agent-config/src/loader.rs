@@ -193,6 +193,7 @@ impl ConfigLoader {
             .enabled
             .extend(override_config.plugins.enabled);
         merged.plugins.paths.extend(override_config.plugins.paths);
+        merged.mcp.servers.extend(override_config.mcp.servers);
 
         if !override_config.permissions.always_allow.is_empty() {
             merged.permissions.always_allow = override_config.permissions.always_allow;

@@ -1,0 +1,19 @@
+[package]
+name = "pleiades-agent-mcp"
+version = "2.0.0"
+edition = "2024"
+description = "Pleiades MCP client foundation"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/CodWasTaken/Pleiades"
+
+[dependencies]
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "io-util", "time", "macros", "rt-multi-thread"] }
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"

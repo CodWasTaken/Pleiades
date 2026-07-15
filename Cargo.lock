@@ -1591,6 +1591,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pleiades-agent-mcp"
+version = "2.0.0"
+dependencies = [
+ "pleiades-agent-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "pleiades-agent-memory"
 version = "2.0.0"
 dependencies = [
