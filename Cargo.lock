@@ -1740,6 +1740,7 @@ dependencies = [
  "rustyline 14.0.0",
  "serde_json",
  "syntect",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tracing",

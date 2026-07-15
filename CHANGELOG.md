@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `commands/*.toml`. Valid files register dynamic command specs for help,
   palette, slash autocomplete, and prompt submission; invalid files are skipped
   without crashing the workspace.
+- Added live extension reload events. `/plugins reload`, `/mcp reload`, and
+  `/skills reload` rebuild the runtime command registry and tell the TUI to
+  refresh autocomplete and command-palette data without restarting.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

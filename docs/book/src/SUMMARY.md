@@ -12,6 +12,7 @@
 - [MCP servers](mcp.md)
 - [Skills](skills.md)
 - [Custom commands](custom-commands.md)
+- [Hot reload](hot-reload.md)
 - [Prompt templates](prompts.md)
 - [Workflows](workflows.md)
 - [Git integration](git.md)

@@ -712,6 +712,10 @@ impl AppState {
             AgentEvent::Document(document) => {
                 self.overlay = Some(Overlay::Document(document));
             }
+            AgentEvent::ExtensionsReloaded => {
+                self.commands = pleiades_agent_commands::defaults::default_registry();
+                self.status = "Extensions reloaded".to_string();
+            }
             AgentEvent::ShuttingDown => {
                 self.quit_requested = true;
                 self.status = "Shutting down".to_string();
@@ -985,6 +989,40 @@ mod tests {
 
         state.apply_agent(AgentEvent::ShuttingDown);
         assert!(state.quit_requested);
+    }
+
+    #[test]
+    fn extensions_reloaded_refreshes_custom_command_completion() {
+        let original = std::env::current_dir().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_current_dir(temp.path()).unwrap();
+        let mut state = state();
+        assert!(
+            !state
+                .complete_slash_candidates("/release")
+                .iter()
+                .any(|item| item == "release")
+        );
+
+        std::fs::create_dir_all(".pleiades/commands").unwrap();
+        std::fs::write(
+            ".pleiades/commands/release.toml",
+            r#"
+description = "Prepare a release"
+prompt = "Prepare release {{args}}"
+"#,
+        )
+        .unwrap();
+        state.apply_agent(AgentEvent::ExtensionsReloaded);
+        std::env::set_current_dir(original).unwrap();
+
+        assert!(
+            state
+                .complete_slash_candidates("/release")
+                .iter()
+                .any(|item| item == "release")
+        );
+        assert_eq!(state.status, "Extensions reloaded");
     }
 
     #[test]
