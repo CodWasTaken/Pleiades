@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-275f7afb.js";
+            window.path_to_searchindex_js = "searchindex-bf541404.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4fe40847.js"></script>
+        <script src="toc-dc77043f.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -642,6 +642,52 @@ token_env = "DOCS_MCP_TOKEN"
 <p>Pleiades stores environment variable names for credentials, not credential
 values. Tool allowlists and denylists are configuration filters only until live
 schema discovery is connected.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="skills"><a class="header" href="#skills">Skills</a></h1>
+<p>Skills are reusable instructions that can be enabled for the live workspace or
+headless runs. They are project-aware guidance, not executable plugins.</p>
+<p>Pleiades loads skills from:</p>
+<ul>
+<li>project scope: <code>.pleiades/skills/*.toml</code></li>
+<li>global scope: <code>~/.config/pleiades/skills/*.toml</code></li>
+</ul>
+<p>Each skill is a TOML file:</p>
+<pre><code class="language-toml">name = "review"
+description = "Review changes before completion"
+instructions = "Always inspect the final diff and report the validation commands that actually ran."
+enabled = true
+permissions = []
+</code></pre>
+<p>Enabled skills are appended to the engine system prompt under an <code>Enabled Skills</code> section. Disabled skills remain available for inspection and editing but
+do not affect agent behavior.</p>
+<h2 id="cli-commands"><a class="header" href="#cli-commands">CLI commands</a></h2>
+<pre><code class="language-bash">pleiades skills list
+pleiades skills show review
+pleiades skills create review
+pleiades skills edit review
+pleiades skills enable review
+pleiades skills disable review
+pleiades skills reload
+</code></pre>
+<p><code>skills create</code> writes a project-local skill in <code>.pleiades/skills/</code>.
+<code>skills edit</code> opens <code>$EDITOR</code> when set; otherwise it prints the file path.</p>
+<h2 id="live-workspace-commands-1"><a class="header" href="#live-workspace-commands-1">Live workspace commands</a></h2>
+<p>The same service backs the live slash commands:</p>
+<pre><code class="language-text">/skills list
+/skills show review
+/skills create review
+/skills edit review
+/skills enable review
+/skills disable review
+/skills reload
+</code></pre>
+<p><code>/skills edit</code> displays the skill file path inside the workspace. Edit the TOML
+file with your editor and run <code>/skills reload</code> to refresh the live command
+surface.</p>
+<h2 id="safety"><a class="header" href="#safety">Safety</a></h2>
+<p>Skills only contribute instructions. They do not execute commands, read files,
+or grant permissions on their own. Future custom command and plugin features can
+reference skills, but execution remains governed by the permission engine.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="prompt-templates"><a class="header" href="#prompt-templates">Prompt templates</a></h1>
 <p>Pleiades ships assistant, summarizer, review, commit, PR summary, diff explanation, refactoring, and test-generation templates. Templates substitute <code>{{name}}</code>; <code>{{name|default}}</code> supplies a fallback.</p>
