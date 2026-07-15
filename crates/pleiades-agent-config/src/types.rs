@@ -15,6 +15,9 @@ pub struct Config {
     /// Plugin configuration.
     #[serde(default)]
     pub plugins: PluginConfig,
+    /// MCP server configuration.
+    #[serde(default)]
+    pub mcp: McpConfig,
     /// Permission configuration.
     #[serde(default)]
     pub permissions: PermissionConfig,
@@ -167,6 +170,109 @@ impl Default for PluginConfig {
             sandbox: false,
         }
     }
+}
+
+/// Model Context Protocol configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpConfig {
+    /// Configured MCP servers keyed by stable local ID.
+    #[serde(default)]
+    pub servers: HashMap<String, McpServerConfig>,
+}
+
+/// Per-server MCP configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpServerConfig {
+    /// Whether this server is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Server transport and endpoint details.
+    #[serde(flatten)]
+    pub transport: McpTransportConfig,
+    /// Request timeout in seconds.
+    #[serde(default = "default_mcp_timeout")]
+    pub timeout_secs: u64,
+    /// Optional list of exposed tools. Empty means all non-denied tools.
+    #[serde(default)]
+    pub tool_allowlist: Vec<String>,
+    /// Tools that must not be exposed.
+    #[serde(default)]
+    pub tool_denylist: Vec<String>,
+}
+
+fn default_mcp_timeout() -> u64 {
+    30
+}
+
+/// MCP server transport configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "transport", rename_all = "kebab-case")]
+pub enum McpTransportConfig {
+    /// Spawn a local process and communicate over stdin/stdout JSON-RPC.
+    Stdio {
+        /// Executable to run.
+        command: String,
+        /// Command arguments.
+        #[serde(default)]
+        args: Vec<String>,
+        /// Environment variables for the child process. Values may contain `${VAR}`.
+        #[serde(default)]
+        env: HashMap<String, String>,
+    },
+    /// Connect to a remote HTTP MCP endpoint.
+    Http {
+        /// HTTP endpoint URL.
+        url: String,
+        /// Optional authentication configuration.
+        auth: Option<McpAuthConfig>,
+    },
+    /// Connect to a streamable HTTP MCP endpoint.
+    StreamableHttp {
+        /// HTTP endpoint URL.
+        url: String,
+        /// Optional authentication configuration.
+        auth: Option<McpAuthConfig>,
+    },
+}
+
+impl Default for McpTransportConfig {
+    fn default() -> Self {
+        Self::Stdio {
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+        }
+    }
+}
+
+impl Default for McpServerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            transport: McpTransportConfig::default(),
+            timeout_secs: 30,
+            tool_allowlist: Vec::new(),
+            tool_denylist: Vec::new(),
+        }
+    }
+}
+
+/// Authentication source for remote MCP servers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum McpAuthConfig {
+    /// Read a bearer token from an environment variable.
+    Bearer {
+        /// Environment variable containing the bearer token.
+        token_env: String,
+    },
+    /// Read OAuth client/token material from environment variables.
+    OAuth {
+        /// Optional client ID environment variable.
+        client_id_env: Option<String>,
+        /// Environment variable containing the access token.
+        token_env: String,
+    },
 }
 
 /// Permission configuration.
@@ -362,6 +468,7 @@ mod tests {
         assert_eq!(config.display.style, "rich");
         assert_eq!(config.session.context_size, 100);
         assert!(!config.plugins.sandbox);
+        assert!(config.mcp.servers.is_empty());
     }
 
     #[test]
@@ -377,5 +484,26 @@ mod tests {
         let provider = ProviderConfig::default();
         assert_eq!(provider.max_retries, 3);
         assert_eq!(provider.timeout_secs, 120);
+    }
+
+    #[test]
+    fn test_mcp_config_roundtrip() {
+        let config = r#"
+[core]
+
+[mcp.servers.filesystem]
+transport = "stdio"
+command = "mcp-server-filesystem"
+args = ["."]
+timeout_secs = 15
+tool_allowlist = ["read_file"]
+"#;
+
+        let parsed: Config = toml::from_str(config).unwrap();
+        let server = parsed.mcp.servers.get("filesystem").unwrap();
+        assert!(server.enabled);
+        assert_eq!(server.timeout_secs, 15);
+        assert_eq!(server.tool_allowlist, vec!["read_file"]);
+        assert!(matches!(server.transport, McpTransportConfig::Stdio { .. }));
     }
 }

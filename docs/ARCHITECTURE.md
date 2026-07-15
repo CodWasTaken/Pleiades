@@ -37,6 +37,7 @@ Pleiades is a native Rust 2024 autonomous coding agent. Its architecture separat
 | `pleiades-agent-tui` | Ratatui app, reducer, native Markdown, textarea composer, overlays, terminal lifecycle, design tokens |
 | `pleiades-agent-providers` | OpenAI, Anthropic, OpenAI-compatible, and official Codex CLI adapters |
 | `pleiades-agent-tools` | Nine built-in tools, workspace path confinement, process isolation |
+| `pleiades-agent-mcp` | MCP JSON-RPC protocol types, stdio client primitives, server definitions, redacted status reports |
 | `pleiades-agent-plugins` | Manifest lifecycle and pre/post shell hooks |
 | `pleiades-agent-memory` | Session, project, and user memory stores |
 | `pleiades-agent-prompts` | Templates and professional coding-agent protocol |

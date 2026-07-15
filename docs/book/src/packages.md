@@ -10,6 +10,7 @@ The crates.io names `pleiades` and `pleiades-core` are owned by unrelated projec
 | `pleiades-agent-engine` | Chat and agent orchestration |
 | `pleiades-agent-providers` | Provider adapters |
 | `pleiades-agent-tools` | Built-in tools |
+| `pleiades-agent-mcp` | Model Context Protocol client primitives |
 | `pleiades-agent-tui` | Terminal UI |
 | `pleiades-agent-plugins` | Plugin manifests and shell hooks |
 | `pleiades-agent-memory` | Persistent memory tiers |

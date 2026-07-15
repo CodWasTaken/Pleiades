@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Added `pleiades-agent-mcp`, MCP configuration under `mcp.servers`, JSON-RPC
+  protocol types, stdio client primitives, redacted server status reporting,
+  auth-source metadata, tool filtering, and validation for invalid server
+  definitions. See `docs/adr/0009-mcp-client-foundation.md`.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

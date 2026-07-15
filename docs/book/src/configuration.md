@@ -24,6 +24,16 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `plugins.paths` | string list | `~/.pleiades/plugins` |
 | `plugins.settings` | nested string map | empty |
 | `plugins.sandbox` | boolean | `false` (reserved for a future sandbox runtime) |
+| `mcp.servers.<id>.transport` | `stdio`, `http`, or `streamable-http` | required per server |
+| `mcp.servers.<id>.command` | string | required for `stdio` |
+| `mcp.servers.<id>.args` | string list | empty |
+| `mcp.servers.<id>.env` | string map | empty |
+| `mcp.servers.<id>.url` | string | required for remote transports |
+| `mcp.servers.<id>.auth` | auth source | unset |
+| `mcp.servers.<id>.enabled` | boolean | `true` |
+| `mcp.servers.<id>.timeout_secs` | integer | `30` |
+| `mcp.servers.<id>.tool_allowlist` | string list | empty |
+| `mcp.servers.<id>.tool_denylist` | string list | empty |
 | `permissions.always_allow` | string list | empty |
 | `permissions.always_deny` | string list | empty |
 | `permissions.rules` | array of permission rules | empty |
@@ -47,6 +57,32 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `agent.auto_edit` | boolean | `false` |
 
 Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.
+
+MCP servers are configured under `mcp.servers`. Stdio servers define a command,
+arguments, and optional environment variables:
+
+```toml
+[mcp.servers.filesystem]
+transport = "stdio"
+command = "mcp-server-filesystem"
+args = ["."]
+timeout_secs = 30
+tool_allowlist = ["read_file", "list_directory"]
+```
+
+Remote servers use `http` or `streamable-http` and may point authentication at
+environment variables. Pleiades stores the variable names, not token values:
+
+```toml
+[mcp.servers.remote-docs]
+transport = "streamable-http"
+url = "https://example.test/mcp"
+timeout_secs = 30
+
+[mcp.servers.remote-docs.auth]
+type = "bearer"
+token_env = "REMOTE_DOCS_MCP_TOKEN"
+```
 
 The special `providers.openai-subscription` entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with `pleiades auth status`. Run `pleiades setup` instead of editing this entry manually.
 

@@ -51,6 +51,8 @@ event so the UI can show why the agent stopped.
 - `pleiades-agent-engine` — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.
 - `pleiades-agent-permissions` — structured permission rules, shell command
   clause parsing, path escape checks, and deny-first decisions.
+- `pleiades-agent-mcp` — MCP JSON-RPC protocol types, server definitions,
+  redacted status reporting, and stdio client primitives.
 - `pleiades-agent-tui` — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.
 - `pleiades-agent-providers` — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.
 - `pleiades-agent-tools` — confined filesystem/search/diff tools and sandboxed command execution.

@@ -11,6 +11,7 @@ pub fn validate(config: &Config) -> Result<(), Vec<FieldError>> {
     validate_display(&config.display, &mut errors);
     validate_agent(&config.agent, &mut errors);
     validate_plugins(&config.plugins, &mut errors);
+    validate_mcp(&config.mcp, &mut errors);
     validate_permissions(&config.permissions, &mut errors);
 
     if errors.is_empty() {
@@ -160,6 +161,94 @@ fn validate_agent(agent: &crate::types::AgentConfig, errors: &mut Vec<FieldError
 fn validate_plugins(_plugins: &crate::types::PluginConfig, _errors: &mut Vec<FieldError>) {
     // Plugin validation is minimal since plugins are loaded dynamically.
     // Plugin path existence is validated at runtime.
+}
+
+fn validate_mcp(mcp: &crate::types::McpConfig, errors: &mut Vec<FieldError>) {
+    for (id, server) in &mcp.servers {
+        if id.trim().is_empty() {
+            errors.push(FieldError {
+                field: "mcp.servers".to_string(),
+                message: "MCP server ID cannot be empty".to_string(),
+            });
+        }
+
+        if server.timeout_secs == 0 {
+            errors.push(FieldError {
+                field: format!("mcp.servers.{}.timeout_secs", id),
+                message: "timeout_secs must be greater than 0".to_string(),
+            });
+        }
+
+        match &server.transport {
+            crate::types::McpTransportConfig::Stdio { command, .. } => {
+                if command.trim().is_empty() {
+                    errors.push(FieldError {
+                        field: format!("mcp.servers.{}.command", id),
+                        message: "stdio MCP server command cannot be empty".to_string(),
+                    });
+                }
+            }
+            crate::types::McpTransportConfig::Http { url, auth }
+            | crate::types::McpTransportConfig::StreamableHttp { url, auth } => {
+                if !url.starts_with("http://") && !url.starts_with("https://") {
+                    errors.push(FieldError {
+                        field: format!("mcp.servers.{}.url", id),
+                        message: "MCP server URL must start with http:// or https://".to_string(),
+                    });
+                }
+                validate_mcp_auth(id, auth, errors);
+            }
+        }
+
+        for tool in &server.tool_allowlist {
+            if server.tool_denylist.contains(tool) {
+                errors.push(FieldError {
+                    field: format!("mcp.servers.{}.tool_allowlist", id),
+                    message: format!("MCP tool '{}' is both allowed and denied", tool),
+                });
+            }
+        }
+    }
+}
+
+fn validate_mcp_auth(
+    id: &str,
+    auth: &Option<crate::types::McpAuthConfig>,
+    errors: &mut Vec<FieldError>,
+) {
+    let Some(auth) = auth else {
+        return;
+    };
+
+    match auth {
+        crate::types::McpAuthConfig::Bearer { token_env } => {
+            if token_env.trim().is_empty() {
+                errors.push(FieldError {
+                    field: format!("mcp.servers.{}.auth.token_env", id),
+                    message: "MCP bearer token_env cannot be empty".to_string(),
+                });
+            }
+        }
+        crate::types::McpAuthConfig::OAuth {
+            client_id_env,
+            token_env,
+        } => {
+            if let Some(client_id_env) = client_id_env {
+                if client_id_env.trim().is_empty() {
+                    errors.push(FieldError {
+                        field: format!("mcp.servers.{}.auth.client_id_env", id),
+                        message: "MCP OAuth client_id_env cannot be empty".to_string(),
+                    });
+                }
+            }
+            if token_env.trim().is_empty() {
+                errors.push(FieldError {
+                    field: format!("mcp.servers.{}.auth.token_env", id),
+                    message: "MCP OAuth token_env cannot be empty".to_string(),
+                });
+            }
+        }
+    }
 }
 
 fn validate_permissions(
@@ -387,6 +476,82 @@ mod tests {
                 .unwrap_err()
                 .iter()
                 .any(|error| error.field == "permissions.rules")
+        );
+    }
+
+    #[test]
+    fn test_invalid_mcp_stdio_command() {
+        let mut config = make_valid_config();
+        config.mcp.servers.insert(
+            "broken".to_string(),
+            McpServerConfig {
+                transport: McpTransportConfig::Stdio {
+                    command: " ".to_string(),
+                    args: Vec::new(),
+                    env: std::collections::HashMap::new(),
+                },
+                ..McpServerConfig::default()
+            },
+        );
+
+        let result = validate(&config);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .iter()
+                .any(|error| error.field == "mcp.servers.broken.command")
+        );
+    }
+
+    #[test]
+    fn test_invalid_mcp_http_url() {
+        let mut config = make_valid_config();
+        config.mcp.servers.insert(
+            "remote".to_string(),
+            McpServerConfig {
+                transport: McpTransportConfig::Http {
+                    url: "ftp://example.test".to_string(),
+                    auth: None,
+                },
+                ..McpServerConfig::default()
+            },
+        );
+
+        let result = validate(&config);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .iter()
+                .any(|error| error.field == "mcp.servers.remote.url")
+        );
+    }
+
+    #[test]
+    fn test_mcp_overlapping_tool_filters() {
+        let mut config = make_valid_config();
+        config.mcp.servers.insert(
+            "filtered".to_string(),
+            McpServerConfig {
+                transport: McpTransportConfig::Stdio {
+                    command: "server".to_string(),
+                    args: Vec::new(),
+                    env: std::collections::HashMap::new(),
+                },
+                tool_allowlist: vec!["read".to_string()],
+                tool_denylist: vec!["read".to_string()],
+                ..McpServerConfig::default()
+            },
+        );
+
+        let result = validate(&config);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .iter()
+                .any(|error| error.field == "mcp.servers.filtered.tool_allowlist")
         );
     }
 
