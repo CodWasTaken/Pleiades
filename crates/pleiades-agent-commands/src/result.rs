@@ -68,6 +68,22 @@ pub enum AppEffect {
     LoadSession(String),
     /// Save the current session.
     SaveSession,
+    /// List saved sessions.
+    ListSessions,
+    /// Search saved sessions.
+    SearchSessions(String),
+    /// Show one saved session.
+    ShowSession(String),
+    /// Rename a saved session.
+    RenameSession { id: String, name: String },
+    /// Fork a saved session, or the current session when no id is supplied.
+    ForkSession(Option<String>),
+    /// Delete a saved session.
+    DeleteSession(String),
+    /// Export a saved session.
+    ExportSession { id: String, format: String },
+    /// Enable or disable ephemeral persistence for this live process.
+    SetEphemeralSession(bool),
     /// Create a checkpoint from the live runtime state.
     CreateCheckpoint(Option<String>),
     /// List saved checkpoints.

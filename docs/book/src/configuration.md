@@ -44,6 +44,7 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `session.history_dir` | string? | unset |
 | `session.max_concurrent` | integer | `10` |
 | `session.compress_history` | boolean | `false` |
+| `session.ephemeral` | boolean | `false` |
 | `display.style` | `plain`, `rich`, or `minimal` | `rich` |
 | `display.syntax_highlighting` | boolean | `true` |
 | `display.show_token_usage`, `display.show_timing` | boolean | `false` |

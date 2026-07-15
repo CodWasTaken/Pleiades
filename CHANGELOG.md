@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `/project run <recipe>`, and `/project verify`. Recipes are detected from
   Rust and Node project markers and can be overridden in
   `.pleiades/project.toml`.
+- Expanded session management with searchable session metadata, unique-prefix
+  resolution, rename, fork, resume guidance, export rendering, and
+  process-local ephemeral mode through `/session ...` and
+  `pleiades session ...`.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

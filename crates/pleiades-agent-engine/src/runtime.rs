@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 use crate::checkpoint::{CheckpointRecord, CheckpointStore};
 use crate::context::{CompressionRecord, ContextAccountant, ContextPin, ContextReport, make_pin};
 use crate::loop_detector::{DoomLoopDetector, LoopSignal};
+use crate::session::SessionInfo;
 use crate::verification::{VerificationReport, VerificationScope, VerificationService};
 use crate::{Engine, SessionStore};
 
@@ -1546,6 +1547,152 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
                 }
             }
         }
+        AppEffect::ListSessions => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.session_store.list() {
+                    Ok(sessions) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(sessions_document("Sessions", &sessions)),
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::SearchSessions(query) => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.session_store.search(&query) {
+                    Ok(sessions) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(sessions_document(
+                                &format!("Session search: {query}"),
+                                &sessions,
+                            )),
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::ShowSession(id) => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.session_store.load(&id) {
+                    Ok(conversation) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(session_document(&conversation)),
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::RenameSession { id, name } => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.session_store.rename(&id, name) {
+                    Ok(conversation) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Success,
+                                message: format!("Renamed session {}", conversation.id),
+                            }),
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::ForkSession(id) => {
+            if let Some(ctx) = state.context.as_mut() {
+                let fork_result = match id {
+                    Some(id) => ctx.session_store.fork(&id),
+                    None => ctx.session_store.fork_conversation(&ctx.conversation),
+                };
+                match fork_result {
+                    Ok(conversation) => {
+                        ctx.conversation = conversation;
+                        send_event(
+                            state.events,
+                            AgentEvent::SessionReady {
+                                id: ctx.conversation.id.clone(),
+                                history: ctx.conversation.messages.clone(),
+                            },
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::DeleteSession(id) => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.session_store.delete(&id) {
+                    Ok(()) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Success,
+                                message: format!("Deleted session {id}"),
+                            }),
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::ExportSession { id, format } => {
+            if let Some(ctx) = state.context.as_ref() {
+                let exported = if format == "json" {
+                    ctx.session_store.export_json(&id)
+                } else {
+                    ctx.session_store.export_markdown(&id)
+                };
+                match exported {
+                    Ok(content) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(
+                                RenderableDocument::new(format!("Session export: {id}"))
+                                    .section(format, content),
+                            ),
+                        )
+                        .await;
+                    }
+                    Err(e) => send_event(state.events, AgentEvent::Error(e.to_string())).await,
+                }
+            }
+        }
+        AppEffect::SetEphemeralSession(enabled) => {
+            state.config.session.ephemeral = enabled;
+            if let Some(ctx) = state.context.as_mut() {
+                ctx.set_config(state.config.clone(), *state.mode);
+                ctx.session_store = SessionStore::from_config(state.config);
+            }
+            send_event(
+                state.events,
+                AgentEvent::Notify(Notification {
+                    level: if enabled {
+                        NotificationLevel::Warning
+                    } else {
+                        NotificationLevel::Success
+                    },
+                    message: if enabled {
+                        "Ephemeral session enabled; saves are disabled for this process".to_string()
+                    } else {
+                        "Ephemeral session disabled; saves are enabled".to_string()
+                    },
+                }),
+            )
+            .await;
+        }
         AppEffect::CreateCheckpoint(name) => {
             if state.active.is_none() {
                 if let Some(ctx) = state.context.as_ref() {
@@ -2426,6 +2573,97 @@ fn project_commands_document(
         );
     }
     document
+}
+
+fn sessions_document(title: &str, sessions: &[SessionInfo]) -> RenderableDocument {
+    let mut document = RenderableDocument::new(title);
+    if sessions.is_empty() {
+        document.push_section("No sessions", "No saved sessions matched.");
+        return document;
+    }
+    for session in sessions {
+        let title = session.metadata.title.as_deref().unwrap_or("Untitled");
+        let provider = session.metadata.provider.as_deref().unwrap_or("?");
+        let model = session.metadata.model.as_deref().unwrap_or("?");
+        let tokens = session
+            .metadata
+            .total_tokens
+            .map(|tokens| tokens.to_string())
+            .unwrap_or_else(|| "?".to_string());
+        document.push_section(
+            format!(
+                "{} · {}",
+                short_session_id(&session.id),
+                session.metadata.updated_at.format("%Y-%m-%d %H:%M")
+            ),
+            format!(
+                "{title}\nProvider: {provider}\nModel: {model}\nTokens: {tokens}\nTags: {}",
+                if session.metadata.tags.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    session.metadata.tags.join(", ")
+                }
+            ),
+        );
+    }
+    document
+}
+
+fn session_document(conversation: &Conversation) -> RenderableDocument {
+    let mut document =
+        RenderableDocument::new(format!("Session {}", short_session_id(&conversation.id)));
+    document.push_section("ID", conversation.id.clone());
+    document.push_section(
+        "Title",
+        conversation
+            .metadata
+            .title
+            .clone()
+            .unwrap_or_else(|| "Untitled".to_string()),
+    );
+    document.push_section(
+        "Metadata",
+        format!(
+            "Created: {}\nUpdated: {}\nProvider: {}\nModel: {}\nTokens: {}\nTags: {}",
+            conversation
+                .metadata
+                .created_at
+                .format("%Y-%m-%d %H:%M UTC"),
+            conversation
+                .metadata
+                .updated_at
+                .format("%Y-%m-%d %H:%M UTC"),
+            conversation.metadata.provider.as_deref().unwrap_or("?"),
+            conversation.metadata.model.as_deref().unwrap_or("?"),
+            conversation
+                .metadata
+                .total_tokens
+                .map(|tokens| tokens.to_string())
+                .unwrap_or_else(|| "?".to_string()),
+            if conversation.metadata.tags.is_empty() {
+                "(none)".to_string()
+            } else {
+                conversation.metadata.tags.join(", ")
+            }
+        ),
+    );
+    document.push_section("Messages", conversation.messages.len().to_string());
+    for message in conversation.messages.iter().rev().take(8).rev() {
+        let text = message.text_content();
+        document.push_section(
+            format!("{:?}", message.role).to_lowercase(),
+            if text.chars().count() > 500 {
+                format!("{}…", text.chars().take(500).collect::<String>())
+            } else {
+                text
+            },
+        );
+    }
+    document
+}
+
+fn short_session_id(id: &str) -> &str {
+    id.get(..8).unwrap_or(id)
 }
 
 fn checkpoint_label(record: &CheckpointRecord) -> String {
