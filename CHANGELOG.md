@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   install disabled, cannot be enabled until trusted, expose detailed trust
   reports through `/plugins info` and `pleiades plugin info`, and support
   `/plugins trust|untrust` plus `pleiades plugin trust|untrust`.
+- Added reusable skills loaded from global and project-local TOML files, with
+  `/skills ...` workspace commands, matching `pleiades skills ...` CLI
+  commands, and engine system-prompt injection for enabled skills.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

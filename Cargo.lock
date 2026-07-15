@@ -1570,6 +1570,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "toml",
  "tracing",
  "uuid",
 ]
@@ -1696,8 +1697,10 @@ dependencies = [
  "pleiades-agent-permissions",
  "pleiades-agent-plugins",
  "pleiades-agent-providers",
+ "serde",
  "tempfile",
  "tokio",
+ "toml",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pleiades_agent_core::conversation::{Conversation, Message, MessageRole};
@@ -9,8 +10,17 @@ use pleiades_agent_core::provider::{ChatRequest, Provider, StreamEvent};
 use pleiades_agent_core::tool::{PermissionLevel, Tool, ToolContext};
 
 use pleiades_agent_config::types::Config;
+use serde::Deserialize;
 
 use crate::memory::MemoryManager;
+
+#[derive(Debug, Deserialize)]
+struct EngineSkillFile {
+    name: String,
+    instructions: String,
+    #[serde(default)]
+    enabled: bool,
+}
 
 /// The main engine that orchestrates AI interactions.
 ///
@@ -497,21 +507,25 @@ impl Engine {
     /// Uses the conversation-configured prompt when present, otherwise falls
     /// back to the built-in default assistant prompt from the prompt library.
     fn resolve_system_prompt(&self, conversation: &Conversation) -> Option<String> {
-        if let Some(existing) = &conversation.config.system_prompt {
+        let base = if let Some(existing) = &conversation.config.system_prompt {
             if !existing.trim().is_empty() {
-                return Some(existing.clone());
+                Some(existing.clone())
+            } else {
+                None
             }
-        }
-        let lib = pleiades_agent_prompts::PromptLibrary::with_builtins();
-        let mut vars = std::collections::HashMap::new();
-        vars.insert("os".to_string(), std::env::consts::OS.to_string());
-        vars.insert(
-            "cwd".to_string(),
-            std::env::current_dir()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| ".".to_string()),
-        );
-        lib.render("default-assistant", &vars).ok()
+        } else {
+            let lib = pleiades_agent_prompts::PromptLibrary::with_builtins();
+            let mut vars = std::collections::HashMap::new();
+            vars.insert("os".to_string(), std::env::consts::OS.to_string());
+            vars.insert(
+                "cwd".to_string(),
+                std::env::current_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| ".".to_string()),
+            );
+            lib.render("default-assistant", &vars).ok()
+        }?;
+        Some(append_enabled_skills(base))
     }
 
     /// Emit an event if a sender is configured.
@@ -519,5 +533,100 @@ impl Engine {
         if let Some(sender) = &self.event_sender {
             let _ = sender.try_send(event);
         }
+    }
+}
+
+fn append_enabled_skills(mut prompt: String) -> String {
+    let skills = enabled_skill_context();
+    if skills.trim().is_empty() {
+        return prompt;
+    }
+    prompt.push_str("\n\n[Enabled Skills]\n");
+    prompt.push_str(&skills);
+    prompt
+}
+
+fn enabled_skill_context() -> String {
+    let mut roots = Vec::new();
+    if let Some(config_dir) = dirs::config_dir() {
+        roots.push(config_dir.join("pleiades").join("skills"));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd.join(".pleiades").join("skills"));
+    }
+
+    let mut sections = Vec::new();
+    for root in roots {
+        sections.extend(read_enabled_skills(&root));
+    }
+    sections.sort_by(|left, right| left.0.cmp(&right.0));
+    sections
+        .into_iter()
+        .map(|(name, instructions)| format!("## {name}\n{instructions}"))
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn read_enabled_skills(root: &Path) -> Vec<(String, String)> {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+    let mut skills = Vec::new();
+    for entry in entries.flatten() {
+        let path: PathBuf = entry.path();
+        if !path
+            .extension()
+            .is_some_and(|extension| extension == "toml")
+        {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(skill) = toml::from_str::<EngineSkillFile>(&text) else {
+            continue;
+        };
+        if skill.enabled && !skill.instructions.trim().is_empty() {
+            skills.push((skill.name, skill.instructions));
+        }
+    }
+    skills
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pleiades_agent_core::conversation::ConversationConfig;
+
+    #[test]
+    fn resolve_system_prompt_appends_enabled_project_skills() {
+        let original = std::env::current_dir().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_current_dir(temp.path()).unwrap();
+        std::fs::create_dir_all(".pleiades/skills").unwrap();
+        std::fs::write(
+            ".pleiades/skills/review.toml",
+            r#"
+name = "review"
+description = "Review guidance"
+instructions = "Always inspect the diff before reporting completion."
+enabled = true
+"#,
+        )
+        .unwrap();
+
+        let engine = Engine::new(Config::default());
+        let mut conversation = Conversation::new("test");
+        conversation.config = ConversationConfig {
+            system_prompt: Some("Base prompt".to_string()),
+            ..ConversationConfig::default()
+        };
+        let prompt = engine.resolve_system_prompt(&conversation).unwrap();
+        std::env::set_current_dir(original).unwrap();
+
+        assert!(prompt.contains("Base prompt"));
+        assert!(prompt.contains("[Enabled Skills]"));
+        assert!(prompt.contains("Always inspect the diff"));
     }
 }

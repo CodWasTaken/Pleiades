@@ -14,7 +14,9 @@ pleiades-agent-mcp = { path = "../pleiades-agent-mcp", version = "2.0.0" }
 pleiades-agent-permissions = { path = "../pleiades-agent-permissions", version = "2.0.0" }
 pleiades-agent-plugins = { path = "../pleiades-agent-plugins", version = "2.0.0" }
 pleiades-agent-providers = { path = "../pleiades-agent-providers", version = "2.0.0" }
+serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["sync"] }
+toml = "0.8"
 
 [dev-dependencies]
 tempfile = "3"

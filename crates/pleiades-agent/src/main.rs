@@ -114,6 +114,10 @@ enum Commands {
     #[command(subcommand)]
     Mcp(McpCommand),
 
+    /// Manage reusable skills
+    #[command(subcommand)]
+    Skills(SkillsCommand),
+
     /// Manage permission rules
     #[command(subcommand)]
     Permissions(PermissionsCommand),
@@ -508,6 +512,24 @@ enum McpCommand {
         /// Optional MCP server ID
         id: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum SkillsCommand {
+    /// List skills
+    List,
+    /// Show a skill
+    Show { name: String },
+    /// Create a project-local skill
+    Create { name: String },
+    /// Print the file path to edit
+    Edit { name: String },
+    /// Enable a skill
+    Enable { name: String },
+    /// Disable a skill
+    Disable { name: String },
+    /// Reload skill definitions
+    Reload,
 }
 
 #[derive(Subcommand)]
@@ -2063,6 +2085,134 @@ fn handle_mcp_live_only(action: &str, id: Option<&str>) {
     }
 }
 
+fn skill_service(loader: &ConfigLoader) -> pleiades_agent_services::SkillService {
+    pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    )
+    .skill()
+}
+
+fn handle_skills_list(loader: &ConfigLoader) {
+    match skill_service(loader).list() {
+        Ok(skills) => {
+            if skills.is_empty() {
+                println!("No skills configured.");
+                println!("Run `pleiades skills create <name>` to create a project-local skill.");
+                return;
+            }
+            for skill in skills {
+                println!(
+                    "  {:<24}  {:<8}  {:<8}  {}",
+                    skill.name,
+                    skill.scope,
+                    if skill.enabled { "enabled" } else { "disabled" },
+                    skill.description
+                );
+            }
+        }
+        Err(error) => {
+            eprintln!("Error listing skills: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_skills_show(loader: &ConfigLoader, name: &str) {
+    match skill_service(loader).show(name) {
+        Ok(skill) => {
+            println!("Skill: {}", skill.name);
+            println!("  Description: {}", skill.description);
+            println!("  Scope:       {}", skill.scope);
+            println!("  Enabled:     {}", skill.enabled);
+            println!("  Permissions: {}", cli_list_or_none(&skill.permissions));
+            println!("  Path:        {}", skill.path.display());
+            println!();
+            println!("{}", skill.instructions);
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_skills_create(loader: &ConfigLoader, name: &str) {
+    match skill_service(loader).create(name) {
+        Ok(skill) => {
+            println!(
+                "\x1b[1;32m✓\x1b[0m Created skill `{}` at {}",
+                skill.name,
+                skill.path.display()
+            );
+            println!(
+                "Edit the instructions, then run `pleiades skills enable {}`.",
+                skill.name
+            );
+        }
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Create failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_skills_edit(loader: &ConfigLoader, name: &str) {
+    let service = skill_service(loader);
+    let skill = match service.show(name) {
+        Ok(skill) => skill,
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    };
+
+    match std::env::var("EDITOR") {
+        Ok(editor) if !editor.trim().is_empty() => {
+            match std::process::Command::new(editor).arg(&skill.path).status() {
+                Ok(status) if status.success() => println!("Edited skill `{name}`."),
+                Ok(status) => {
+                    eprintln!("Editor exited with status {status}");
+                    std::process::exit(status.code().unwrap_or(1));
+                }
+                Err(error) => {
+                    eprintln!("Could not start editor: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => {
+            println!("Set $EDITOR to edit automatically, or open this file:");
+            println!("{}", skill.path.display());
+        }
+    }
+}
+
+fn handle_skills_enable(loader: &ConfigLoader, name: &str) {
+    match skill_service(loader).enable(name) {
+        Ok(()) => println!("\x1b[1;32m✓\x1b[0m Skill enabled: {name}"),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Enable failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_skills_disable(loader: &ConfigLoader, name: &str) {
+    match skill_service(loader).disable(name) {
+        Ok(()) => println!("\x1b[1;32m✓\x1b[0m Skill disabled: {name}"),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Disable failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_skills_reload() {
+    println!("Skills are reloaded automatically by headless commands.");
+    println!("The live workspace reloads skills through `/skills reload`.");
+}
+
 fn cli_list_or_all(values: &[String]) -> String {
     if values.is_empty() {
         "all non-denied tools".to_string()
@@ -2970,6 +3120,15 @@ fn main() {
             McpCommand::Restart { id } => handle_mcp_live_only("restart", id.as_deref()),
             McpCommand::Logs { id } => handle_mcp_live_only("logs", id.as_deref()),
             McpCommand::Debug { id } => handle_mcp_live_only("debug", id.as_deref()),
+        },
+        Some(Commands::Skills(cmd)) => match cmd {
+            SkillsCommand::List => handle_skills_list(&loader),
+            SkillsCommand::Show { name } => handle_skills_show(&loader, &name),
+            SkillsCommand::Create { name } => handle_skills_create(&loader, &name),
+            SkillsCommand::Edit { name } => handle_skills_edit(&loader, &name),
+            SkillsCommand::Enable { name } => handle_skills_enable(&loader, &name),
+            SkillsCommand::Disable { name } => handle_skills_disable(&loader, &name),
+            SkillsCommand::Reload => handle_skills_reload(),
         },
         Some(Commands::Permissions(cmd)) => match cmd {
             PermissionsCommand::Show => handle_permissions_show(&loader),

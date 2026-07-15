@@ -10,6 +10,7 @@
 - [Tools and permissions](tools.md)
 - [Plugins and hooks](plugins.md)
 - [MCP servers](mcp.md)
+- [Skills](skills.md)
 - [Prompt templates](prompts.md)
 - [Workflows](workflows.md)
 - [Git integration](git.md)
