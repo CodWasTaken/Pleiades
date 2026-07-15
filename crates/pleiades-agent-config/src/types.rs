@@ -300,6 +300,9 @@ pub struct AgentConfig {
     /// Maximum tool call iterations.
     #[serde(default = "default_tool_iters")]
     pub max_tool_iterations: u32,
+    /// Maximum identical failures before the runtime stops the task.
+    #[serde(default = "default_max_repeats")]
+    pub max_repeats: u32,
     /// Allow agent to edit files without confirmation.
     #[serde(default)]
     pub auto_edit: bool,
@@ -309,6 +312,10 @@ fn default_tool_iters() -> u32 {
     25
 }
 
+fn default_max_repeats() -> u32 {
+    3
+}
+
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
@@ -316,6 +323,7 @@ impl Default for AgentConfig {
             system_prompt_prefix: None,
             default_tools: Vec::new(),
             max_tool_iterations: 25,
+            max_repeats: 3,
             auto_edit: false,
         }
     }

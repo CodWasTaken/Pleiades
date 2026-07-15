@@ -96,6 +96,11 @@ launch background runtime tasks that detect project tooling, inspect Git diff
 state, execute bounded commands, and return structured evidence. Plan mode
 reports planned commands without executing them.
 
+Autonomous tasks include a doom-loop detector keyed by repeated failure
+signals. The first integrated signal is identical tool failure; when it reaches
+`agent.max_repeats`, the runtime emits `TaskFailed` with the repeated-failure
+reason instead of continuing until the global iteration limit.
+
 ### Typed activity
 
 Provider and runtime activity use `AgentActivityKind` and `AgentActivityStatus`, not display strings. Kinds include inspecting, searching, reading, planning, editing, writing, executing, testing, reviewing, and tool. Statuses include queued, running, waiting for approval, completed, failed, and cancelled.

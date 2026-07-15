@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::checkpoint::{CheckpointRecord, CheckpointStore};
 use crate::context::{CompressionRecord, ContextAccountant, ContextPin, ContextReport, make_pin};
+use crate::loop_detector::{DoomLoopDetector, LoopSignal};
 use crate::verification::{VerificationReport, VerificationScope, VerificationService};
 use crate::{Engine, SessionStore};
 
@@ -625,6 +626,7 @@ async fn execute_task(
     .await;
 
     let max_iterations = context.config.agent.max_tool_iterations;
+    let mut loop_detector = DoomLoopDetector::new(context.config.agent.max_repeats as usize);
     for iteration in 0..max_iterations {
         let planning_id = format!("planning-{iteration}");
         send_event(
@@ -914,16 +916,39 @@ async fn execute_task(
                     } else {
                         fail_activity(&events, &call.id, raw.clone()).await;
                     }
+                    let failure_text = (!result.success).then(|| raw.clone());
                     add_tool_result(&mut context.conversation, &call.id, raw, !result.success);
+                    if let Some(failure_text) = failure_text {
+                        let Some(reason) = loop_detector.record(LoopSignal::ToolFailure {
+                            tool: call.name.clone(),
+                            target: target.clone(),
+                            error: failure_text,
+                        }) else {
+                            continue;
+                        };
+                        send_event(&events, AgentEvent::TaskFailed { message: reason }).await;
+                        let _ = context.session_store.save(&context.conversation);
+                        return context;
+                    }
                 }
                 Err(error) => {
-                    fail_activity(&events, &call.id, error.to_string()).await;
+                    let error = error.to_string();
+                    fail_activity(&events, &call.id, error.clone()).await;
                     add_tool_result(
                         &mut context.conversation,
                         &call.id,
                         format!("Error: {error}"),
                         true,
                     );
+                    if let Some(reason) = loop_detector.record(LoopSignal::ToolFailure {
+                        tool: call.name.clone(),
+                        target: target.clone(),
+                        error,
+                    }) {
+                        send_event(&events, AgentEvent::TaskFailed { message: reason }).await;
+                        let _ = context.session_store.save(&context.conversation);
+                        return context;
+                    }
                 }
             }
         }
@@ -2206,6 +2231,7 @@ mod tests {
     #[derive(Clone, Copy)]
     enum MockBehavior {
         ToolThenFinish,
+        RepeatedFailingTool,
         Slow,
     }
 
@@ -2285,6 +2311,23 @@ mod tests {
                         .await
                         .unwrap();
                 }
+                MockBehavior::RepeatedFailingTool => {
+                    sender
+                        .send(StreamEvent::ToolCall {
+                            id: format!("fail-{call}"),
+                            name: "mock-fail".to_string(),
+                            input: serde_json::json!({"path": "src/lib.rs"}),
+                        })
+                        .await
+                        .unwrap();
+                    sender
+                        .send(StreamEvent::Done {
+                            finish_reason: "tool_use".to_string(),
+                            usage: None,
+                        })
+                        .await
+                        .unwrap();
+                }
                 MockBehavior::Slow => {
                     tokio::spawn(async move {
                         tokio::time::sleep(Duration::from_secs(30)).await;
@@ -2297,6 +2340,7 @@ mod tests {
     }
 
     struct MockWriteTool(Arc<AtomicUsize>);
+    struct MockFailTool(Arc<AtomicUsize>);
 
     #[async_trait]
     impl Tool for MockWriteTool {
@@ -2334,6 +2378,42 @@ mod tests {
         }
     }
 
+    #[async_trait]
+    impl Tool for MockFailTool {
+        fn name(&self) -> &str {
+            "mock-fail"
+        }
+        fn description(&self) -> &str {
+            "Fail with the same error"
+        }
+        fn input_schema(&self) -> serde_json::Value {
+            serde_json::json!({"type": "object"})
+        }
+        fn is_readonly(&self) -> bool {
+            false
+        }
+        fn is_concurrency_safe(&self) -> bool {
+            false
+        }
+        fn permission_level(&self) -> PermissionLevel {
+            PermissionLevel::WorkspaceWrite
+        }
+
+        async fn execute(
+            &self,
+            _input: serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> Result<ToolResult, Error> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(ToolResult {
+                success: false,
+                content: String::new(),
+                error: Some("identical failure".to_string()),
+                metadata: None,
+            })
+        }
+    }
+
     fn runtime_with_mock(
         mode: AgentMode,
         behavior: MockBehavior,
@@ -2360,7 +2440,8 @@ mod tests {
             calls: Arc::new(AtomicUsize::new(0)),
             behavior,
         }));
-        engine.register_tool(Box::new(MockWriteTool(executions)));
+        engine.register_tool(Box::new(MockWriteTool(executions.clone())));
+        engine.register_tool(Box::new(MockFailTool(executions)));
         let runtime = AgentRuntime::new(
             config,
             Conversation::new("test-session"),
@@ -2631,6 +2712,34 @@ mod tests {
                 .any(|section| section.heading.contains("passed")
                     && section.body.contains("rustc --version"))
         );
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn repeated_identical_tool_failure_halts_the_task() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) = runtime_with_mock_config(
+            AgentMode::Auto,
+            MockBehavior::RepeatedFailingTool,
+            executions.clone(),
+            |config| {
+                config.agent.max_repeats = 3;
+                config.agent.max_tool_iterations = 10;
+            },
+        );
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::Submit("trigger repeated failure".into()))
+            .await
+            .unwrap();
+        let message = loop {
+            if let AgentEvent::TaskFailed { message } = next_event(&mut handle.events).await {
+                break message;
+            }
+        };
+        assert!(message.contains("repeated 3 times"));
+        assert_eq!(executions.load(Ordering::SeqCst), 3);
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }
 

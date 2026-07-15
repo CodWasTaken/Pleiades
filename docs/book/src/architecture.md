@@ -36,6 +36,10 @@ tooling, inspect the diff, execute bounded checks, and emit structured evidence
 documents so completion reports can distinguish passed, failed, skipped, and
 unverified work.
 
+The runtime records repeated failure signals during autonomous work. Identical
+tool failures are stopped at `agent.max_repeats` with a typed `TaskFailed`
+event so the UI can show why the agent stopped.
+
 ## Crate responsibilities
 
 - `pleiades-agent-core` — provider/tool traits and normalized domain types.

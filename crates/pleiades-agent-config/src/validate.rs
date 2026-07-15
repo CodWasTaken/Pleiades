@@ -143,6 +143,18 @@ fn validate_agent(agent: &crate::types::AgentConfig, errors: &mut Vec<FieldError
             message: "max_tool_iterations too large (max 1000)".to_string(),
         });
     }
+    if agent.max_repeats == 0 {
+        errors.push(FieldError {
+            field: "agent.max_repeats".to_string(),
+            message: "max_repeats must be greater than 0".to_string(),
+        });
+    }
+    if agent.max_repeats > 100 {
+        errors.push(FieldError {
+            field: "agent.max_repeats".to_string(),
+            message: "max_repeats too large (max 100)".to_string(),
+        });
+    }
 }
 
 fn validate_plugins(_plugins: &crate::types::PluginConfig, _errors: &mut Vec<FieldError>) {
@@ -236,6 +248,17 @@ pub fn validate_field(key: &str, value: &str) -> Result<(), String> {
                 return Err("max_tool_iterations too large (max 1000)".to_string());
             }
         }
+        "agent.max_repeats" => {
+            let n: u32 = value
+                .parse()
+                .map_err(|_| "max_repeats must be a positive integer".to_string())?;
+            if n == 0 {
+                return Err("max_repeats must be greater than 0".to_string());
+            }
+            if n > 100 {
+                return Err("max_repeats too large (max 100)".to_string());
+            }
+        }
         _ => {
             if key.starts_with("providers.")
                 && key.ends_with(".base_url")
@@ -324,6 +347,16 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid_max_repeats() {
+        let mut config = make_valid_config();
+        config.agent.max_repeats = 0;
+        let result = validate(&config);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.field == "agent.max_repeats"));
+    }
+
+    #[test]
     fn test_overlapping_permissions() {
         let mut config = make_valid_config();
         config.permissions.always_allow.push("npm".to_string());
@@ -365,5 +398,7 @@ mod tests {
         assert!(validate_field("core.temperature", "-1").is_err());
         assert!(validate_field("display.style", "rich").is_ok());
         assert!(validate_field("display.style", "invalid").is_err());
+        assert!(validate_field("agent.max_repeats", "3").is_ok());
+        assert!(validate_field("agent.max_repeats", "0").is_err());
     }
 }

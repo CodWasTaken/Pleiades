@@ -25,6 +25,11 @@ Every task has a cancellation token. `Ctrl+C` interrupts a provider stream, tool
 
 Messages sent while a task runs enter a FIFO queue. The runtime starts each queued follow-up automatically using the updated conversation and emits queue-count changes for the status bar.
 
+The runtime also stops repeated identical failures before they consume the
+entire tool-iteration budget. `agent.max_repeats` defaults to `3`; when the
+same tool failure repeats that many times, Pleiades emits a clear failure such
+as `Stopping: identical failure ... repeated 3 times` and saves the session.
+
 ## Evidence and persistence
 
 Sessions save after tool iterations, completion, cancellation, explicit `/save`, and shutdown. At completion, the runtime captures the current Git diff and branch state for in-interface review. Model and tool output is bounded on UTF-8 boundaries, while the conversation viewport renders a moving window so unusually large sessions do not monopolize redraw work.

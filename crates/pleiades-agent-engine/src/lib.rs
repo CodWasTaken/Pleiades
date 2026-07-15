@@ -8,6 +8,7 @@ pub mod chat;
 pub mod checkpoint;
 pub mod context;
 pub mod engine;
+pub mod loop_detector;
 pub mod memory;
 pub mod runtime;
 pub mod session;
