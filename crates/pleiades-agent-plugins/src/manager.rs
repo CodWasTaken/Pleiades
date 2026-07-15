@@ -50,15 +50,18 @@ pub struct UpdateOutcome {
 pub struct PluginManager {
     config_home: PathBuf,
     enabled_plugins: BTreeMap<String, bool>,
+    trusted_plugins: BTreeMap<String, bool>,
 }
 
 impl PluginManager {
     pub fn new(config_home: impl Into<PathBuf>) -> Self {
         let config_home = config_home.into();
         let enabled_plugins = Self::load_enabled_state(&config_home);
+        let trusted_plugins = Self::load_trusted_state(&config_home);
         Self {
             config_home,
             enabled_plugins,
+            trusted_plugins,
         }
     }
 
@@ -118,8 +121,8 @@ impl PluginManager {
         let mut registry = self.load_registry()?;
         registry.plugins.insert(plugin_id.clone(), record);
         self.store_registry(&registry)?;
-        self.set_enabled(&plugin_id, Some(true))?;
-        self.enabled_plugins.insert(plugin_id.clone(), true);
+        self.set_enabled(&plugin_id, Some(false))?;
+        self.enabled_plugins.insert(plugin_id.clone(), false);
 
         Ok(InstallOutcome {
             plugin_id,
@@ -221,15 +224,40 @@ impl PluginManager {
         }
         self.store_registry(&registry)?;
         self.set_enabled(plugin_id, None)?;
+        self.set_trusted(plugin_id, None)?;
         self.enabled_plugins.remove(plugin_id);
+        self.trusted_plugins.remove(plugin_id);
         Ok(())
     }
 
     /// Enable a plugin.
     pub fn enable(&mut self, plugin_id: &str) -> Result<(), PluginError> {
-        self.ensure_known(plugin_id)?;
+        let plugin = self.ensure_known(plugin_id)?;
+        if plugin.metadata().kind == PluginKind::External && !self.is_trusted(plugin_id) {
+            return Err(PluginError::CommandFailed(format!(
+                "plugin `{plugin_id}` must be trusted before it can be enabled"
+            )));
+        }
         self.set_enabled(plugin_id, Some(true))?;
         self.enabled_plugins.insert(plugin_id.to_string(), true);
+        Ok(())
+    }
+
+    /// Mark a plugin as explicitly trusted.
+    pub fn trust(&mut self, plugin_id: &str) -> Result<(), PluginError> {
+        self.ensure_known(plugin_id)?;
+        self.set_trusted(plugin_id, Some(true))?;
+        self.trusted_plugins.insert(plugin_id.to_string(), true);
+        Ok(())
+    }
+
+    /// Revoke a plugin trust decision and disable it.
+    pub fn untrust(&mut self, plugin_id: &str) -> Result<(), PluginError> {
+        self.ensure_known(plugin_id)?;
+        self.set_enabled(plugin_id, Some(false))?;
+        self.enabled_plugins.insert(plugin_id.to_string(), false);
+        self.set_trusted(plugin_id, Some(false))?;
+        self.trusted_plugins.insert(plugin_id.to_string(), false);
         Ok(())
     }
 
@@ -241,14 +269,18 @@ impl PluginManager {
         Ok(())
     }
 
-    fn ensure_known(&self, plugin_id: &str) -> Result<(), PluginError> {
-        if self.plugin_registry()?.contains(plugin_id) {
-            Ok(())
-        } else {
-            Err(PluginError::NotFound(format!(
-                "plugin `{plugin_id}` is not installed"
-            )))
-        }
+    pub fn is_trusted(&self, plugin_id: &str) -> bool {
+        self.trusted_plugins
+            .get(plugin_id)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    fn ensure_known(&self, plugin_id: &str) -> Result<PluginEntry, PluginError> {
+        self.plugin_registry()?
+            .get(plugin_id)
+            .cloned()
+            .ok_or_else(|| PluginError::NotFound(format!("plugin `{plugin_id}` is not installed")))
     }
 
     fn discover_plugins(&self) -> Result<PluginRegistry, PluginError> {
@@ -298,6 +330,12 @@ impl PluginManager {
             source: "builtin".to_string(),
             default_enabled: true,
             root: None,
+            requested_paths: Vec::new(),
+            env_vars: Vec::new(),
+            network: None,
+            checksum: None,
+            signature: None,
+            commands: Vec::new(),
         };
         let enabled = self
             .enabled_plugins
@@ -347,26 +385,39 @@ impl PluginManager {
     }
 
     fn set_enabled(&self, plugin_id: &str, enabled: Option<bool>) -> Result<(), PluginError> {
+        self.set_bool_setting("enabledPlugins", plugin_id, enabled)
+    }
+
+    fn set_trusted(&self, plugin_id: &str, trusted: Option<bool>) -> Result<(), PluginError> {
+        self.set_bool_setting("trustedPlugins", plugin_id, trusted)
+    }
+
+    fn set_bool_setting(
+        &self,
+        key: &str,
+        plugin_id: &str,
+        value: Option<bool>,
+    ) -> Result<(), PluginError> {
         let path = self.settings_path();
         let mut settings: serde_json::Value = std::fs::read_to_string(&path)
             .ok()
             .and_then(|c| serde_json::from_str(&c).ok())
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
 
-        let enabled_plugins = settings
+        let entries = settings
             .as_object_mut()
             .unwrap()
-            .entry("enabledPlugins")
+            .entry(key)
             .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
             .as_object_mut()
             .unwrap();
 
-        match enabled {
+        match value {
             Some(val) => {
-                enabled_plugins.insert(plugin_id.to_string(), serde_json::json!(val));
+                entries.insert(plugin_id.to_string(), serde_json::json!(val));
             }
             None => {
-                enabled_plugins.remove(plugin_id);
+                entries.remove(plugin_id);
             }
         }
 
@@ -390,6 +441,31 @@ impl PluginManager {
         let mut map = BTreeMap::new();
         if let Some(enabled) = settings.get("enabledPlugins").and_then(|v| v.as_object()) {
             for (id, val) in enabled {
+                if let Some(state) = val.as_bool() {
+                    map.insert(id.clone(), state);
+                }
+            }
+        }
+        map
+    }
+
+    fn load_trusted_state(config_home: &Path) -> BTreeMap<String, bool> {
+        Self::load_bool_state(config_home, "trustedPlugins")
+    }
+
+    fn load_bool_state(config_home: &Path, key: &str) -> BTreeMap<String, bool> {
+        let path = config_home.join(SETTINGS_FILE);
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => return BTreeMap::new(),
+        };
+        let settings: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => return BTreeMap::new(),
+        };
+        let mut map = BTreeMap::new();
+        if let Some(entries) = settings.get(key).and_then(|v| v.as_object()) {
+            for (id, val) in entries {
                 if let Some(state) = val.as_bool() {
                     map.insert(id.clone(), state);
                 }
@@ -489,7 +565,7 @@ mod tests {
         assert!(plugin.is_some());
         let p = plugin.unwrap();
         assert_eq!(p.name, "my-plugin");
-        assert!(p.enabled);
+        assert!(!p.enabled);
     }
 
     #[test]
@@ -567,6 +643,8 @@ mod tests {
         let p = plugins.iter().find(|p| p.id == plugin_id).unwrap();
         assert!(!p.enabled);
 
+        assert!(manager.enable(plugin_id).is_err());
+        manager.trust(plugin_id).expect("trust should succeed");
         manager.enable(plugin_id).expect("enable should succeed");
         let plugins = manager.list_plugins().expect("list should succeed");
         let p = plugins.iter().find(|p| p.id == plugin_id).unwrap();
@@ -615,9 +693,13 @@ mod tests {
         manager
             .install(tmp.path().join("alpha").to_str().unwrap())
             .expect("install alpha");
+        manager.trust("alpha-external").expect("trust alpha");
+        manager.enable("alpha-external").expect("enable alpha");
         manager
             .install(tmp.path().join("beta").to_str().unwrap())
             .expect("install beta");
+        manager.trust("beta-external").expect("trust beta");
+        manager.enable("beta-external").expect("enable beta");
 
         let registry = manager.plugin_registry().expect("registry");
         let hooks = registry.aggregated_hooks();

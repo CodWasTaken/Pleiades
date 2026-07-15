@@ -19,6 +19,10 @@ impl PluginEntry {
         self.definition.hooks()
     }
 
+    pub fn lifecycle(&self) -> &crate::manifest::PluginLifecycle {
+        self.definition.lifecycle()
+    }
+
     pub fn tools(&self) -> &[PluginTool] {
         self.definition.tools()
     }

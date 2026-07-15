@@ -366,22 +366,45 @@ impl CommandHandler for PluginInfoHandler {
             .first()
             .ok_or_else(|| Error::invalid_input("usage: /plugins info <id>"))?;
         let plugin = context.services().plugin().info(id)?;
-        Ok(CommandResult::RenderDocument(
-            crate::result::RenderableDocument::new(plugin.name)
-                .section("ID", plugin.id)
-                .section("Version", plugin.version)
-                .section("Source", plugin.source)
-                .section("Description", plugin.description)
-                .section(
-                    "Permissions",
-                    if plugin.permissions.is_empty() {
-                        "No executable hooks or tools requested".to_string()
-                    } else {
-                        plugin.permissions.join("\n")
-                    },
-                ),
-        ))
+        Ok(CommandResult::RenderDocument(plugin_trust_document(plugin)))
     }
+}
+
+fn plugin_trust_document(
+    plugin: pleiades_agent_services::PluginReport,
+) -> crate::result::RenderableDocument {
+    let accept = format!(
+        "Run /plugins trust {} to accept this plugin before enabling it.",
+        plugin.id
+    );
+    crate::result::RenderableDocument::new(plugin.name)
+        .section("ID", plugin.id)
+        .section("Version", plugin.version)
+        .section("Source", plugin.source)
+        .section("Description", plugin.description)
+        .section("Trust required", plugin.trust_required.to_string())
+        .section("Trusted", plugin.trusted.to_string())
+        .section(
+            "Permissions",
+            if plugin.permissions.is_empty() {
+                "No executable hooks or tools requested".to_string()
+            } else {
+                plugin.permissions.join("\n")
+            },
+        )
+        .section("Executable hooks", list_or_none(&plugin.executable_hooks))
+        .section(
+            "Lifecycle commands",
+            list_or_none(&plugin.lifecycle_commands),
+        )
+        .section("Tools", list_or_none(&plugin.tools))
+        .section("Custom commands", list_or_none(&plugin.custom_commands))
+        .section("Requested paths", list_or_none(&plugin.requested_paths))
+        .section("Network access", plugin.network_access)
+        .section("Environment variables", list_or_none(&plugin.env_vars))
+        .section("Checksum", plugin.checksum.as_deref().unwrap_or("(none)"))
+        .section("Signature", plugin.signature.as_deref().unwrap_or("(none)"))
+        .section("Accept", accept)
 }
 
 enum PluginMutation {
@@ -411,6 +434,10 @@ impl CommandHandler for PluginMutationHandler {
                 format!("Uninstalled `{target}`")
             }
             PluginMutation::Enable => {
+                let report = service.info(target)?;
+                if report.trust_required && !report.trusted {
+                    return Ok(CommandResult::RenderDocument(plugin_trust_document(report)));
+                }
                 service.enable(target)?;
                 format!("Enabled `{target}`")
             }
@@ -429,6 +456,35 @@ impl CommandHandler for PluginMutationHandler {
         Ok(CommandResult::notification(
             crate::result::NotificationLevel::Success,
             message,
+        ))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PluginTrustAction {
+    Trust,
+    Untrust,
+}
+
+struct PluginTrustHandler(PluginTrustAction);
+
+#[async_trait]
+impl CommandHandler for PluginTrustHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let id = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /plugins trust|untrust <id>"))?;
+        match self.0 {
+            PluginTrustAction::Trust => context.services().plugin().trust(id)?,
+            PluginTrustAction::Untrust => context.services().plugin().untrust(id)?,
+        }
+        let action = match self.0 {
+            PluginTrustAction::Trust => "trusted",
+            PluginTrustAction::Untrust => "untrusted and disabled",
+        };
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            format!("Plugin `{id}` {action}"),
         ))
     }
 }
@@ -1165,6 +1221,27 @@ fn register_plugin_family(r: &mut crate::registry::CommandRegistry) {
         .build(),
     )
     .ok();
+    for (name, action) in [
+        ("trust", PluginTrustAction::Trust),
+        ("untrust", PluginTrustAction::Untrust),
+    ] {
+        r.register(
+            CommandSpec::builder(
+                vec!["plugins", name],
+                "Accept or revoke plugin trust",
+                PluginTrustHandler(action),
+            )
+            .arguments(vec![
+                ArgumentSpec::required("id", "Plugin identifier")
+                    .with_completer(CompletionSource::Plugin),
+            ])
+            .category(CommandCategory::Extension)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Dangerous)
+            .build(),
+        )
+        .ok();
+    }
     r.register(
         CommandSpec::builder(
             vec!["plugins", "reload"],
@@ -2012,6 +2089,8 @@ mod tests {
             "plugins enable",
             "plugins disable",
             "plugins permissions",
+            "plugins trust",
+            "plugins untrust",
             "plugins reload",
             "mcp",
             "mcp list",

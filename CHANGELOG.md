@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   server reports are redacted, enable/disable/remove persist through the shared
   service layer, and tool commands report configured exposure filters without
   claiming live schema discovery.
+- Added plugin trust metadata parsing and enforcement. External plugins now
+  install disabled, cannot be enabled until trusted, expose detailed trust
+  reports through `/plugins info` and `pleiades plugin info`, and support
+  `/plugins trust|untrust` plus `pleiades plugin trust|untrust`.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,
