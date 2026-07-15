@@ -10,7 +10,23 @@ pub struct MemoryEntry {
     pub content: String,
     pub source: String,
     pub timestamp: u64,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub uitype: String,
+    #[serde(default = "default_confidence")]
+    pub confidence: f32,
+    #[serde(default)]
+    pub last_used: Option<u64>,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub generated: bool,
     pub metadata: Option<serde_json::Value>,
+}
+
+fn default_confidence() -> f32 {
+    1.0
 }
 
 /// Abstract memory storage interface.
@@ -18,6 +34,7 @@ pub trait MemoryStore: Send + Sync {
     fn insert(&mut self, entry: MemoryEntry) -> Result<(), Error>;
     fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error>;
     fn recent(&self, limit: usize) -> Result<Vec<MemoryEntry>, Error>;
+    fn delete(&mut self, id: &str) -> Result<bool, Error>;
     fn clear(&mut self) -> Result<(), Error>;
 }
 
@@ -76,6 +93,12 @@ impl MemoryStore for InMemoryStore {
         entries.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         entries.truncate(limit);
         Ok(entries)
+    }
+
+    fn delete(&mut self, id: &str) -> Result<bool, Error> {
+        let before = self.entries.len();
+        self.entries.retain(|entry| entry.id != id);
+        Ok(self.entries.len() != before)
     }
 
     fn clear(&mut self) -> Result<(), Error> {
@@ -195,6 +218,17 @@ impl MemoryStore for FileStore {
         entries.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         entries.truncate(limit);
         Ok(entries)
+    }
+
+    fn delete(&mut self, id: &str) -> Result<bool, Error> {
+        let before = self.entries.len();
+        self.entries.retain(|entry| entry.id != id);
+        let changed = self.entries.len() != before;
+        if changed {
+            self.dirty = true;
+            self.flush()?;
+        }
+        Ok(changed)
     }
 
     fn clear(&mut self) -> Result<(), Error> {

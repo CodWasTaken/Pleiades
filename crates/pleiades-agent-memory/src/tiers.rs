@@ -6,6 +6,31 @@ use pleiades_agent_core::error::Error;
 
 use crate::store::{FileStore, InMemoryStore, MemoryEntry, MemoryStore};
 
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn entry(content: impl Into<String>, source: impl Into<String>, scope: &str) -> MemoryEntry {
+    MemoryEntry {
+        id: uuid::Uuid::new_v4().to_string(),
+        content: content.into(),
+        source: source.into(),
+        timestamp: now_secs(),
+        scope: scope.to_string(),
+        uitype: "text".to_string(),
+        confidence: 1.0,
+        last_used: None,
+        project: std::env::current_dir()
+            .ok()
+            .map(|path| path.display().to_string()),
+        generated: false,
+        metadata: None,
+    }
+}
+
 /// Working memory for the current conversation context.
 pub struct WorkingMemory {
     messages: Vec<Message>,
@@ -66,17 +91,10 @@ impl SessionMemory {
     }
 
     pub fn add(&self, content: impl Into<String>, source: impl Into<String>) -> Result<(), Error> {
-        let entry = MemoryEntry {
-            id: uuid::Uuid::new_v4().to_string(),
-            content: content.into(),
-            source: source.into(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            metadata: None,
-        };
-        self.store.lock().unwrap().insert(entry)
+        self.store
+            .lock()
+            .unwrap()
+            .insert(entry(content, source, "session"))
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
@@ -89,6 +107,10 @@ impl SessionMemory {
 
     pub fn clear(&self) -> Result<(), Error> {
         self.store.lock().unwrap().clear()
+    }
+
+    pub fn delete(&self, id: &str) -> Result<bool, Error> {
+        self.store.lock().unwrap().delete(id)
     }
 }
 
@@ -124,17 +146,10 @@ impl ProjectMemory {
     }
 
     pub fn add(&self, content: impl Into<String>, source: impl Into<String>) -> Result<(), Error> {
-        let entry = MemoryEntry {
-            id: uuid::Uuid::new_v4().to_string(),
-            content: content.into(),
-            source: source.into(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            metadata: None,
-        };
-        self.store.lock().unwrap().insert(entry)
+        self.store
+            .lock()
+            .unwrap()
+            .insert(entry(content, source, "project"))
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
@@ -147,6 +162,10 @@ impl ProjectMemory {
 
     pub fn clear(&self) -> Result<(), Error> {
         self.store.lock().unwrap().clear()
+    }
+
+    pub fn delete(&self, id: &str) -> Result<bool, Error> {
+        self.store.lock().unwrap().delete(id)
     }
 }
 
@@ -182,17 +201,10 @@ impl UserMemory {
     }
 
     pub fn add(&self, content: impl Into<String>, source: impl Into<String>) -> Result<(), Error> {
-        let entry = MemoryEntry {
-            id: uuid::Uuid::new_v4().to_string(),
-            content: content.into(),
-            source: source.into(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            metadata: None,
-        };
-        self.store.lock().unwrap().insert(entry)
+        self.store
+            .lock()
+            .unwrap()
+            .insert(entry(content, source, "user"))
     }
 
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<MemoryEntry>, Error> {
@@ -205,6 +217,10 @@ impl UserMemory {
 
     pub fn clear(&self) -> Result<(), Error> {
         self.store.lock().unwrap().clear()
+    }
+
+    pub fn delete(&self, id: &str) -> Result<bool, Error> {
+        self.store.lock().unwrap().delete(id)
     }
 }
 

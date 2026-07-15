@@ -53,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   resolution, rename, fork, resume guidance, export rendering, and
   process-local ephemeral mode through `/session ...` and
   `pleiades session ...`.
+- Added memory inspection and control with `/memory show`, `search`, `add`,
+  `forget`, `refresh`, `sources`, and `clear`, matching
+  `pleiades memory ...` CLI commands, enriched memory metadata, and
+  delete-by-id/prefix support.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

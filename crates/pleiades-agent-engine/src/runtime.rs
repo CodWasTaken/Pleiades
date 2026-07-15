@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 use crate::checkpoint::{CheckpointRecord, CheckpointStore};
 use crate::context::{CompressionRecord, ContextAccountant, ContextPin, ContextReport, make_pin};
 use crate::loop_detector::{DoomLoopDetector, LoopSignal};
+use crate::memory::{MemoryRecord, MemorySourceReport};
 use crate::session::SessionInfo;
 use crate::verification::{VerificationReport, VerificationScope, VerificationService};
 use crate::{Engine, SessionStore};
@@ -1929,6 +1930,134 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
                 .await;
             }
         }
+        AppEffect::MemoryShow => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.engine.memory().recent(20) {
+                    Ok(records) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(memory_records_document("Memory", &records)),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
+                }
+            }
+        }
+        AppEffect::MemorySearch(query) => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.engine.memory().search(&query, 20) {
+                    Ok(records) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(memory_records_document(
+                                &format!("Memory search: {query}"),
+                                &records,
+                            )),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
+                }
+            }
+        }
+        AppEffect::MemoryAdd(text) => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.engine.memory().add_user(&text) {
+                    Ok(()) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Success,
+                                message: "Memory added".to_string(),
+                            }),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
+                }
+            }
+        }
+        AppEffect::MemoryForget(id) => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.engine.memory().forget(&id) {
+                    Ok(true) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Success,
+                                message: format!("Forgot memory {id}"),
+                            }),
+                        )
+                        .await;
+                    }
+                    Ok(false) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Error(format!("Memory `{id}` not found")),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
+                }
+            }
+        }
+        AppEffect::MemoryRefresh => {
+            if let Some(ctx) = state.context.as_mut() {
+                ctx.set_config(state.config.clone(), *state.mode);
+                send_event(
+                    state.events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Success,
+                        message: "Memory refreshed from persistent storage".to_string(),
+                    }),
+                )
+                .await;
+            }
+        }
+        AppEffect::MemorySources => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.engine.memory().sources() {
+                    Ok(sources) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Document(memory_sources_document(&sources)),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
+                }
+            }
+        }
+        AppEffect::MemoryClear => {
+            if let Some(ctx) = state.context.as_ref() {
+                match ctx.engine.memory().clear_all() {
+                    Ok(()) => {
+                        send_event(
+                            state.events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Success,
+                                message: "Memory cleared".to_string(),
+                            }),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        send_event(state.events, AgentEvent::Error(error.to_string())).await
+                    }
+                }
+            }
+        }
         AppEffect::Verify => {
             start_verification(
                 VerificationScope::Full,
@@ -2820,6 +2949,51 @@ fn context_sources_document(report: &ContextReport) -> RenderableDocument {
                 format!("{} tokens · {}", source.tokens, source.label),
             );
         }
+    }
+    document
+}
+
+fn memory_records_document(title: &str, records: &[MemoryRecord]) -> RenderableDocument {
+    let mut document = RenderableDocument::new(title);
+    if records.is_empty() {
+        document.push_section("No memory", "No memory entries matched.");
+        return document;
+    }
+    for record in records {
+        let entry = &record.entry;
+        document.push_section(
+            format!("{} · {}", short_session_id(&entry.id), record.tier),
+            format!(
+                "{}\nSource: {}\nScope: {}\nType: {}\nCreated: {}\nConfidence: {:.2}\nLast used: {}\nProject: {}\nGenerated: {}",
+                entry.content,
+                entry.source,
+                if entry.scope.is_empty() { &record.tier } else { &entry.scope },
+                if entry.uitype.is_empty() { "text" } else { &entry.uitype },
+                entry.timestamp,
+                entry.confidence,
+                entry
+                    .last_used
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "(never)".to_string()),
+                entry.project.as_deref().unwrap_or("(none)"),
+                entry.generated
+            ),
+        );
+    }
+    document
+}
+
+fn memory_sources_document(sources: &[MemorySourceReport]) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Memory sources");
+    for report in sources {
+        document.push_section(
+            format!("{} · {} entries", report.tier, report.count),
+            if report.sources.is_empty() {
+                "(none)".to_string()
+            } else {
+                report.sources.join("\n")
+            },
+        );
     }
     document
 }
