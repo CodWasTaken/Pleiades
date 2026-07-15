@@ -4,6 +4,7 @@
 //! Ratatui widgets, or parse Clap arguments. The CLI and live workspace can
 //! therefore present the same operation without duplicating business logic.
 
+mod custom_commands;
 mod mcp;
 mod models;
 mod permissions;
@@ -13,6 +14,9 @@ mod skills;
 
 use std::path::PathBuf;
 
+pub use custom_commands::{
+    CustomArgumentReport, CustomCommandDefinition, CustomCommandReport, CustomCommandService,
+};
 pub use mcp::{McpServerReport, McpService, McpToolReport};
 pub use models::{ModelDiscoveryReport, ModelPreferences, ModelProviderResult, ModelService};
 pub use permissions::{
@@ -73,6 +77,13 @@ impl ApplicationServices {
         SkillService::new(
             self.global_config_dir.join("skills"),
             self.project_config_dir.join("skills"),
+        )
+    }
+
+    pub fn custom_command(&self) -> CustomCommandService {
+        CustomCommandService::new(
+            self.global_config_dir.join("commands"),
+            self.project_config_dir.join("commands"),
         )
     }
 
