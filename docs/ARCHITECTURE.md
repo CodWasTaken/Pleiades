@@ -33,7 +33,7 @@ Pleiades is a native Rust 2024 autonomous coding agent. Its architecture separat
 | `pleiades-agent` | Clap command tree, setup/auth/doctor, one-shot commands, binary packaging |
 | `pleiades-agent-core` | Provider and tool traits, conversations, models, normalized events and errors |
 | `pleiades-agent-config` | Defaults, global/project files, profiles, environment interpolation, validation |
-| `pleiades-agent-engine` | Provider/tool orchestration, autonomous runtime, permissions, cancellation, queue, memory, sessions |
+| `pleiades-agent-engine` | Provider/tool orchestration, autonomous runtime, permissions, cancellation, queue, memory, sessions, checkpoints, context accounting |
 | `pleiades-agent-tui` | Ratatui app, reducer, native Markdown, textarea composer, overlays, terminal lifecycle, design tokens |
 | `pleiades-agent-providers` | OpenAI, Anthropic, OpenAI-compatible, and official Codex CLI adapters |
 | `pleiades-agent-tools` | Nine built-in tools, workspace path confinement, process isolation |
@@ -84,6 +84,12 @@ The application keeps five persistent regions and renders permission, palette, p
 - shutdown.
 
 Each active task owns a `CancellationToken` and a permission-response channel. Provider streaming and tool waits are wrapped in `tokio::select!` with that token. A mode change cancels work running under the prior security boundary before rebuilding the configured engine.
+
+The runtime also owns checkpoint and context-management state. `/context`
+commands flow through the shared command registry as typed effects; the runtime
+accounts for approximate token usage by conversation, tool output, memory,
+compression summaries, pins, and detected file/tool sources, then emits
+structured documents for the frontend to render.
 
 ### Typed activity
 

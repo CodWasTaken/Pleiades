@@ -78,6 +78,18 @@ pub enum AppEffect {
     RestoreCheckpoint { id: String, confirm: bool },
     /// Delete a checkpoint.
     DeleteCheckpoint(String),
+    /// Show current context usage summary.
+    ContextStatus,
+    /// Show detailed context accounting.
+    ContextInspect,
+    /// Compact conversation context and record the result.
+    ContextCompact,
+    /// Pin a file path, message id, or free-form context target.
+    ContextPin(String),
+    /// Remove a context pin by id.
+    ContextUnpin(String),
+    /// Show files and tool sources represented in context.
+    ContextSources,
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;

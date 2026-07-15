@@ -41,8 +41,8 @@ executes provider or tool logic in the TUI.
 
 The currently implemented workspace commands include `/help`, `/status`,
 `/mode`, `/provider`, `/model`, `/files`, `/sessions`, `/load`, `/diff`,
-`/output`, `/checkpoint`, `/undo`, `/redo`, `/rewind`, `/doctor`, `/config`,
-`/clear`, `/save`, and `/quit`. The provider family includes `list`, `use`,
+`/output`, `/checkpoint`, `/context`, `/undo`, `/redo`, `/rewind`, `/doctor`,
+`/config`, `/clear`, `/save`, and `/quit`. The provider family includes `list`, `use`,
 `info`, `add`, `remove`, and `reload`. Provider reports are obtained through the
 same application service used by the external CLI and always mask credentials.
 Model and plugin command families are also registered with nested completion
@@ -58,6 +58,21 @@ and staged/unstaged tracked diffs. `/checkpoint list` and `/checkpoint show
 diff when the current Git HEAD still matches. Current tracked changes are backed
 up as a patch before restore. New untracked files that were not part of the
 checkpoint block restoration so unrelated user work is not silently removed.
+
+## Context
+
+Use `/context status` to inspect approximate context usage. The report splits
+tokens across conversation messages, tool output, memory context, compression
+summaries, and pinned items. `/context inspect` adds pins, compression history,
+and detected sources. `/context sources` lists file paths, URLs, searches, and
+tool inputs represented in the current conversation.
+
+Use `/context pin <file-or-message>` to mark a file path, message id, or short
+note as important. `/context unpin <id>` removes a pin. Pins are runtime state
+in this release. `/context compact` summarizes older non-system messages and
+records before/after token estimates. Token counts use a deterministic
+four-characters-per-token approximation until provider-specific tokenizers are
+integrated.
 
 ## Terminal compatibility
 
