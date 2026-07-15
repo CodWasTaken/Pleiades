@@ -348,9 +348,35 @@ enum SessionCommand {
     /// List saved sessions
     List,
 
+    /// Search saved sessions
+    Search {
+        /// Query matched against title, provider, model, tags, and messages
+        query: String,
+    },
+
     /// Show session details
     Show {
         /// Session ID
+        id: String,
+    },
+
+    /// Rename a session
+    Rename {
+        /// Session ID or unique prefix
+        id: String,
+        /// New session title
+        name: String,
+    },
+
+    /// Fork a session into a new session ID
+    Fork {
+        /// Session ID or unique prefix
+        id: Option<String>,
+    },
+
+    /// Print how to resume a session in the live workspace
+    Resume {
+        /// Session ID or unique prefix
         id: String,
     },
 
@@ -374,6 +400,12 @@ enum SessionCommand {
 
     /// Show session store location
     Path,
+
+    /// Use `/session ephemeral on|off` in the live workspace
+    Ephemeral {
+        /// on or off
+        state: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1596,6 +1628,36 @@ fn handle_session_list(loader: &ConfigLoader) {
     }
 }
 
+fn handle_session_search(loader: &ConfigLoader, query: &str) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_agent_engine::SessionStore::from_config(&config);
+    match store.search(query) {
+        Ok(sessions) => {
+            if sessions.is_empty() {
+                println!("No saved sessions matched `{query}`.");
+                return;
+            }
+            println!("Sessions matching `{query}` ({}):", sessions.len());
+            for session in sessions {
+                let title = session.metadata.title.as_deref().unwrap_or("Untitled");
+                let updated = session.metadata.updated_at.format("%Y-%m-%d %H:%M");
+                println!("  {}  {}  {}", short_id(&session.id), updated, title);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error searching sessions: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn handle_session_show(loader: &ConfigLoader, id: &str) {
     let config = match loader.load() {
         Ok(c) => c,
@@ -1652,6 +1714,85 @@ fn handle_session_show(loader: &ConfigLoader, id: &str) {
     }
 }
 
+fn handle_session_rename(loader: &ConfigLoader, id: &str, name: &str) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_agent_engine::SessionStore::from_config(&config);
+    match store.rename(id, name) {
+        Ok(conversation) => println!(
+            "Renamed session {} to `{}`",
+            short_id(&conversation.id),
+            conversation.metadata.title.as_deref().unwrap_or("Untitled")
+        ),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_session_fork(loader: &ConfigLoader, id: Option<&str>) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_agent_engine::SessionStore::from_config(&config);
+    let source = match id {
+        Some(id) => id.to_string(),
+        None => match store
+            .list()
+            .ok()
+            .and_then(|sessions| sessions.first().cloned())
+        {
+            Some(session) => session.id,
+            None => {
+                eprintln!("Error: no saved session to fork");
+                std::process::exit(1);
+            }
+        },
+    };
+    match store.fork(&source) {
+        Ok(conversation) => println!(
+            "Forked session {} from {}",
+            short_id(&conversation.id),
+            short_id(&source)
+        ),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_session_resume(loader: &ConfigLoader, id: &str) {
+    let config = match loader.load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let store = pleiades_agent_engine::SessionStore::from_config(&config);
+    match store.resolve_id(id) {
+        Ok(resolved) => println!("Run `pleiades chat --session {resolved}` to resume."),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn handle_session_delete(loader: &ConfigLoader, id: &str) {
     let config = match loader.load() {
         Ok(c) => c,
@@ -1670,6 +1811,26 @@ fn handle_session_delete(loader: &ConfigLoader, id: &str) {
             std::process::exit(1);
         }
     }
+}
+
+fn handle_session_ephemeral(state: &str) {
+    match state {
+        "on" | "true" => {
+            println!("Ephemeral mode is process-local.");
+            println!("Run `pleiades`, then `/session ephemeral on`.");
+        }
+        "off" | "false" => {
+            println!("Run `pleiades`, then `/session ephemeral off` to re-enable saves.");
+        }
+        _ => {
+            eprintln!("Error: usage: pleiades session ephemeral <on|off>");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn short_id(id: &str) -> &str {
+    id.get(..8).unwrap_or(id)
 }
 
 fn handle_session_export(loader: &ConfigLoader, id: &str, format: &str, output: Option<String>) {
@@ -3394,12 +3555,17 @@ fn main() {
         },
         Some(Commands::Session(cmd)) => match cmd {
             SessionCommand::List => handle_session_list(&loader),
+            SessionCommand::Search { query } => handle_session_search(&loader, &query),
             SessionCommand::Show { id } => handle_session_show(&loader, &id),
+            SessionCommand::Rename { id, name } => handle_session_rename(&loader, &id, &name),
+            SessionCommand::Fork { id } => handle_session_fork(&loader, id.as_deref()),
+            SessionCommand::Resume { id } => handle_session_resume(&loader, &id),
             SessionCommand::Delete { id } => handle_session_delete(&loader, &id),
             SessionCommand::Export { id, format, output } => {
                 handle_session_export(&loader, &id, &format, output)
             }
             SessionCommand::Path => handle_session_path(&loader),
+            SessionCommand::Ephemeral { state } => handle_session_ephemeral(&state),
         },
         Some(Commands::Tool(cmd)) => match cmd {
             ToolCommand::List => handle_tool_list(&loader),
@@ -3644,8 +3810,10 @@ fn get_session_field(config: &pleiades_agent_config::Config, field: &str) -> Opt
             .session
             .auto_save_interval_secs
             .map(|v| v.to_string()),
+        "history_dir" => config.session.history_dir.clone(),
         "max_concurrent" => Some(config.session.max_concurrent.to_string()),
         "compress_history" => Some(config.session.compress_history.to_string()),
+        "ephemeral" => Some(config.session.ephemeral.to_string()),
         _ => None,
     }
 }
@@ -3754,11 +3922,17 @@ fn set_session_field(config: &mut pleiades_agent_config::Config, field: &str, va
         "auto_save_interval_secs" => {
             config.session.auto_save_interval_secs = value.parse().ok();
         }
+        "history_dir" => {
+            config.session.history_dir = Some(value.to_string());
+        }
         "max_concurrent" => {
             config.session.max_concurrent = value.parse().unwrap_or(10);
         }
         "compress_history" => {
             config.session.compress_history = value == "true";
+        }
+        "ephemeral" => {
+            config.session.ephemeral = value == "true";
         }
         _ => eprintln!("Warning: unknown session field '{}'", field),
     }

@@ -615,6 +615,7 @@ pub fn default_registry_with_services(
 ) -> crate::registry::CommandRegistry {
     let mut r = crate::registry::CommandRegistry::new();
     register_workspace(&mut r);
+    register_session_family(&mut r);
     register_help(&mut r);
     register_provider_family(&mut r);
     register_model_family(&mut r);
@@ -800,6 +801,212 @@ fn register_workspace(r: &mut crate::registry::CommandRegistry) {
         .aliases(vec!["exit", "q"])
         .category(CommandCategory::Workspace)
         .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+}
+
+fn register_session_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["session"],
+            "List saved sessions",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ListSessions]))),
+        )
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "list"],
+            "List saved sessions",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ListSessions]))),
+        )
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "search"],
+            "Search saved sessions",
+            handler(|args| {
+                if args.is_empty() {
+                    return Err(Error::invalid_input("usage: /session search <query>"));
+                }
+                Ok(CommandResult::effects([AppEffect::SearchSessions(
+                    args.join(" "),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "query",
+            "Text matched against id, title, provider, model, tags, and message text.",
+        )])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "show"],
+            "Show session details",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::ShowSession(id.clone())])),
+                None => Err(Error::invalid_input("usage: /session show <id>")),
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Session id or unique prefix.")
+                .with_completer(CompletionSource::Session),
+        ])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "rename"],
+            "Rename a saved session",
+            handler(|args| {
+                let id = args
+                    .first()
+                    .ok_or_else(|| Error::invalid_input("usage: /session rename <id> <name>"))?;
+                if args.len() < 2 {
+                    return Err(Error::invalid_input("usage: /session rename <id> <name>"));
+                }
+                Ok(CommandResult::effects([AppEffect::RenameSession {
+                    id: id.clone(),
+                    name: args[1..].join(" "),
+                }]))
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Session id or unique prefix.")
+                .with_completer(CompletionSource::Session),
+            ArgumentSpec::required("name", "New session title."),
+        ])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "fork"],
+            "Fork a saved session",
+            handler(|args| {
+                Ok(CommandResult::effects([AppEffect::ForkSession(
+                    args.first().cloned(),
+                )]))
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::optional(
+                "id",
+                "Session id or unique prefix; defaults to current session.",
+            )
+            .with_completer(CompletionSource::Session),
+        ])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "resume"],
+            "Resume a saved session",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::LoadSession(id.clone())])),
+                None => Err(Error::invalid_input("usage: /session resume <id>")),
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Session id or unique prefix.")
+                .with_completer(CompletionSource::Session),
+        ])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Interactive)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "export"],
+            "Export a saved session",
+            handler(|args| {
+                let id = args.first().ok_or_else(|| {
+                    Error::invalid_input("usage: /session export <id> [markdown|json]")
+                })?;
+                Ok(CommandResult::effects([AppEffect::ExportSession {
+                    id: id.clone(),
+                    format: args
+                        .get(1)
+                        .cloned()
+                        .unwrap_or_else(|| "markdown".to_string()),
+                }]))
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Session id or unique prefix.")
+                .with_completer(CompletionSource::Session),
+            ArgumentSpec::optional("format", "markdown or json."),
+        ])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "delete"],
+            "Delete a saved session",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::DeleteSession(
+                    id.clone(),
+                )])),
+                None => Err(Error::invalid_input("usage: /session delete <id>")),
+            }),
+        )
+        .arguments(vec![
+            ArgumentSpec::required("id", "Session id or unique prefix.")
+                .with_completer(CompletionSource::Session),
+        ])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Both)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["session", "ephemeral"],
+            "Enable or disable session persistence for this process",
+            handler(|args| match args.first().map(String::as_str) {
+                Some("on") | Some("true") => {
+                    Ok(CommandResult::effects([AppEffect::SetEphemeralSession(
+                        true,
+                    )]))
+                }
+                Some("off") | Some("false") => {
+                    Ok(CommandResult::effects([AppEffect::SetEphemeralSession(
+                        false,
+                    )]))
+                }
+                _ => Err(Error::invalid_input("usage: /session ephemeral <on|off>")),
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "state",
+            "Use on to stop persistence for this process, off to save again.",
+        )])
+        .category(CommandCategory::Memory)
+        .availability(CommandAvailability::Interactive)
         .build(),
     )
     .ok();
@@ -2830,6 +3037,16 @@ mod tests {
             "config",
             "files",
             "sessions",
+            "session",
+            "session list",
+            "session search",
+            "session show",
+            "session rename",
+            "session fork",
+            "session resume",
+            "session export",
+            "session delete",
+            "session ephemeral",
             "clear",
             "save",
             "load",
@@ -2967,6 +3184,49 @@ mod tests {
             }
             other => panic!("unexpected: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn session_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/session search auth refresh", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::SearchSessions("auth refresh".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/session rename abc New Name", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::RenameSession {
+                id: "abc".to_string(),
+                name: "New Name".to_string()
+            }]
+        ));
+
+        let result = default_registry()
+            .dispatch("/session fork abc", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::ForkSession(Some("abc".to_string()))]
+        ));
+
+        let result = default_registry()
+            .dispatch("/session ephemeral on", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::SetEphemeralSession(true)]
+        ));
     }
 
     #[tokio::test]

@@ -14,6 +14,7 @@
 - [Custom commands](custom-commands.md)
 - [Hot reload](hot-reload.md)
 - [Prompt templates](prompts.md)
+- [Sessions](sessions.md)
 - [Workflows](workflows.md)
 - [Git integration](git.md)
 - [Diff review](diff-review.md)

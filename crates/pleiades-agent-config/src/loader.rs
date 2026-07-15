@@ -188,6 +188,30 @@ impl ConfigLoader {
         merged.models.favorites.dedup();
         merged.models.reasoning = override_config.models.reasoning.or(merged.models.reasoning);
 
+        if override_config.session.context_size
+            != crate::types::SessionConfig::default().context_size
+        {
+            merged.session.context_size = override_config.session.context_size;
+        }
+        if override_config.session.auto_save_interval_secs.is_some() {
+            merged.session.auto_save_interval_secs =
+                override_config.session.auto_save_interval_secs;
+        }
+        if override_config.session.history_dir.is_some() {
+            merged.session.history_dir = override_config.session.history_dir;
+        }
+        if override_config.session.max_concurrent
+            != crate::types::SessionConfig::default().max_concurrent
+        {
+            merged.session.max_concurrent = override_config.session.max_concurrent;
+        }
+        if override_config.session.compress_history {
+            merged.session.compress_history = true;
+        }
+        if override_config.session.ephemeral {
+            merged.session.ephemeral = true;
+        }
+
         merged
             .plugins
             .enabled
@@ -299,6 +323,27 @@ mod tests {
 
         let merged = ConfigLoader::merge(base, override_cfg);
         assert_eq!(merged.core.default_provider, None);
+    }
+
+    #[test]
+    fn partial_project_config_can_override_session_history_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join(".pleiades");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(
+            project.join("config.toml"),
+            "[session]\nhistory_dir = \"/tmp/pleiades-test-sessions\"\n",
+        )
+        .unwrap();
+
+        let loader = ConfigLoader::with_dirs(temp.path().join("global"), project);
+        let config = loader.load().unwrap();
+
+        assert_eq!(
+            config.session.history_dir.as_deref(),
+            Some("/tmp/pleiades-test-sessions")
+        );
+        assert_eq!(config.core.theme.as_deref(), Some("seven-sisters"));
     }
 
     #[test]

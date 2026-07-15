@@ -5,6 +5,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Config {
     /// Core application settings.
+    #[serde(default)]
     pub core: CoreConfig,
     /// Provider-specific configurations.
     #[serde(default)]
@@ -327,6 +328,9 @@ pub struct SessionConfig {
     /// Whether to compress older sessions.
     #[serde(default)]
     pub compress_history: bool,
+    /// Do not persist conversations for the active process.
+    #[serde(default)]
+    pub ephemeral: bool,
 }
 
 fn default_context_size() -> usize {
@@ -345,6 +349,7 @@ impl Default for SessionConfig {
             history_dir: None,
             max_concurrent: 10,
             compress_history: false,
+            ephemeral: false,
         }
     }
 }

@@ -1,6 +1,7 @@
 use std::fs;
 
 use assert_cmd::Command;
+use pleiades_agent_core::conversation::{Conversation, Message};
 use predicates::prelude::*;
 
 fn command(home: &std::path::Path) -> Command {
@@ -263,6 +264,66 @@ fn project_cli_lists_and_runs_configured_recipes() {
         .assert()
         .success()
         .stdout(predicate::str::contains("smoke-ok"));
+}
+
+#[test]
+fn session_cli_search_rename_fork_and_resume() {
+    let workspace = tempfile::tempdir().unwrap();
+    let sessions = workspace.path().join("sessions");
+    fs::create_dir_all(&sessions).unwrap();
+
+    let mut conversation = Conversation::new("session-alpha");
+    conversation.metadata.title = Some("Auth Refresh".to_string());
+    conversation.metadata.provider = Some("openai".to_string());
+    conversation.metadata.model = Some("gpt-test".to_string());
+    conversation.metadata.tags.push("regression".to_string());
+    conversation.add_message(Message::user("token refresh failed"));
+    fs::write(
+        sessions.join("session-alpha.json"),
+        serde_json::to_string_pretty(&conversation).unwrap(),
+    )
+    .unwrap();
+    let project_config = workspace.path().join(".pleiades");
+    fs::create_dir_all(&project_config).unwrap();
+    fs::write(
+        project_config.join("config.toml"),
+        format!(
+            "[session]\nhistory_dir = \"{}\"\n",
+            sessions.display().to_string().replace('\\', "\\\\")
+        ),
+    )
+    .unwrap();
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["session", "search", "refresh"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("session-"))
+        .stdout(predicate::str::contains("Auth Refresh"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["session", "rename", "session-alpha", "Renamed Auth"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Renamed session"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["session", "fork", "session-alpha"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Forked session"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["session", "resume", "session-alpha"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "pleiades chat --session session-alpha",
+        ));
 }
 
 #[test]
