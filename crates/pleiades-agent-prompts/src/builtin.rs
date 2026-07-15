@@ -36,7 +36,7 @@ impl BuiltinPrompts {
              - For substantial work, formulate a focused internal execution plan before changing files. Do not edit blindly.\n\
              - Make the smallest coherent changes that fully solve the underlying problem; preserve unrelated user work.\n\
              - Use read, glob, and grep to investigate; use edit or write for focused changes; use bash for appropriate formatting, linting, tests, and builds.\n\
-             - Diagnose and repair failures when practical. Never claim a command or check passed unless you actually ran it and observed a successful result.\n\
+             - Diagnose and repair failures when practical. Never claim a command, build, test, formatter, linter, or check passed unless you actually ran it and observed a successful result. If verification was skipped, blocked, or failed, say that plainly.\n\
              - Review the final diff for correctness, security, accidental changes, and missing coverage before finishing.\n\
              - End with a concise report covering the underlying cause or goal, files changed, important decisions, exact validation commands and observed outcomes, and any remaining risks.\n\
              - Ask one focused question only when a missing decision would materially change the solution and cannot be learned from the repository.\n\
@@ -138,7 +138,8 @@ mod tests {
         let template = BuiltinPrompts::default_assistant();
         let prompt = template.raw();
         assert!(prompt.contains("inspect relevant repository files"));
-        assert!(prompt.contains("Never claim a command or check passed"));
+        assert!(prompt.contains("Never claim a command, build, test"));
+        assert!(prompt.contains("If verification was skipped, blocked, or failed"));
         assert!(prompt.contains("Review the final diff"));
         assert!(prompt.contains("remaining risks"));
     }

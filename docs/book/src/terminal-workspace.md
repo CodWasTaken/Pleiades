@@ -42,11 +42,12 @@ executes provider or tool logic in the TUI.
 The currently implemented workspace commands include `/help`, `/status`,
 `/mode`, `/provider`, `/model`, `/files`, `/sessions`, `/load`, `/diff`,
 `/output`, `/checkpoint`, `/context`, `/undo`, `/redo`, `/rewind`, `/doctor`,
-`/config`, `/clear`, `/save`, and `/quit`. The provider family includes `list`, `use`,
-`info`, `add`, `remove`, and `reload`. Provider reports are obtained through the
-same application service used by the external CLI and always mask credentials.
-Model and plugin command families are also registered with nested completion
-and structured documents.
+`/verify`, `/test`, `/run`, `/review`, `/config`, `/clear`, `/save`, and
+`/quit`. The provider family includes `list`, `use`, `info`, `add`, `remove`,
+and `reload`. Provider reports are obtained through the same application
+service used by the external CLI and always mask credentials. Model and plugin
+command families are also registered with nested completion and structured
+documents.
 
 ## Checkpoints
 
@@ -73,6 +74,22 @@ in this release. `/context compact` summarizes older non-system messages and
 records before/after token estimates. Token counts use a deterministic
 four-characters-per-token approximation until provider-specific tokenizers are
 integrated.
+
+## Verification
+
+Use `/verify` before reporting a development task as complete. Pleiades
+detects the project type, captures the current Git diff summary and changed
+files, runs a small definition-of-done command plan, and renders a structured
+evidence report. Rust projects currently run `cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+`cargo test --workspace`. Node projects run `npm test` and `npm run lint
+--if-present`.
+
+Use `/test` to run only detected tests, `/run <command>` to capture evidence
+from an explicit command, and `/review` to open the diff overlay. In Plan mode,
+verification commands are planned but not executed because Plan mode is
+read-only. A report must show executed successful commands before Pleiades can
+truthfully claim verification passed.
 
 ## Terminal compatibility
 
