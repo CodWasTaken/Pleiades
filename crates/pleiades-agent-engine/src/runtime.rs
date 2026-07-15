@@ -21,6 +21,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::checkpoint::{CheckpointRecord, CheckpointStore};
+use crate::context::{CompressionRecord, ContextAccountant, ContextPin, ContextReport, make_pin};
 use crate::{Engine, SessionStore};
 
 const COMMAND_CAPACITY: usize = 64;
@@ -500,6 +501,8 @@ struct RuntimeContext {
     mode: AgentMode,
     session_store: SessionStore,
     checkpoint_store: CheckpointStore,
+    context_pins: Vec<ContextPin>,
+    compression_history: Vec<CompressionRecord>,
     allowed_session: HashSet<String>,
     denied_session: HashSet<String>,
 }
@@ -522,6 +525,8 @@ impl RuntimeContext {
             mode,
             session_store,
             checkpoint_store,
+            context_pins: Vec::new(),
+            compression_history: Vec::new(),
             allowed_session: HashSet::new(),
             denied_session: HashSet::new(),
         }
@@ -535,6 +540,14 @@ impl RuntimeContext {
         self.engine = Engine::configured(config.clone(), mode.sandbox());
         self.config = config;
         self.mode = mode;
+    }
+
+    fn context_report(&self) -> ContextReport {
+        ContextAccountant::new(self.config.session.context_size * 4).report(
+            &self.conversation,
+            &self.context_pins,
+            &self.compression_history,
+        )
     }
 }
 
@@ -1643,6 +1656,98 @@ async fn apply_app_effect(
                 }
             }
         }
+        AppEffect::ContextStatus => {
+            if let Some(ctx) = context.as_ref() {
+                send_event(
+                    events,
+                    AgentEvent::Document(context_status_document(&ctx.context_report())),
+                )
+                .await;
+            }
+        }
+        AppEffect::ContextInspect => {
+            if let Some(ctx) = context.as_ref() {
+                send_event(
+                    events,
+                    AgentEvent::Document(context_inspect_document(&ctx.context_report())),
+                )
+                .await;
+            }
+        }
+        AppEffect::ContextCompact => {
+            if active.is_none() {
+                if let Some(ctx) = context.as_mut() {
+                    match compact_context(ctx).await {
+                        Ok(record) => {
+                            let _ = ctx.session_store.save(&ctx.conversation);
+                            send_event(
+                                events,
+                                AgentEvent::Document(context_compaction_document(
+                                    &ctx.context_report(),
+                                    &record,
+                                )),
+                            )
+                            .await;
+                        }
+                        Err(error) => {
+                            send_event(events, AgentEvent::Error(error.to_string())).await
+                        }
+                    }
+                }
+            }
+        }
+        AppEffect::ContextPin(target) => {
+            if let Some(ctx) = context.as_mut() {
+                let id = format!("pin-{}", ctx.context_pins.len() + 1);
+                let pin = make_pin(id.clone(), target);
+                ctx.context_pins.push(pin);
+                send_event(
+                    events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Success,
+                        message: format!("Context pin added: {id}"),
+                    }),
+                )
+                .await;
+                send_event(
+                    events,
+                    AgentEvent::Document(context_status_document(&ctx.context_report())),
+                )
+                .await;
+            }
+        }
+        AppEffect::ContextUnpin(id) => {
+            if let Some(ctx) = context.as_mut() {
+                let before = ctx.context_pins.len();
+                ctx.context_pins.retain(|pin| pin.id != id);
+                let removed = before != ctx.context_pins.len();
+                send_event(
+                    events,
+                    AgentEvent::Notify(Notification {
+                        level: if removed {
+                            NotificationLevel::Success
+                        } else {
+                            NotificationLevel::Warning
+                        },
+                        message: if removed {
+                            format!("Context pin removed: {id}")
+                        } else {
+                            format!("Context pin not found: {id}")
+                        },
+                    }),
+                )
+                .await;
+            }
+        }
+        AppEffect::ContextSources => {
+            if let Some(ctx) = context.as_ref() {
+                send_event(
+                    events,
+                    AgentEvent::Document(context_sources_document(&ctx.context_report())),
+                )
+                .await;
+            }
+        }
         AppEffect::CancelTask => {
             if let Some(task) = active.as_ref() {
                 task.cancellation.cancel();
@@ -1737,6 +1842,171 @@ fn format_changed_files(files: &[String]) -> String {
     } else {
         files.join("\n")
     }
+}
+
+fn context_status_document(report: &ContextReport) -> RenderableDocument {
+    RenderableDocument::new("Context status")
+        .section(
+            "Usage",
+            format!(
+                "{} / {} tokens ({}%)",
+                report.total_tokens, report.provider_context_limit, report.percent_used
+            ),
+        )
+        .section(
+            "Contributions",
+            format!(
+                "Conversation: {}\nTool output: {}\nMemory: {}\nCompression summaries: {}\nPinned: {}",
+                report.conversation_tokens,
+                report.tool_output_tokens,
+                report.memory_tokens,
+                report.compression_tokens,
+                report.pinned_tokens
+            ),
+        )
+        .section(
+            "Shape",
+            format!(
+                "Messages: {}\nTool results: {}\nCompression summaries: {}\nPins: {}\nSources: {}",
+                report.message_count,
+                report.tool_result_count,
+                report.compression_summary_count,
+                report.pinned.len(),
+                report.sources.len()
+            ),
+        )
+}
+
+fn context_inspect_document(report: &ContextReport) -> RenderableDocument {
+    let mut document = context_status_document(report);
+    document.title = "Context inspect".to_string();
+    document.push_section(
+        "Pinned",
+        if report.pinned.is_empty() {
+            "(none)".to_string()
+        } else {
+            report
+                .pinned
+                .iter()
+                .map(|pin| format!("{} · {} tokens · {}", pin.id, pin.tokens, pin.target))
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    );
+    document.push_section(
+        "Compression history",
+        if report.compression_history.is_empty() {
+            "(none)".to_string()
+        } else {
+            report
+                .compression_history
+                .iter()
+                .enumerate()
+                .map(|(index, record)| {
+                    format!(
+                        "{}. {} → {} tokens · summary {} tokens · {}",
+                        index + 1,
+                        record.before_tokens,
+                        record.after_tokens,
+                        record.summary_tokens,
+                        record.message
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    );
+    document.push_section(
+        "Sources",
+        if report.sources.is_empty() {
+            "(none)".to_string()
+        } else {
+            report
+                .sources
+                .iter()
+                .map(|source| {
+                    format!(
+                        "{} · {} tokens · {}",
+                        source.kind, source.tokens, source.label
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    );
+    document
+}
+
+fn context_sources_document(report: &ContextReport) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Context sources");
+    if report.sources.is_empty() {
+        document.push_section("Sources", "No file, URL, search, or tool sources detected.");
+    } else {
+        for source in &report.sources {
+            document.push_section(
+                &source.kind,
+                format!("{} tokens · {}", source.tokens, source.label),
+            );
+        }
+    }
+    document
+}
+
+fn context_compaction_document(
+    report: &ContextReport,
+    record: &CompressionRecord,
+) -> RenderableDocument {
+    let mut document = context_status_document(report);
+    document.title = "Context compacted".to_string();
+    document.push_section(
+        "Compaction",
+        format!(
+            "{} → {} tokens\nSummary size: {} tokens\n{}",
+            record.before_tokens, record.after_tokens, record.summary_tokens, record.message
+        ),
+    );
+    document
+}
+
+async fn compact_context(ctx: &mut RuntimeContext) -> Result<CompressionRecord, String> {
+    let before_tokens = ctx.context_report().total_tokens;
+    let non_system = ctx
+        .conversation
+        .messages
+        .iter()
+        .filter(|message| message.role != MessageRole::System)
+        .count();
+    if non_system < 4 {
+        return Err("not enough non-system messages to compact safely".to_string());
+    }
+
+    let target_remove = (non_system / 2).max(2);
+    let mut removed = Vec::new();
+    let mut kept = Vec::with_capacity(ctx.conversation.messages.len());
+    for message in ctx.conversation.messages.drain(..) {
+        if message.role != MessageRole::System && removed.len() < target_remove {
+            removed.push(message);
+        } else {
+            kept.push(message);
+        }
+    }
+
+    let summary = ctx.engine.summarize_messages(&removed).await;
+    let summary_tokens = crate::context::estimate_tokens(&summary);
+    kept.insert(
+        0,
+        Message::system(format!("[Conversation History Summary]\n{}", summary)),
+    );
+    ctx.conversation.messages = kept;
+    let after_tokens = ctx.context_report().total_tokens;
+    let record = CompressionRecord {
+        before_tokens,
+        after_tokens,
+        summary_tokens,
+        message: format!("Manually compacted {} messages", removed.len()),
+    };
+    ctx.compression_history.push(record.clone());
+    Ok(record)
 }
 
 #[cfg(test)]
@@ -2068,6 +2338,119 @@ mod tests {
             }
         };
         assert_eq!(preview.title, "Checkpoint restore preview");
+
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn context_commands_report_sources_and_pins() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, mut runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        runtime
+            .conversation
+            .add_message(Message::user("inspect context"));
+        runtime.conversation.add_message(Message {
+            role: MessageRole::Assistant,
+            content: vec![ContentBlock::ToolUse {
+                id: "read-1".to_string(),
+                name: "read".to_string(),
+                input: serde_json::json!({"path": "src/lib.rs"}),
+            }],
+            reasoning: None,
+            metadata: None,
+        });
+        let mut handle = runtime.spawn();
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash(
+                "/context pin src/main.rs".into(),
+            ))
+            .await
+            .unwrap();
+        let status = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Context status" {
+                    break document;
+                }
+            }
+        };
+        assert!(
+            status
+                .sections
+                .iter()
+                .any(|section| section.heading == "Shape" && section.body.contains("Pins: 1"))
+        );
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/context sources".into()))
+            .await
+            .unwrap();
+        let sources = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Context sources" {
+                    break document;
+                }
+            }
+        };
+        assert!(
+            sources
+                .sections
+                .iter()
+                .any(|section| section.body.contains("src/lib.rs"))
+        );
+
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn context_compact_records_history() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, mut runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        for index in 0..6 {
+            runtime
+                .conversation
+                .add_message(Message::user(format!("message {index} with enough words")));
+        }
+        let mut handle = runtime.spawn();
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/context compact".into()))
+            .await
+            .unwrap();
+        let compacted = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Context compacted" {
+                    break document;
+                }
+            }
+        };
+        assert!(
+            compacted
+                .sections
+                .iter()
+                .any(|section| section.heading == "Compaction")
+        );
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/context inspect".into()))
+            .await
+            .unwrap();
+        let inspect = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Context inspect" {
+                    break document;
+                }
+            }
+        };
+        assert!(inspect.sections.iter().any(|section| {
+            section.heading == "Compression history" && section.body.contains("Manually compacted")
+        }));
 
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }

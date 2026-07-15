@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,
   model, mode, Git head/branch, changed files, and staged/unstaged diffs.
+- Added `/context status`, `/context inspect`, `/context compact`,
+  `/context pin`, `/context unpin`, and `/context sources` live workspace
+  commands backed by an engine-owned context accountant. Reports show
+  approximate token usage by conversation, tool output, memory, compression
+  summaries, pins, and detected sources.
 - Split runtime access control into typed `ApprovalPolicy` and
   `SandboxPolicy` values, and added `auto` and `yolo` mode presets. Auto runs
   without prompts inside the workspace; YOLO is the explicit full-host preset.

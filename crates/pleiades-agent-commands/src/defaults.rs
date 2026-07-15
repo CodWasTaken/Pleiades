@@ -559,6 +559,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_mode_family(&mut r);
     register_permissions_family(&mut r);
     register_checkpoint_family(&mut r);
+    register_context_family(&mut r);
     r
 }
 
@@ -1481,6 +1482,112 @@ fn checkpoint_help_document() -> crate::result::RenderableDocument {
         .section("Delete", "/checkpoint delete <id>")
 }
 
+fn register_context_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["context"],
+            "Inspect and compact model context",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ContextStatus]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["context", "status"],
+            "Show context usage summary",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ContextStatus]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["context", "inspect"],
+            "Show detailed context accounting",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ContextInspect]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["context", "compact"],
+            "Compact older conversation context into a summary",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ContextCompact]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["context", "pin"],
+            "Pin a file path, message id, or note into the context report",
+            handler(|args| {
+                if args.is_empty() {
+                    return Err(Error::invalid_input(
+                        "usage: /context pin <file-or-message>",
+                    ));
+                }
+                Ok(CommandResult::effects([AppEffect::ContextPin(
+                    args.join(" "),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "file-or-message",
+            "File path, message id, or short note to pin.",
+        )])
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["context", "unpin"],
+            "Remove a pinned context item",
+            handler(|args| match args.first() {
+                Some(id) => Ok(CommandResult::effects([AppEffect::ContextUnpin(
+                    id.clone(),
+                )])),
+                None => Err(Error::invalid_input("usage: /context unpin <id>")),
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required("id", "Pinned context id")])
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["context", "sources"],
+            "Show files and tools represented in context",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ContextSources]))),
+        )
+        .category(CommandCategory::Workspace)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -1753,6 +1860,44 @@ mod tests {
                 id: "abc".to_string(),
                 confirm: true
             }]
+        );
+    }
+
+    #[tokio::test]
+    async fn context_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/context status", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("context status should emit an effect");
+        };
+        assert_eq!(effects, vec![AppEffect::ContextStatus]);
+
+        let result = default_registry()
+            .dispatch(
+                "/context pin crates/pleiades-agent-engine/src/runtime.rs",
+                &context,
+                true,
+            )
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("context pin should emit an effect");
+        };
+        assert_eq!(
+            effects,
+            vec![AppEffect::ContextPin(
+                "crates/pleiades-agent-engine/src/runtime.rs".to_string()
+            )]
+        );
+
+        let suggestions = default_registry().suggest("/context ", true);
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.label == "context compact")
         );
     }
 

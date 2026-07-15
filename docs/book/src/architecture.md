@@ -27,7 +27,7 @@ The terminal loop uses `tokio::select!` across Crossterm's `EventStream`, the ag
 
 ## Agent runtime
 
-`AgentRuntime` owns the configured `Engine`, `Conversation`, `SessionStore`, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, and shutdown.
+`AgentRuntime` owns the configured `Engine`, `Conversation`, `SessionStore`, checkpoint store, context pins, compression history, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, checkpoint operations, context inspection/compaction, and shutdown.
 
 Provider streams normalize text, reasoning summaries, tool calls, provider-managed activity, tool output, usage, completion, and errors. The runtime adds typed lifecycle events for planning, permission waits, execution, validation, diff review, completion, failure, and cancellation.
 
