@@ -613,6 +613,7 @@ pub fn default_registry() -> crate::registry::CommandRegistry {
     register_model_family(&mut r);
     register_plugin_family(&mut r);
     register_mcp_family(&mut r);
+    register_skills_family(&mut r);
     register_mode_family(&mut r);
     register_permissions_family(&mut r);
     register_checkpoint_family(&mut r);
@@ -1566,6 +1567,195 @@ fn list_or_none(values: &[String]) -> String {
     }
 }
 
+struct SkillsListHandler;
+
+#[async_trait]
+impl CommandHandler for SkillsListHandler {
+    async fn handle(&self, context: &CommandContext, _: &[String]) -> HandlerResult {
+        let skills = context.services().skill().list()?;
+        let mut document = crate::result::RenderableDocument::new("Skills");
+        if skills.is_empty() {
+            document.push_section("No skills found", "Create one with /skills create <name>.");
+        }
+        for skill in skills {
+            document.push_section(
+                skill.name,
+                format!(
+                    "{} · {} · {}\n{}\nPath: {}",
+                    skill.scope,
+                    if skill.enabled { "enabled" } else { "disabled" },
+                    list_or_none(&skill.permissions),
+                    skill.description,
+                    skill.path.display()
+                ),
+            );
+        }
+        Ok(CommandResult::RenderDocument(document))
+    }
+}
+
+struct SkillShowHandler;
+
+#[async_trait]
+impl CommandHandler for SkillShowHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let name = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /skills show <name>"))?;
+        let skill = context.services().skill().show(name)?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new(format!("Skill: {}", skill.name))
+                .section("Description", skill.description)
+                .section("Scope", skill.scope)
+                .section("Enabled", skill.enabled.to_string())
+                .section("Permissions", list_or_none(&skill.permissions))
+                .section("Path", skill.path.display().to_string())
+                .section("Instructions", skill.instructions),
+        ))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SkillMutation {
+    Create,
+    Enable,
+    Disable,
+}
+
+struct SkillMutationHandler(SkillMutation);
+
+#[async_trait]
+impl CommandHandler for SkillMutationHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let name = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /skills create|enable|disable <name>"))?;
+        let service = context.services().skill();
+        let message = match self.0 {
+            SkillMutation::Create => {
+                let report = service.create(name)?;
+                format!(
+                    "Created skill `{}` at {}",
+                    report.name,
+                    report.path.display()
+                )
+            }
+            SkillMutation::Enable => {
+                service.enable(name)?;
+                format!("Enabled skill `{name}`")
+            }
+            SkillMutation::Disable => {
+                service.disable(name)?;
+                format!("Disabled skill `{name}`")
+            }
+        };
+        Ok(CommandResult::notification(
+            crate::result::NotificationLevel::Success,
+            message,
+        ))
+    }
+}
+
+struct SkillEditHandler;
+
+#[async_trait]
+impl CommandHandler for SkillEditHandler {
+    async fn handle(&self, context: &CommandContext, args: &[String]) -> HandlerResult {
+        let name = args
+            .first()
+            .ok_or_else(|| Error::invalid_input("usage: /skills edit <name>"))?;
+        let skill = context.services().skill().show(name)?;
+        Ok(CommandResult::RenderDocument(
+            crate::result::RenderableDocument::new(format!("Edit skill: {}", skill.name))
+                .section("Path", skill.path.display().to_string())
+                .section(
+                    "Instructions",
+                    "Open this TOML file in your editor, update `instructions`, then run /skills reload.",
+                ),
+        ))
+    }
+}
+
+fn register_skills_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(vec!["skills"], "Manage reusable skills", SkillsListHandler)
+            .category(CommandCategory::Extension)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(vec!["skills", "list"], "List skills", SkillsListHandler)
+            .category(CommandCategory::Extension)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(vec!["skills", "show"], "Show a skill", SkillShowHandler)
+            .arguments(vec![
+                ArgumentSpec::required("name", "Skill name")
+                    .with_completer(CompletionSource::Skill),
+            ])
+            .category(CommandCategory::Extension)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+    )
+    .ok();
+    for (name, mutation) in [
+        ("create", SkillMutation::Create),
+        ("enable", SkillMutation::Enable),
+        ("disable", SkillMutation::Disable),
+    ] {
+        r.register(
+            CommandSpec::builder(
+                vec!["skills", name],
+                "Create or change skill state",
+                SkillMutationHandler(mutation),
+            )
+            .arguments(vec![
+                ArgumentSpec::required("name", "Skill name")
+                    .with_completer(CompletionSource::Skill),
+            ])
+            .category(CommandCategory::Extension)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Write)
+            .build(),
+        )
+        .ok();
+    }
+    r.register(
+        CommandSpec::builder(
+            vec!["skills", "edit"],
+            "Show the skill file path for editing",
+            SkillEditHandler,
+        )
+        .arguments(vec![
+            ArgumentSpec::required("name", "Skill name").with_completer(CompletionSource::Skill),
+        ])
+        .category(CommandCategory::Extension)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Write)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["skills", "reload"],
+            "Reload skills",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ReloadExtensions]))),
+        )
+        .category(CommandCategory::Extension)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+}
+
 fn register_mode_family(r: &mut crate::registry::CommandRegistry) {
     // /mode [preset]
     r.register(
@@ -2107,6 +2297,14 @@ mod tests {
             "mcp restart",
             "mcp logs",
             "mcp debug",
+            "skills",
+            "skills list",
+            "skills show",
+            "skills create",
+            "skills edit",
+            "skills enable",
+            "skills disable",
+            "skills reload",
             "mode",
             "mode plan",
             "mode agent",
@@ -2486,6 +2684,52 @@ mod tests {
             suggestions
                 .iter()
                 .any(|suggestion| suggestion.label == "mcp tool-info")
+        );
+    }
+
+    #[tokio::test]
+    async fn skills_commands_use_the_injected_application_services() {
+        let temp = tempfile::tempdir().unwrap();
+        let services = pleiades_agent_services::ApplicationServices::with_config_dirs(
+            temp.path().join("global"),
+            temp.path().join("project"),
+        );
+        let context = CommandContextBuilder::default()
+            .services(services.clone())
+            .build();
+
+        let result = default_registry()
+            .dispatch("/skills create review", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(result, CommandResult::Notification(_)));
+
+        let result = default_registry()
+            .dispatch("/skills enable review", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(result, CommandResult::Notification(_)));
+        assert!(services.skill().show("review").unwrap().enabled);
+
+        let result = default_registry()
+            .dispatch("/skills show review", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::RenderDocument(document) = result else {
+            panic!("skills show should render a document");
+        };
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "Instructions")
+        );
+
+        let suggestions = default_registry().suggest("/skills ", true);
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.label == "skills show")
         );
     }
 

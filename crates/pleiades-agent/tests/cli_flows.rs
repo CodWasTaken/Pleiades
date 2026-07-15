@@ -186,6 +186,39 @@ tool_allowlist = ["search"]
 }
 
 #[test]
+fn skills_cli_create_enable_show_and_disable() {
+    let workspace = tempfile::tempdir().unwrap();
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["skills", "create", "review"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created skill `review`"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["skills", "enable", "review"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Skill enabled: review"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["skills", "show", "review"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Skill: review"))
+        .stdout(predicate::str::contains("Enabled:     true"));
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["skills", "disable", "review"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Skill disabled: review"));
+}
+
+#[test]
 fn workflow_create_validate_list_and_run() {
     let workspace = tempfile::tempdir().unwrap();
     command(workspace.path())

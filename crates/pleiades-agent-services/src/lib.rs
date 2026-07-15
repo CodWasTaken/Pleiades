@@ -9,6 +9,7 @@ mod models;
 mod permissions;
 mod plugins;
 mod providers;
+mod skills;
 
 use std::path::PathBuf;
 
@@ -19,6 +20,7 @@ pub use permissions::{
 };
 pub use plugins::{PluginInstallReport, PluginReport, PluginService, PluginUpdateReport};
 pub use providers::{ProviderFactory, ProviderReport, ProviderService, ProviderTestReport};
+pub use skills::{SkillReport, SkillService};
 
 /// Root service container shared by headless and interactive frontends.
 #[derive(Debug, Clone)]
@@ -65,6 +67,13 @@ impl ApplicationServices {
 
     pub fn permission(&self) -> PermissionService {
         PermissionService::new(self.loader())
+    }
+
+    pub fn skill(&self) -> SkillService {
+        SkillService::new(
+            self.global_config_dir.join("skills"),
+            self.project_config_dir.join("skills"),
+        )
     }
 
     pub fn loader(&self) -> pleiades_agent_config::ConfigLoader {
