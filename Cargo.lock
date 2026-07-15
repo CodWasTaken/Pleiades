@@ -1559,6 +1559,7 @@ dependencies = [
  "pleiades-agent-commands",
  "pleiades-agent-config",
  "pleiades-agent-core",
+ "pleiades-agent-git",
  "pleiades-agent-memory",
  "pleiades-agent-permissions",
  "pleiades-agent-prompts",

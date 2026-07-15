@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added live extension reload events. `/plugins reload`, `/mcp reload`, and
   `/skills reload` rebuild the runtime command registry and tell the TUI to
   refresh autocomplete and command-palette data without restarting.
+- Added structured Git diff review foundations: unified diff parsing into
+  files/hunks, simple unstaged hunk restoration, `/git status`, `/git diff`,
+  `/git diff --staged`, `/diff`, and `/review` review document commands.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

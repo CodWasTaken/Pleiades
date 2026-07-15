@@ -626,6 +626,7 @@ pub fn default_registry_with_services(
     register_checkpoint_family(&mut r);
     register_context_family(&mut r);
     register_verification_family(&mut r);
+    register_git_family(&mut r);
     register_custom_commands(&mut r, services);
     r
 }
@@ -691,7 +692,11 @@ fn register_workspace(r: &mut crate::registry::CommandRegistry) {
         CommandSpec::builder(
             vec!["diff"],
             "Review the current working-tree diff",
-            handler(|_| Ok(CommandResult::overlay(OverlayKind::Diff))),
+            handler(|_| {
+                Ok(CommandResult::effects([AppEffect::ReviewDiff {
+                    staged: false,
+                }]))
+            }),
         )
         .aliases(vec!["d"])
         .category(CommandCategory::Project)
@@ -2227,14 +2232,90 @@ fn register_verification_family(r: &mut crate::registry::CommandRegistry) {
         CommandSpec::builder(
             vec!["review"],
             "Open the current diff review overlay",
-            handler(|_| Ok(CommandResult::overlay(OverlayKind::Diff))),
+            handler(|_| {
+                Ok(CommandResult::effects([AppEffect::ReviewDiff {
+                    staged: false,
+                }]))
+            }),
         )
         .category(CommandCategory::Verification)
-        .availability(CommandAvailability::Interactive)
+        .availability(CommandAvailability::Both)
         .permission(PermissionRequirement::Read)
         .build(),
     )
     .ok();
+}
+
+fn register_git_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["git"],
+            "Inspect and manage Git state",
+            handler(|_| Ok(CommandResult::effects([AppEffect::GitStatus]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["git", "status"],
+            "Show git status",
+            handler(|_| Ok(CommandResult::effects([AppEffect::GitStatus]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["git", "diff"],
+            "Review unstaged or staged diff",
+            handler(|args| {
+                Ok(CommandResult::effects([AppEffect::ReviewDiff {
+                    staged: args.iter().any(|arg| arg == "--staged"),
+                }]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::optional(
+            "--staged",
+            "Review the staged diff instead of the working tree.",
+        )])
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    for (name, description) in [
+        ("review", "Generate or inspect a git review"),
+        ("commit", "Generate or prepare a git commit"),
+        ("log", "Inspect git log"),
+        ("branch", "Inspect git branches"),
+        ("worktree", "Manage git worktrees"),
+    ] {
+        r.register(
+            CommandSpec::builder(
+                vec!["git", name],
+                description,
+                handler(move |_| {
+                    Ok(CommandResult::notification(
+                        crate::result::NotificationLevel::Info,
+                        format!("`/git {name}` opens richer Git tooling in a later slice. Use `/git diff` and `/review` for diff review now."),
+                    ))
+                }),
+            )
+            .category(CommandCategory::Project)
+            .availability(CommandAvailability::Both)
+            .permission(PermissionRequirement::Read)
+            .build(),
+        )
+        .ok();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2499,6 +2580,14 @@ mod tests {
             "undo",
             "redo",
             "rewind",
+            "git",
+            "git status",
+            "git diff",
+            "git review",
+            "git commit",
+            "git log",
+            "git branch",
+            "git worktree",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -2772,7 +2861,29 @@ mod tests {
             .unwrap();
         assert!(matches!(
             result,
-            CommandResult::OpenOverlay(OverlayKind::Diff)
+            CommandResult::Effects(effects) if effects == vec![AppEffect::ReviewDiff { staged: false }]
+        ));
+    }
+
+    #[tokio::test]
+    async fn git_diff_commands_emit_review_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/git diff --staged", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::ReviewDiff { staged: true }]
+        ));
+
+        let result = default_registry()
+            .dispatch("/git status", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::GitStatus]
         ));
     }
 

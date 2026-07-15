@@ -1796,6 +1796,25 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
             )
             .await;
         }
+        AppEffect::ReviewDiff { staged } => {
+            match pleiades_agent_git::working_diff_review(std::path::Path::new("."), staged).await {
+                Ok(review) => {
+                    send_event(state.events, AgentEvent::DiffUpdated(review.raw.clone())).await;
+                    send_event(
+                        state.events,
+                        AgentEvent::Document(diff_review_document(&review)),
+                    )
+                    .await;
+                }
+                Err(error) => {
+                    send_event(state.events, AgentEvent::Error(error.to_string())).await;
+                }
+            }
+        }
+        AppEffect::GitStatus => match git_status_document().await {
+            Ok(document) => send_event(state.events, AgentEvent::Document(document)).await,
+            Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+        },
         AppEffect::SubmitPrompt(prompt) => {
             if prompt.trim().is_empty() {
                 send_event(
@@ -1864,6 +1883,80 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
         }
     }
     false
+}
+
+async fn git_status_document() -> Result<RenderableDocument, pleiades_agent_core::Error> {
+    let output = tokio::process::Command::new("git")
+        .args(["status", "--short", "--branch"])
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Err(pleiades_agent_core::Error::tool(
+            String::from_utf8_lossy(&output.stderr).trim(),
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(RenderableDocument::new("Git status").section(
+        "Status",
+        if stdout.trim().is_empty() {
+            "(clean)".to_string()
+        } else {
+            stdout.into_owned()
+        },
+    ))
+}
+
+fn diff_review_document(review: &pleiades_agent_git::DiffReview) -> RenderableDocument {
+    let mut document = RenderableDocument::new(if review.staged {
+        "Staged diff review"
+    } else {
+        "Working-tree diff review"
+    })
+    .section("Summary", review.summary());
+    for (file_index, file) in review.files.iter().enumerate() {
+        let path = file
+            .new_path
+            .as_ref()
+            .or(file.old_path.as_ref())
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "(unknown)".to_string());
+        let mut body = String::new();
+        body.push_str(&format!(
+            "File index: {file_index}\nOld: {}\nNew: {}\nBinary: {}\nHunks: {}\n",
+            file.old_path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "/dev/null".to_string()),
+            file.new_path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "/dev/null".to_string()),
+            file.binary,
+            file.hunks.len()
+        ));
+        for (hunk_index, hunk) in file.hunks.iter().enumerate() {
+            body.push_str(&format!(
+                "\nHunk {hunk_index}: {}\n-old {},{} +new {},{}\n",
+                hunk.header, hunk.old_start, hunk.old_len, hunk.new_start, hunk.new_len
+            ));
+            for line in hunk.lines.iter().take(80) {
+                let prefix = match line.kind {
+                    pleiades_agent_git::DiffLineKind::Context => " ",
+                    pleiades_agent_git::DiffLineKind::Added => "+",
+                    pleiades_agent_git::DiffLineKind::Removed => "-",
+                    pleiades_agent_git::DiffLineKind::NoNewline => "\\",
+                };
+                body.push_str(prefix);
+                body.push_str(line.content.trim_end_matches('\n'));
+                body.push('\n');
+            }
+            if hunk.lines.len() > 80 {
+                body.push_str("… hunk truncated in review document\n");
+            }
+        }
+        document.push_section(path, body);
+    }
+    document
 }
 
 fn checkpoint_label(record: &CheckpointRecord) -> String {

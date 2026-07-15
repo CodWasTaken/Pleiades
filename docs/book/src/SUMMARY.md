@@ -16,4 +16,5 @@
 - [Prompt templates](prompts.md)
 - [Workflows](workflows.md)
 - [Git integration](git.md)
+- [Diff review](diff-review.md)
 - [Architecture](architecture.md)
