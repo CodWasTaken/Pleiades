@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6f12bce3.js";
+            window.path_to_searchindex_js = "searchindex-4ada3b4e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-1ea7e559.js"></script>
+        <script src="toc-773a4cad.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -873,6 +873,44 @@ pleiades/memory/user
 <p><code>/memory refresh</code> rebuilds the runtime engine and reloads persistent memory
 from disk. <code>/memory clear</code> clears all tiers and should be treated as a
 destructive action.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="usage-and-budgets"><a class="header" href="#usage-and-budgets">Usage and budgets</a></h1>
+<p>Pleiades tracks live runtime usage and can stop active tasks when process-local
+budgets are exceeded.</p>
+<p>Inside the live workspace:</p>
+<pre><code class="language-text">/budget
+/budget show
+/budget tokens &lt;count&gt;
+/budget cost &lt;amount&gt;
+/budget time &lt;duration&gt;
+/budget tools &lt;count&gt;
+/budget reset
+</code></pre>
+<p>The report includes:</p>
+<ul>
+<li>input, output, cache-read, and cache-write tokens;</li>
+<li>total token usage;</li>
+<li>tool-call count;</li>
+<li>provider latency;</li>
+<li>tool execution time;</li>
+<li>elapsed runtime time;</li>
+<li>active token, cost, time, and tool limits;</li>
+<li>rate-limit status when a provider reports one.</li>
+</ul>
+<p>Token, time, and tool-call budgets are enforced by the runtime. When a limit is
+exceeded, the current task is stopped with a clear failure event and the session
+is saved.</p>
+<p>Cost budgets can be recorded, but cost enforcement requires reliable model
+pricing data attached to provider usage events. Until that pricing source is
+available, Pleiades reports cost as unavailable rather than inventing an
+estimate.</p>
+<p>External commands such as:</p>
+<pre><code class="language-bash">pleiades budget show
+pleiades budget time 10m
+</code></pre>
+<p>run in a separate process. They validate syntax and explain the matching
+workspace command, but they cannot mutate an already-running TUI runtime. Use
+<code>/budget ...</code> inside <code>pleiades</code> for live task control.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="workflows"><a class="header" href="#workflows">Workflows</a></h1>
 <p>Workflow definitions may be TOML, YAML, or JSON and are discovered in <code>.pleiades/workflows</code> and the global Pleiades configuration directory.</p>
