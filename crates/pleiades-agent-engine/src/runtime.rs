@@ -266,6 +266,7 @@ pub struct AgentRuntime {
     engine_override: Option<Engine>,
     registry: commands::CommandRegistry,
     process_manager: pleiades_agent_process::ProcessManager,
+    browser: pleiades_agent_browser::BrowserService,
 }
 
 impl AgentRuntime {
@@ -287,6 +288,9 @@ impl AgentRuntime {
             engine_override: None,
             registry: commands::defaults::default_registry(),
             process_manager: pleiades_agent_process::ProcessManager::new(),
+            browser: pleiades_agent_browser::BrowserService::new(
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            ),
         }
     }
 
@@ -329,6 +333,7 @@ impl AgentRuntime {
             engine_override,
             mut registry,
             process_manager,
+            browser,
         } = self;
         config.core.default_provider = Some(provider_name.clone());
         config.core.default_model = Some(model_name.clone());
@@ -457,6 +462,7 @@ impl AgentRuntime {
                                 events: &events,
                                 registry: &mut registry,
                                 process_manager: &process_manager,
+                                browser: &browser,
                             };
                             let should_shutdown = dispatch_slash(&input, &mut dispatch).await;
                             if should_shutdown {
@@ -1412,6 +1418,7 @@ struct SlashDispatchState<'a> {
     events: &'a mpsc::Sender<AgentEvent>,
     registry: &'a mut commands::CommandRegistry,
     process_manager: &'a pleiades_agent_process::ProcessManager,
+    browser: &'a pleiades_agent_browser::BrowserService,
 }
 
 async fn dispatch_slash(input: &str, state: &mut SlashDispatchState<'_>) -> bool {
@@ -1962,6 +1969,57 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
             }
             Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
         },
+        AppEffect::BrowserOpen(url) => match state.browser.open(&url).await {
+            Ok(report) => {
+                send_event(
+                    state.events,
+                    AgentEvent::Document(browser_report_document("Browser report", &report)),
+                )
+                .await;
+            }
+            Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+        },
+        AppEffect::BrowserScreenshot => match state.browser.screenshot().await {
+            Ok(report) => {
+                send_event(
+                    state.events,
+                    AgentEvent::Document(browser_report_document("Browser screenshot", &report)),
+                )
+                .await;
+            }
+            Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+        },
+        AppEffect::BrowserInspect => match state.browser.inspect().await {
+            Ok(report) => {
+                send_event(
+                    state.events,
+                    AgentEvent::Document(browser_report_document("Browser inspection", &report)),
+                )
+                .await;
+            }
+            Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+        },
+        AppEffect::BrowserConsole => match state.browser.console().await {
+            Ok(lines) => {
+                send_event(
+                    state.events,
+                    AgentEvent::Document(browser_console_document(&lines)),
+                )
+                .await;
+            }
+            Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+        },
+        AppEffect::BrowserClose => {
+            state.browser.close().await;
+            send_event(
+                state.events,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Success,
+                    message: "Browser session cleared".to_string(),
+                }),
+            )
+            .await;
+        }
         AppEffect::SubmitPrompt(prompt) => {
             if prompt.trim().is_empty() {
                 send_event(
@@ -2221,6 +2279,58 @@ fn process_logs_document(logs: &pleiades_agent_process::ProcessLogs) -> Renderab
             "(no output captured yet)".to_string()
         } else {
             logs.lines.join("\n")
+        },
+    )
+}
+
+fn browser_report_document(
+    title: &str,
+    report: &pleiades_agent_browser::BrowserReport,
+) -> RenderableDocument {
+    RenderableDocument::new(title)
+        .section("URL", &report.url)
+        .section("Title", &report.title)
+        .section(
+            "Page",
+            format!(
+                "Status: {}\nHTML characters: {}\nScreenshot: {}",
+                report
+                    .status
+                    .map(|status| status.to_string())
+                    .unwrap_or_else(|| "(none)".to_string()),
+                report.html_chars,
+                report
+                    .screenshot_path
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|| "(none)".to_string())
+            ),
+        )
+        .section(
+            "Console",
+            if report.console.is_empty() {
+                "(none)".to_string()
+            } else {
+                report.console.join("\n")
+            },
+        )
+        .section(
+            "Network failures",
+            if report.failed_requests.is_empty() {
+                "(none)".to_string()
+            } else {
+                report.failed_requests.join("\n")
+            },
+        )
+}
+
+fn browser_console_document(lines: &[String]) -> RenderableDocument {
+    RenderableDocument::new("Browser console").section(
+        "Messages",
+        if lines.is_empty() {
+            "(none)".to_string()
+        } else {
+            lines.join("\n")
         },
     )
 }

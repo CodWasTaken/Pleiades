@@ -19,4 +19,5 @@
 - [Diff review](diff-review.md)
 - [Language services](lsp.md)
 - [Background processes](processes.md)
+- [Browser verification](browser.md)
 - [Architecture](architecture.md)

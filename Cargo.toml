@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/pleiades-agent",
+    "crates/pleiades-agent-browser",
     "crates/pleiades-agent-core",
     "crates/pleiades-agent-commands",
     "crates/pleiades-agent-services",
