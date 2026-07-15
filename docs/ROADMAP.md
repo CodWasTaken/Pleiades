@@ -238,7 +238,7 @@ tracked as a GitHub issue under the matching milestone.
 | Release | Title | Status |
 |---|---|---|
 | 2.1 | Unified Workspace Commands | implemented |
-| 2.2 | Safe Autonomous and YOLO Modes | 🚧 in progress |
+| 2.2 | Safe Autonomous and YOLO Modes | implemented |
 | 2.3 | Checkpoints, Context, Verification | pending |
 | 2.4 | MCP, Plugins, Skills, Custom Commands | pending |
 | 2.5 | Professional Coding Workspace | pending |
@@ -261,14 +261,14 @@ Implemented. Items (GitHub issues):
 
 ### Release 2.2 — Safe Autonomous and YOLO Modes
 
-In progress. Items (GitHub issues):
+Implemented. Items (GitHub issues):
 
 - [x] Split approval and sandbox policies (`ApprovalPolicy`, `SandboxPolicy`)
 - [x] Add `plan`, `agent`, `auto`, and `yolo` presets
 - [x] Add YOLO confirmation and persistent danger status
 - [x] Add structured `permissions.rules` and deny-first evaluation
 - [x] Add `/permissions` and `pleiades permissions` management commands
-- [ ] Publish cross-platform CI report and milestone summary
+- [x] Publish cross-platform CI report and milestone summary
 
 A slice is considered done when `cargo fmt`, `cargo clippy -D warnings`, and
 `cargo test --workspace` all pass on Linux, macOS, and Windows, and the
