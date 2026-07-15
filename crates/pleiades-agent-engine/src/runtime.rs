@@ -1815,6 +1815,61 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
             Ok(document) => send_event(state.events, AgentEvent::Document(document)).await,
             Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
         },
+        AppEffect::LspStatus | AppEffect::LspServers => {
+            let service = pleiades_agent_lsp::LspService::new(
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            );
+            match service.status().await {
+                Ok(report) => {
+                    send_event(
+                        state.events,
+                        AgentEvent::Document(lsp_status_document(&report)),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
+        AppEffect::LspRestart => {
+            send_event(
+                state.events,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Info,
+                    message: "No persistent LSP server process is running in this slice; diagnostics are executed on demand.".to_string(),
+                }),
+            )
+            .await;
+        }
+        AppEffect::LspDiagnostics => {
+            let service = pleiades_agent_lsp::LspService::new(
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            );
+            match service.diagnostics().await {
+                Ok(report) => {
+                    send_event(
+                        state.events,
+                        AgentEvent::Document(lsp_diagnostics_document(&report)),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
+        AppEffect::LspSymbols(query) => {
+            let service = pleiades_agent_lsp::LspService::new(
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            );
+            match service.symbols(&query).await {
+                Ok(report) => {
+                    send_event(
+                        state.events,
+                        AgentEvent::Document(lsp_symbols_document(&report)),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
         AppEffect::SubmitPrompt(prompt) => {
             if prompt.trim().is_empty() {
                 send_event(
@@ -1955,6 +2010,87 @@ fn diff_review_document(review: &pleiades_agent_git::DiffReview) -> RenderableDo
             }
         }
         document.push_section(path, body);
+    }
+    document
+}
+
+fn lsp_status_document(report: &pleiades_agent_lsp::LspStatusReport) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Language services")
+        .section("Workspace", report.workspace.display().to_string());
+    if report.servers.is_empty() {
+        document.push_section(
+            "No detected language service",
+            "No supported project marker was found in this workspace.",
+        );
+    }
+    for server in &report.servers {
+        document.push_section(
+            format!("{} ({})", server.id, server.language),
+            format!(
+                "Status: {}\nCommand: {}\nTransport: {}\n{}",
+                server.status.label(),
+                server.command,
+                server.transport,
+                server.notes
+            ),
+        );
+    }
+    document
+}
+
+fn lsp_diagnostics_document(report: &pleiades_agent_lsp::DiagnosticReport) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Language diagnostics")
+        .section("Workspace", report.workspace.display().to_string())
+        .section(
+            "Command",
+            report
+                .command
+                .as_deref()
+                .unwrap_or("no diagnostics command run"),
+        );
+    if report.diagnostics.is_empty() {
+        document.push_section("Diagnostics", "No diagnostics reported.");
+    }
+    for file in &report.diagnostics {
+        let mut body = String::new();
+        for diagnostic in &file.diagnostics {
+            let severity = match diagnostic.severity {
+                Some(lsp_types::DiagnosticSeverity::ERROR) => "error",
+                Some(lsp_types::DiagnosticSeverity::WARNING) => "warning",
+                Some(lsp_types::DiagnosticSeverity::INFORMATION) => "info",
+                Some(lsp_types::DiagnosticSeverity::HINT) => "hint",
+                _ => "diagnostic",
+            };
+            body.push_str(&format!(
+                "{}:{}:{}: {}: {}\n",
+                file.path.display(),
+                diagnostic.range.start.line + 1,
+                diagnostic.range.start.character + 1,
+                severity,
+                diagnostic.message
+            ));
+        }
+        document.push_section(file.path.display().to_string(), body);
+    }
+    document
+}
+
+fn lsp_symbols_document(report: &pleiades_agent_lsp::SymbolSearchReport) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Workspace symbols").section("Query", &report.query);
+    if report.symbols.is_empty() {
+        document.push_section("Matches", "No symbols matched.");
+    }
+    for symbol in report.symbols.iter().take(100) {
+        document.push_section(
+            format!("{} {}", symbol.kind, symbol.name),
+            format!("{}:{}", symbol.location.display(), symbol.line),
+        );
+    }
+    if report.symbols.len() > 100 {
+        document.push_section(
+            "Truncated",
+            format!("Showing 100 of {} matches.", report.symbols.len()),
+        );
     }
     document
 }

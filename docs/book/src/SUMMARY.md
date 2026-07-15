@@ -17,4 +17,5 @@
 - [Workflows](workflows.md)
 - [Git integration](git.md)
 - [Diff review](diff-review.md)
+- [Language services](lsp.md)
 - [Architecture](architecture.md)
