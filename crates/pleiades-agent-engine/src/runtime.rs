@@ -265,6 +265,7 @@ pub struct AgentRuntime {
     session_store: SessionStore,
     engine_override: Option<Engine>,
     registry: commands::CommandRegistry,
+    process_manager: pleiades_agent_process::ProcessManager,
 }
 
 impl AgentRuntime {
@@ -285,6 +286,7 @@ impl AgentRuntime {
             session_store,
             engine_override: None,
             registry: commands::defaults::default_registry(),
+            process_manager: pleiades_agent_process::ProcessManager::new(),
         }
     }
 
@@ -326,6 +328,7 @@ impl AgentRuntime {
             session_store,
             engine_override,
             mut registry,
+            process_manager,
         } = self;
         config.core.default_provider = Some(provider_name.clone());
         config.core.default_model = Some(model_name.clone());
@@ -453,6 +456,7 @@ impl AgentRuntime {
                                 outcome_tx: &outcome_tx,
                                 events: &events,
                                 registry: &mut registry,
+                                process_manager: &process_manager,
                             };
                             let should_shutdown = dispatch_slash(&input, &mut dispatch).await;
                             if should_shutdown {
@@ -466,6 +470,7 @@ impl AgentRuntime {
                             if let Some(task) = &active {
                                 task.cancellation.cancel();
                             }
+                            process_manager.stop_all().await;
                             break;
                         }
                         _ => {}
@@ -1406,6 +1411,7 @@ struct SlashDispatchState<'a> {
     outcome_tx: &'a mpsc::Sender<TaskOutcome>,
     events: &'a mpsc::Sender<AgentEvent>,
     registry: &'a mut commands::CommandRegistry,
+    process_manager: &'a pleiades_agent_process::ProcessManager,
 }
 
 async fn dispatch_slash(input: &str, state: &mut SlashDispatchState<'_>) -> bool {
@@ -1870,6 +1876,92 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
                 Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
             }
         }
+        AppEffect::ProcessList => {
+            let reports = state.process_manager.list().await;
+            send_event(
+                state.events,
+                AgentEvent::Document(process_list_document(&reports)),
+            )
+            .await;
+        }
+        AppEffect::ProcessStart(command) => {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            match state.process_manager.start(command, cwd).await {
+                Ok(report) => {
+                    send_event(
+                        state.events,
+                        AgentEvent::Notify(Notification {
+                            level: NotificationLevel::Success,
+                            message: format!(
+                                "Started background process {} ({})",
+                                report.id, report.command
+                            ),
+                        }),
+                    )
+                    .await;
+                    let reports = state.process_manager.list().await;
+                    send_event(
+                        state.events,
+                        AgentEvent::Document(process_list_document(&reports)),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
+        AppEffect::ProcessLogs(id) | AppEffect::ProcessAttach(id) => {
+            match state.process_manager.logs(&id).await {
+                Ok(logs) => {
+                    send_event(
+                        state.events,
+                        AgentEvent::Document(process_logs_document(&logs)),
+                    )
+                    .await;
+                }
+                Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+            }
+        }
+        AppEffect::ProcessStop(id) => match state.process_manager.stop(&id).await {
+            Ok(report) => {
+                send_event(
+                    state.events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Success,
+                        message: format!("Stopped background process {}", report.id),
+                    }),
+                )
+                .await;
+                let reports = state.process_manager.list().await;
+                send_event(
+                    state.events,
+                    AgentEvent::Document(process_list_document(&reports)),
+                )
+                .await;
+            }
+            Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+        },
+        AppEffect::ProcessRestart(id) => match state.process_manager.restart(&id).await {
+            Ok(report) => {
+                send_event(
+                    state.events,
+                    AgentEvent::Notify(Notification {
+                        level: NotificationLevel::Success,
+                        message: format!(
+                            "Restarted background process as {} ({})",
+                            report.id, report.command
+                        ),
+                    }),
+                )
+                .await;
+                let reports = state.process_manager.list().await;
+                send_event(
+                    state.events,
+                    AgentEvent::Document(process_list_document(&reports)),
+                )
+                .await;
+            }
+            Err(error) => send_event(state.events, AgentEvent::Error(error.to_string())).await,
+        },
         AppEffect::SubmitPrompt(prompt) => {
             if prompt.trim().is_empty() {
                 send_event(
@@ -1902,6 +1994,7 @@ async fn apply_app_effect(effect: AppEffect, state: &mut SlashDispatchState<'_>)
             if let Some(task) = state.active.as_ref() {
                 task.cancellation.cancel();
             }
+            state.process_manager.stop_all().await;
             send_event(state.events, AgentEvent::ShuttingDown).await;
             return true;
         }
@@ -2093,6 +2186,43 @@ fn lsp_symbols_document(report: &pleiades_agent_lsp::SymbolSearchReport) -> Rend
         );
     }
     document
+}
+
+fn process_list_document(reports: &[pleiades_agent_process::ProcessReport]) -> RenderableDocument {
+    let mut document = RenderableDocument::new("Background processes");
+    if reports.is_empty() {
+        document.push_section("No processes", "Start one with /process start <command>.");
+    }
+    for report in reports {
+        document.push_section(
+            format!("{} · {}", report.id, report.status.label()),
+            format!(
+                "Command: {}\nPID: {}\nCWD: {}\nExit: {}",
+                report.command,
+                report
+                    .pid
+                    .map(|pid| pid.to_string())
+                    .unwrap_or_else(|| "(none)".to_string()),
+                report.cwd.display(),
+                report
+                    .exit_code
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "(running or stopped)".to_string())
+            ),
+        );
+    }
+    document
+}
+
+fn process_logs_document(logs: &pleiades_agent_process::ProcessLogs) -> RenderableDocument {
+    RenderableDocument::new(format!("Process logs: {}", logs.id)).section(
+        "Output",
+        if logs.lines.is_empty() {
+            "(no output captured yet)".to_string()
+        } else {
+            logs.lines.join("\n")
+        },
+    )
 }
 
 fn checkpoint_label(record: &CheckpointRecord) -> String {
@@ -2797,6 +2927,72 @@ mod tests {
 
         assert!(saw_reload);
         assert!(saw_notify);
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn process_commands_manage_runtime_processes() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (_temp, runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+        #[cfg(windows)]
+        let command = "/process start echo hello && ping -n 6 127.0.0.1 >nul";
+        #[cfg(not(windows))]
+        let command = "/process start printf 'hello\\n'; sleep 5";
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash(command.into()))
+            .await
+            .unwrap();
+
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Success,
+                    ..
+                })
+            ) {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/process logs proc-1".into()))
+            .await
+            .unwrap();
+        let logs = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                if document.title == "Process logs: proc-1" {
+                    break document;
+                }
+            }
+        };
+        assert!(
+            logs.sections
+                .iter()
+                .any(|section| section.body.contains("hello"))
+        );
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/process stop proc-1".into()))
+            .await
+            .unwrap();
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Success,
+                    message,
+                }) if message.contains("Stopped background process")
+            ) {
+                break;
+            }
+        }
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }
 

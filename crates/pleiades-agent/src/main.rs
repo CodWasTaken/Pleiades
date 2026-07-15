@@ -138,6 +138,10 @@ enum Commands {
     #[command(subcommand)]
     Lsp(LspCommand),
 
+    /// Manage live workspace background processes
+    #[command(subcommand)]
+    Process(ProcessCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -667,6 +671,25 @@ enum LspCommand {
         /// Symbol name fragment
         query: String,
     },
+}
+
+#[derive(Subcommand)]
+enum ProcessCommand {
+    /// List live workspace processes
+    List,
+    /// Start a background process in the live workspace
+    Start {
+        #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
+        command: Vec<String>,
+    },
+    /// Show captured logs for a process
+    Logs { id: String },
+    /// Stop a process
+    Stop { id: String },
+    /// Restart a process
+    Restart { id: String },
+    /// Attach to process output in the live workspace
+    Attach { id: String },
 }
 
 fn get_config_dirs() -> (PathBuf, PathBuf) {
@@ -2274,6 +2297,38 @@ fn handle_lsp_command(loader: &ConfigLoader, command: LspCommand) {
     }
 }
 
+fn handle_process_command(command: ProcessCommand) {
+    match command {
+        ProcessCommand::List => {
+            println!("Background processes are owned by the live workspace runtime.");
+            println!("Run `pleiades`, then `/process list`.");
+        }
+        ProcessCommand::Start { command } => {
+            let command = command.join(" ");
+            println!(
+                "Start background processes from the live workspace so they can be supervised."
+            );
+            if command.trim().is_empty() {
+                println!("Run `pleiades`, then `/process start <command>`.");
+            } else {
+                println!("Run `pleiades`, then `/process start {command}`.");
+            }
+        }
+        ProcessCommand::Logs { id } => {
+            println!("Run `pleiades`, then `/process logs {id}`.");
+        }
+        ProcessCommand::Stop { id } => {
+            println!("Run `pleiades`, then `/process stop {id}`.");
+        }
+        ProcessCommand::Restart { id } => {
+            println!("Run `pleiades`, then `/process restart {id}`.");
+        }
+        ProcessCommand::Attach { id } => {
+            println!("Run `pleiades`, then `/process attach {id}`.");
+        }
+    }
+}
+
 fn print_lsp_status(report: &pleiades_agent_lsp::LspStatusReport) {
     println!("Workspace: {}", report.workspace.display());
     if report.servers.is_empty() {
@@ -3294,6 +3349,7 @@ fn main() {
             handle_git_command(&loader, cmd, cli.provider.as_deref(), cli.model.as_deref())
         }
         Some(Commands::Lsp(cmd)) => handle_lsp_command(&loader, cmd),
+        Some(Commands::Process(cmd)) => handle_process_command(cmd),
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {
                 Ok(c) => c,

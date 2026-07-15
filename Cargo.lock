@@ -1593,6 +1593,7 @@ dependencies = [
  "pleiades-agent-lsp",
  "pleiades-agent-memory",
  "pleiades-agent-permissions",
+ "pleiades-agent-process",
  "pleiades-agent-prompts",
  "pleiades-agent-providers",
  "pleiades-agent-tools",
@@ -1687,6 +1688,16 @@ dependencies = [
  "tracing",
  "uuid",
  "walkdir",
+]
+
+[[package]]
+name = "pleiades-agent-process"
+version = "2.0.0"
+dependencies = [
+ "pleiades-agent-core",
+ "serde",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

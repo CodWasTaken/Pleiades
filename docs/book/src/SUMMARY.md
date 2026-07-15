@@ -18,4 +18,5 @@
 - [Git integration](git.md)
 - [Diff review](diff-review.md)
 - [Language services](lsp.md)
+- [Background processes](processes.md)
 - [Architecture](architecture.md)

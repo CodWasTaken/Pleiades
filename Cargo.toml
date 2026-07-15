@@ -17,6 +17,7 @@ members = [
     "crates/pleiades-agent-workflow",
     "crates/pleiades-agent-git",
     "crates/pleiades-agent-lsp",
+    "crates/pleiades-agent-process",
     "crates/pleiades-agent-prompts",
     "crates/pleiades-agent-sdk",
 ]

@@ -628,6 +628,7 @@ pub fn default_registry_with_services(
     register_verification_family(&mut r);
     register_git_family(&mut r);
     register_lsp_family(&mut r);
+    register_process_family(&mut r);
     register_custom_commands(&mut r, services);
     r
 }
@@ -2405,6 +2406,93 @@ fn register_lsp_family(r: &mut crate::registry::CommandRegistry) {
     .ok();
 }
 
+fn register_process_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["process"],
+            "Manage background processes",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ProcessList]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["process", "list"],
+            "List background processes",
+            handler(|_| Ok(CommandResult::effects([AppEffect::ProcessList]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["process", "start"],
+            "Start a background process",
+            handler(|args| {
+                if args.is_empty() {
+                    return Err(Error::invalid_input("usage: /process start <command>"));
+                }
+                Ok(CommandResult::effects([AppEffect::ProcessStart(
+                    args.join(" "),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "command",
+            "Command to keep running in the workspace.",
+        )])
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    for (name, effect) in [
+        ("logs", "logs"),
+        ("stop", "stop"),
+        ("restart", "restart"),
+        ("attach", "attach"),
+    ] {
+        r.register(
+            CommandSpec::builder(
+                vec!["process", name],
+                "Control a background process",
+                handler(move |args| {
+                    let id = args
+                        .first()
+                        .ok_or_else(|| {
+                            Error::invalid_input(format!("usage: /process {name} <id>"))
+                        })?
+                        .clone();
+                    let app_effect = match effect {
+                        "logs" => AppEffect::ProcessLogs(id),
+                        "stop" => AppEffect::ProcessStop(id),
+                        "restart" => AppEffect::ProcessRestart(id),
+                        _ => AppEffect::ProcessAttach(id),
+                    };
+                    Ok(CommandResult::effects([app_effect]))
+                }),
+            )
+            .arguments(vec![ArgumentSpec::required(
+                "id",
+                "Process id returned by /process start.",
+            )])
+            .category(CommandCategory::Project)
+            .availability(CommandAvailability::Interactive)
+            .permission(PermissionRequirement::Dangerous)
+            .build(),
+        )
+        .ok();
+    }
+}
+
 #[derive(Debug, Clone)]
 struct CustomCommandHandler {
     definition: CustomCommandDefinition,
@@ -2681,6 +2769,13 @@ mod tests {
             "lsp restart",
             "lsp diagnostics",
             "lsp symbols",
+            "process",
+            "process list",
+            "process start",
+            "process logs",
+            "process stop",
+            "process restart",
+            "process attach",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -3007,6 +3102,28 @@ mod tests {
                 .iter()
                 .any(|suggestion| suggestion.label == "lsp diagnostics")
         );
+    }
+
+    #[tokio::test]
+    async fn process_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/process start cargo watch -x test", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::ProcessStart("cargo watch -x test".to_string())]
+        ));
+
+        let result = default_registry()
+            .dispatch("/process logs proc-1", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::ProcessLogs("proc-1".to_string())]
+        ));
     }
 
     #[tokio::test]

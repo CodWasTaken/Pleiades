@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for status, server discovery, Rust diagnostics via
   `cargo check --message-format=json`, and Rust symbol search backed by shared
   LSP-compatible types.
+- Added a runtime-owned background process manager with `/process list`,
+  `start`, `logs`, `stop`, `restart`, and `attach` commands plus bounded
+  stdout/stderr capture for dev servers and watchers.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,
