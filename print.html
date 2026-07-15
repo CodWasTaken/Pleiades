@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-aba4e4ac.js";
+            window.path_to_searchindex_js = "searchindex-3221004a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -336,6 +336,7 @@ as <code>Stopping: identical failure ... repeated 3 times</code> and saves the s
 <tr><td><code>pleiades-agent-engine</code></td><td>Chat and agent orchestration</td></tr>
 <tr><td><code>pleiades-agent-providers</code></td><td>Provider adapters</td></tr>
 <tr><td><code>pleiades-agent-tools</code></td><td>Built-in tools</td></tr>
+<tr><td><code>pleiades-agent-mcp</code></td><td>Model Context Protocol client primitives</td></tr>
 <tr><td><code>pleiades-agent-tui</code></td><td>Terminal UI</td></tr>
 <tr><td><code>pleiades-agent-plugins</code></td><td>Plugin manifests and shell hooks</td></tr>
 <tr><td><code>pleiades-agent-memory</code></td><td>Persistent memory tiers</td></tr>
@@ -381,6 +382,16 @@ as <code>Stopping: identical failure ... repeated 3 times</code> and saves the s
 <tr><td><code>plugins.paths</code></td><td>string list</td><td><code>~/.pleiades/plugins</code></td></tr>
 <tr><td><code>plugins.settings</code></td><td>nested string map</td><td>empty</td></tr>
 <tr><td><code>plugins.sandbox</code></td><td>boolean</td><td><code>false</code> (reserved for a future sandbox runtime)</td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.transport</code></td><td><code>stdio</code>, <code>http</code>, or <code>streamable-http</code></td><td>required per server</td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.command</code></td><td>string</td><td>required for <code>stdio</code></td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.args</code></td><td>string list</td><td>empty</td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.env</code></td><td>string map</td><td>empty</td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.url</code></td><td>string</td><td>required for remote transports</td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.auth</code></td><td>auth source</td><td>unset</td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.enabled</code></td><td>boolean</td><td><code>true</code></td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.timeout_secs</code></td><td>integer</td><td><code>30</code></td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.tool_allowlist</code></td><td>string list</td><td>empty</td></tr>
+<tr><td><code>mcp.servers.&lt;id&gt;.tool_denylist</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.always_allow</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.always_deny</code></td><td>string list</td><td>empty</td></tr>
 <tr><td><code>permissions.rules</code></td><td>array of permission rules</td><td>empty</td></tr>
@@ -406,6 +417,26 @@ as <code>Stopping: identical failure ... repeated 3 times</code> and saves the s
 </table>
 </div>
 <p>Never commit expanded secrets. Prefer <code>${OPENAI_API_KEY}</code> and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.</p>
+<p>MCP servers are configured under <code>mcp.servers</code>. Stdio servers define a command,
+arguments, and optional environment variables:</p>
+<pre><code class="language-toml">[mcp.servers.filesystem]
+transport = "stdio"
+command = "mcp-server-filesystem"
+args = ["."]
+timeout_secs = 30
+tool_allowlist = ["read_file", "list_directory"]
+</code></pre>
+<p>Remote servers use <code>http</code> or <code>streamable-http</code> and may point authentication at
+environment variables. Pleiades stores the variable names, not token values:</p>
+<pre><code class="language-toml">[mcp.servers.remote-docs]
+transport = "streamable-http"
+url = "https://example.test/mcp"
+timeout_secs = 30
+
+[mcp.servers.remote-docs.auth]
+type = "bearer"
+token_env = "REMOTE_DOCS_MCP_TOKEN"
+</code></pre>
 <p>The special <code>providers.openai-subscription</code> entry does not contain an API key. Authentication remains in the official Codex CLI credential store and can be checked with <code>pleiades auth status</code>. Run <code>pleiades setup</code> instead of editing this entry manually.</p>
 <p>Interactive agent sandbox modes are selected with <code>--permission-mode plan|agent|auto|yolo</code> or <code>/mode plan|agent|auto|yolo</code>. <code>agent</code> is the default.
 <code>auto</code> runs without prompts inside the workspace. <code>yolo</code> removes workspace
@@ -597,6 +628,8 @@ permission, configuration, and extension operations shared by CLI and live comma
 <li><code>pleiades-agent-engine</code> — chat preparation, event-driven autonomous runtime, permissions, cancellation, sessions, and memory.</li>
 <li><code>pleiades-agent-permissions</code> — structured permission rules, shell command
 clause parsing, path escape checks, and deny-first decisions.</li>
+<li><code>pleiades-agent-mcp</code> — MCP JSON-RPC protocol types, server definitions,
+redacted status reporting, and stdio client primitives.</li>
 <li><code>pleiades-agent-tui</code> — reducer state, Ratatui widgets, native Markdown spans, terminal lifecycle, editor, themes, and overlays.</li>
 <li><code>pleiades-agent-providers</code> — Anthropic, OpenAI, OpenAI-compatible, and Codex CLI adapters.</li>
 <li><code>pleiades-agent-tools</code> — confined filesystem/search/diff tools and sandboxed command execution.</li>
