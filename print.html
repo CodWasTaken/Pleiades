@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ff972910.js";
+            window.path_to_searchindex_js = "searchindex-cc848a35.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c11df699.js"></script>
+        <script src="toc-a25795c1.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -865,6 +865,47 @@ functions, structs, enums, and traits. The scan skips <code>.git</code> and <cod
 <li><code>/lsp restart</code> reports that no persistent server exists in this slice.</li>
 <li>Diagnostics may write normal Cargo build artifacts under <code>target/</code>.</li>
 <li>Non-Rust language servers are planned follow-up work.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="background-processes"><a class="header" href="#background-processes">Background processes</a></h1>
+<p>The live workspace can supervise background processes such as development
+servers, file watchers, and long-running test commands.</p>
+<p>Commands:</p>
+<pre><code class="language-text">/process list
+/process start &lt;command&gt;
+/process logs &lt;id&gt;
+/process stop &lt;id&gt;
+/process restart &lt;id&gt;
+/process attach &lt;id&gt;
+</code></pre>
+<p>Headless equivalents exist for discoverability:</p>
+<pre><code class="language-bash">pleiades process list
+pleiades process start &lt;command&gt;
+pleiades process logs &lt;id&gt;
+pleiades process stop &lt;id&gt;
+pleiades process restart &lt;id&gt;
+pleiades process attach &lt;id&gt;
+</code></pre>
+<p>The actual process manager is owned by the live workspace runtime, so headless
+commands print guidance rather than starting an orphan process that would die
+when the CLI invocation exits.</p>
+<h2 id="behavior"><a class="header" href="#behavior">Behavior</a></h2>
+<ul>
+<li>Processes are started in the current workspace directory.</li>
+<li>stdout and stderr are captured into bounded per-process logs.</li>
+<li><code>/process list</code> shows id, command, PID, working directory, status, and exit
+code when known.</li>
+<li><code>/process stop &lt;id&gt;</code> terminates the child process.</li>
+<li><code>/process restart &lt;id&gt;</code> stops the old process and starts a replacement with
+the same command and working directory.</li>
+<li>All runtime-owned processes are stopped when the live workspace shuts down.</li>
+</ul>
+<h2 id="limits-2"><a class="header" href="#limits-2">Limits</a></h2>
+<ul>
+<li>Attach currently renders the captured log document; it is not a tmux-style
+interactive terminal.</li>
+<li>Process groups and graceful signal escalation are planned follow-up work.</li>
+<li>Process records live for the current workspace session only.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
