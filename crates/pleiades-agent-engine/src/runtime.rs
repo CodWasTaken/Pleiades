@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use crate::checkpoint::{CheckpointRecord, CheckpointStore};
 use crate::{Engine, SessionStore};
 
 const COMMAND_CAPACITY: usize = 64;
@@ -498,6 +499,7 @@ struct RuntimeContext {
     conversation: Conversation,
     mode: AgentMode,
     session_store: SessionStore,
+    checkpoint_store: CheckpointStore,
     allowed_session: HashSet<String>,
     denied_session: HashSet<String>,
 }
@@ -512,12 +514,14 @@ impl RuntimeContext {
     ) -> Self {
         let engine =
             engine_override.unwrap_or_else(|| Engine::configured(config.clone(), mode.sandbox()));
+        let checkpoint_store = CheckpointStore::from_config(&config);
         Self {
             engine,
             config,
             conversation,
             mode,
             session_store,
+            checkpoint_store,
             allowed_session: HashSet::new(),
             denied_session: HashSet::new(),
         }
@@ -1502,6 +1506,143 @@ async fn apply_app_effect(
                 }
             }
         }
+        AppEffect::CreateCheckpoint(name) => {
+            if active.is_none() {
+                if let Some(ctx) = context.as_ref() {
+                    match ctx.checkpoint_store.create(
+                        &ctx.conversation,
+                        provider_name,
+                        model_name,
+                        *mode,
+                        name,
+                    ) {
+                        Ok(record) => {
+                            send_event(
+                                events,
+                                AgentEvent::Notify(Notification {
+                                    level: NotificationLevel::Success,
+                                    message: format!(
+                                        "Checkpoint created: {}",
+                                        checkpoint_label(&record)
+                                    ),
+                                }),
+                            )
+                            .await;
+                        }
+                        Err(error) => {
+                            send_event(events, AgentEvent::Error(error.to_string())).await
+                        }
+                    }
+                }
+            }
+        }
+        AppEffect::ListCheckpoints => {
+            if let Some(ctx) = context.as_ref() {
+                match ctx.checkpoint_store.list() {
+                    Ok(checkpoints) => {
+                        let mut document = RenderableDocument::new("Checkpoints");
+                        if checkpoints.is_empty() {
+                            document.push_section(
+                                "No checkpoints",
+                                "Create one with /checkpoint create [name].",
+                            );
+                        } else {
+                            for checkpoint in checkpoints {
+                                document.push_section(
+                                    checkpoint.name.unwrap_or_else(|| checkpoint.id.clone()),
+                                    format!(
+                                        "ID: {}\nMessages: {}\nProvider/model: {}/{}\nMode: {}\nChanged files: {}",
+                                        checkpoint.id,
+                                        checkpoint.message_count,
+                                        checkpoint.provider,
+                                        checkpoint.model,
+                                        checkpoint.mode.label(),
+                                        format_changed_files(&checkpoint.changed_files)
+                                    ),
+                                );
+                            }
+                        }
+                        send_event(events, AgentEvent::Document(document)).await;
+                    }
+                    Err(error) => send_event(events, AgentEvent::Error(error.to_string())).await,
+                }
+            }
+        }
+        AppEffect::ShowCheckpoint(id) => {
+            if let Some(ctx) = context.as_ref() {
+                match ctx.checkpoint_store.load(&id) {
+                    Ok(record) => {
+                        send_event(
+                            events,
+                            AgentEvent::Document(checkpoint_document(&record, false)),
+                        )
+                        .await;
+                    }
+                    Err(error) => send_event(events, AgentEvent::Error(error.to_string())).await,
+                }
+            }
+        }
+        AppEffect::RestoreCheckpoint { id, confirm } => {
+            if active.is_none() {
+                if let Some(ctx) = context.as_mut() {
+                    match ctx.checkpoint_store.load(&id) {
+                        Ok(record) if confirm => {
+                            match ctx.checkpoint_store.restore_workspace(&record) {
+                                Ok(backup) => {
+                                    ctx.conversation = record.conversation.clone();
+                                    let _ = ctx.session_store.save(&ctx.conversation);
+                                    send_event(
+                                        events,
+                                        AgentEvent::SessionReady {
+                                            id: ctx.conversation.id.clone(),
+                                            history: ctx.conversation.messages.clone(),
+                                        },
+                                    )
+                                    .await;
+                                    send_event(events, AgentEvent::Notify(Notification {
+                                        level: NotificationLevel::Success,
+                                        message: backup
+                                            .map(|path| format!("Checkpoint restored; previous diff backed up at {}", path.display()))
+                                            .unwrap_or_else(|| "Checkpoint restored".to_string()),
+                                    })).await;
+                                    emit_git_state(events).await;
+                                }
+                                Err(error) => {
+                                    send_event(events, AgentEvent::Error(error.to_string())).await
+                                }
+                            }
+                        }
+                        Ok(record) => {
+                            send_event(
+                                events,
+                                AgentEvent::Document(checkpoint_document(&record, true)),
+                            )
+                            .await;
+                        }
+                        Err(error) => {
+                            send_event(events, AgentEvent::Error(error.to_string())).await
+                        }
+                    }
+                }
+            }
+        }
+        AppEffect::DeleteCheckpoint(id) => {
+            if let Some(ctx) = context.as_ref() {
+                match ctx.checkpoint_store.delete(&id) {
+                    Ok(()) => {
+                        send_event(
+                            events,
+                            AgentEvent::Notify(Notification {
+                                level: NotificationLevel::Success,
+                                message: format!("Checkpoint deleted: {id}"),
+                            }),
+                        )
+                        .await;
+                    }
+                    Err(error) => send_event(events, AgentEvent::Error(error.to_string())).await,
+                }
+            }
+        }
         AppEffect::CancelTask => {
             if let Some(task) = active.as_ref() {
                 task.cancellation.cancel();
@@ -1546,6 +1687,56 @@ async fn apply_app_effect(
         }
     }
     false
+}
+
+fn checkpoint_label(record: &CheckpointRecord) -> String {
+    record
+        .name
+        .clone()
+        .unwrap_or_else(|| record.id.chars().take(8).collect())
+}
+
+fn checkpoint_document(record: &CheckpointRecord, restore_preview: bool) -> RenderableDocument {
+    let mut document = RenderableDocument::new(if restore_preview {
+        "Checkpoint restore preview"
+    } else {
+        "Checkpoint"
+    });
+    document.push_section("ID", record.id.clone());
+    document.push_section("Name", record.name.as_deref().unwrap_or("(none)"));
+    document.push_section("Messages", record.conversation.messages.len().to_string());
+    document.push_section(
+        "Provider/model",
+        format!("{}/{}", record.provider, record.model),
+    );
+    document.push_section("Mode", record.mode.label());
+    document.push_section(
+        "Git branch",
+        record.git_branch.as_deref().unwrap_or("(not git)"),
+    );
+    document.push_section(
+        "Git HEAD",
+        record.git_head.as_deref().unwrap_or("(not git)"),
+    );
+    document.push_section("Changed files", format_changed_files(&record.changed_files));
+    if restore_preview {
+        document.push_section(
+            "Restore",
+            format!(
+                "Preview only. Run /checkpoint restore {} --confirm to restore this conversation and tracked Git diff.",
+                record.id
+            ),
+        );
+    }
+    document
+}
+
+fn format_changed_files(files: &[String]) -> String {
+    if files.is_empty() {
+        "(none)".to_string()
+    } else {
+        files.join("\n")
+    }
 }
 
 #[cfg(test)]
@@ -1806,6 +1997,77 @@ mod tests {
                 .iter()
                 .any(|section| section.heading == "Model" && section.body == "mock-2")
         );
+
+        handle.commands.send(AgentCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn checkpoint_commands_create_list_and_preview_restore() {
+        let executions = Arc::new(AtomicUsize::new(0));
+        let (temp, runtime) =
+            runtime_with_mock(AgentMode::Agent, MockBehavior::ToolThenFinish, executions);
+        let mut handle = runtime.spawn();
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash(
+                "/checkpoint create before edit".into(),
+            ))
+            .await
+            .unwrap();
+        loop {
+            if matches!(
+                next_event(&mut handle.events).await,
+                AgentEvent::Notify(Notification {
+                    level: NotificationLevel::Success,
+                    ..
+                })
+            ) {
+                break;
+            }
+        }
+
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash("/checkpoint list".into()))
+            .await
+            .unwrap();
+        let document = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                break document;
+            }
+        };
+        assert!(
+            document
+                .sections
+                .iter()
+                .any(|section| section.heading == "before edit")
+        );
+
+        let checkpoint_dir = temp.path().join("sessions/checkpoints");
+        let checkpoint_id = std::fs::read_dir(checkpoint_dir)
+            .unwrap()
+            .flatten()
+            .find_map(|entry| {
+                entry
+                    .path()
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(ToString::to_string)
+            })
+            .unwrap();
+        handle
+            .commands
+            .send(AgentCommand::DispatchSlash(format!(
+                "/checkpoint restore {checkpoint_id}"
+            )))
+            .await
+            .unwrap();
+        let preview = loop {
+            if let AgentEvent::Document(document) = next_event(&mut handle.events).await {
+                break document;
+            }
+        };
+        assert_eq!(preview.title, "Checkpoint restore preview");
 
         handle.commands.send(AgentCommand::Shutdown).await.unwrap();
     }

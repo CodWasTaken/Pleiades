@@ -239,7 +239,7 @@ tracked as a GitHub issue under the matching milestone.
 |---|---|---|
 | 2.1 | Unified Workspace Commands | implemented |
 | 2.2 | Safe Autonomous and YOLO Modes | implemented |
-| 2.3 | Checkpoints, Context, Verification | pending |
+| 2.3 | Checkpoints, Context, Verification | 🚧 in progress |
 | 2.4 | MCP, Plugins, Skills, Custom Commands | pending |
 | 2.5 | Professional Coding Workspace | pending |
 | 2.6 | Sessions, Memory, Observability | pending |
