@@ -120,6 +120,18 @@ pub enum AppEffect {
     MemorySources,
     /// Clear all memory tiers.
     MemoryClear,
+    /// Show usage and active budget limits.
+    BudgetShow,
+    /// Set a token budget for this live runtime.
+    BudgetTokens(u64),
+    /// Set a cost budget in USD for this live runtime.
+    BudgetCost(String),
+    /// Set a time budget for this live runtime.
+    BudgetTime(String),
+    /// Set a tool-call budget for this live runtime.
+    BudgetTools(u64),
+    /// Reset usage totals and budget limits.
+    BudgetReset,
     /// Run a full definition-of-done verification plan.
     Verify,
     /// Run project test commands only.

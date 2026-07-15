@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `forget`, `refresh`, `sources`, and `clear`, matching
   `pleiades memory ...` CLI commands, enriched memory metadata, and
   delete-by-id/prefix support.
+- Added process-local usage and budget tracking with `/budget show`, `tokens`,
+  `cost`, `time`, `tools`, and `reset`, plus `pleiades budget ...` CLI
+  validation. Token, time, and tool-call budgets stop active tasks with
+  evidence; cost remains reported as unavailable until provider pricing data is
+  attached to usage events.
 - Added checkpoint commands for Release 2.3: `/checkpoint create`, list, show,
   restore preview, confirmed restore, delete, plus `/undo`, `/redo`, and
   `/rewind` entry points. Checkpoints persist conversation state, provider,

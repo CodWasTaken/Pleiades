@@ -106,6 +106,10 @@ enum Commands {
     #[command(subcommand)]
     Memory(MemoryCommand),
 
+    /// Inspect and set live task budgets
+    #[command(subcommand)]
+    Budget(BudgetCommand),
+
     /// Manage and execute tools
     #[command(subcommand)]
     Tool(ToolCommand),
@@ -437,6 +441,34 @@ enum MemoryCommand {
     Sources,
     /// Clear all memory tiers
     Clear,
+}
+
+#[derive(Subcommand)]
+enum BudgetCommand {
+    /// Show process-local CLI usage and live-workspace guidance
+    Show,
+    /// Set a token budget in the live workspace
+    Tokens {
+        /// Maximum total input/output/cache tokens
+        count: u64,
+    },
+    /// Set a cost budget in USD in the live workspace
+    Cost {
+        /// Maximum estimated USD cost
+        amount: String,
+    },
+    /// Set a wall-clock task budget in the live workspace
+    Time {
+        /// Duration such as 30s, 10m, or 1h
+        duration: String,
+    },
+    /// Set a tool-call budget in the live workspace
+    Tools {
+        /// Maximum tool calls
+        count: u64,
+    },
+    /// Reset live runtime budget state
+    Reset,
 }
 
 #[derive(Subcommand)]
@@ -1943,6 +1975,125 @@ fn handle_memory_command(command: MemoryCommand) {
             Err(error) => exit_error(&format!("Error: {error}")),
         },
     }
+}
+
+fn handle_budget_command(command: BudgetCommand) {
+    match command {
+        BudgetCommand::Show => {
+            let service = pleiades_agent_engine::BudgetService::new();
+            print_budget_report(&service.report());
+            println!();
+            println!("External CLI invocations are separate processes.");
+            println!("Use `/budget ...` inside `pleiades` to affect the live workspace runtime.");
+        }
+        BudgetCommand::Tokens { count } => {
+            if count == 0 {
+                exit_error("Error: token budget must be greater than 0");
+            }
+            println!("Run `/budget tokens {count}` inside the live workspace.");
+        }
+        BudgetCommand::Cost { amount } => match amount.parse::<f64>() {
+            Ok(value) if value > 0.0 => {
+                println!("Run `/budget cost {amount}` inside the live workspace.");
+                println!(
+                    "Cost enforcement requires provider pricing data; token budgets enforce today."
+                );
+            }
+            _ => exit_error("Error: cost budget must be a positive number"),
+        },
+        BudgetCommand::Time { duration } => match parse_cli_duration(&duration) {
+            Ok(seconds) => {
+                println!("Run `/budget time {duration}` inside the live workspace.");
+                println!("Parsed duration: {seconds}s");
+            }
+            Err(error) => exit_error(&format!("Error: {error}")),
+        },
+        BudgetCommand::Tools { count } => {
+            println!("Run `/budget tools {count}` inside the live workspace.");
+        }
+        BudgetCommand::Reset => {
+            println!("Run `/budget reset` inside the live workspace.");
+        }
+    }
+}
+
+fn print_budget_report(report: &pleiades_agent_engine::BudgetReport) {
+    println!("Usage and budgets");
+    println!("  Input tokens:       {}", report.totals.input_tokens);
+    println!("  Output tokens:      {}", report.totals.output_tokens);
+    println!("  Cache read tokens:  {}", report.totals.cache_read_tokens);
+    println!("  Cache write tokens: {}", report.totals.cache_write_tokens);
+    println!("  Total tokens:       {}", report.totals.total_tokens());
+    println!("  Tool calls:         {}", report.totals.tool_calls);
+    println!(
+        "  Provider latency:   {}ms",
+        report.totals.provider_latency_ms
+    );
+    println!("  Tool time:          {}ms", report.totals.tool_time_ms);
+    println!("  Elapsed:            {}s", report.elapsed_secs);
+    println!(
+        "  Token limit:        {}",
+        report
+            .limits
+            .token_limit
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "none".to_string())
+    );
+    println!(
+        "  Cost limit:         {}",
+        report
+            .limits
+            .cost_limit_usd
+            .map(|value| format!("${value:.4}"))
+            .unwrap_or_else(|| "none".to_string())
+    );
+    println!(
+        "  Time limit:         {}",
+        report
+            .limits
+            .time_limit_secs
+            .map(|value| format!("{value}s"))
+            .unwrap_or_else(|| "none".to_string())
+    );
+    println!(
+        "  Tool limit:         {}",
+        report
+            .limits
+            .tool_limit
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "none".to_string())
+    );
+    println!(
+        "  Estimated cost:     {}",
+        report
+            .estimated_cost_usd
+            .map(|value| format!("${value:.6}"))
+            .unwrap_or_else(|| "unavailable".to_string())
+    );
+}
+
+fn parse_cli_duration(value: &str) -> Result<u64, String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err("duration cannot be empty".to_string());
+    }
+    let (number, multiplier) = match value.chars().last() {
+        Some('s') | Some('S') => (&value[..value.len() - 1], 1),
+        Some('m') | Some('M') => (&value[..value.len() - 1], 60),
+        Some('h') | Some('H') => (&value[..value.len() - 1], 60 * 60),
+        Some('d') | Some('D') => (&value[..value.len() - 1], 24 * 60 * 60),
+        Some(_) => (value, 1),
+        None => return Err("duration cannot be empty".to_string()),
+    };
+    let parsed = number
+        .parse::<u64>()
+        .map_err(|_| "duration must look like 30s, 10m, or 1h".to_string())?;
+    if parsed == 0 {
+        return Err("duration must be greater than 0".to_string());
+    }
+    parsed
+        .checked_mul(multiplier)
+        .ok_or_else(|| "duration is too large".to_string())
 }
 
 fn exit_error(message: &str) -> ! {
@@ -3685,6 +3836,7 @@ fn main() {
             SessionCommand::Ephemeral { state } => handle_session_ephemeral(&state),
         },
         Some(Commands::Memory(cmd)) => handle_memory_command(cmd),
+        Some(Commands::Budget(cmd)) => handle_budget_command(cmd),
         Some(Commands::Tool(cmd)) => match cmd {
             ToolCommand::List => handle_tool_list(&loader),
             ToolCommand::Info { name } => handle_tool_info(&loader, &name),
