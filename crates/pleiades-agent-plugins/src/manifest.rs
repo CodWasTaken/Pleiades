@@ -119,6 +119,16 @@ pub struct PluginManifest {
     pub description: String,
     #[serde(default)]
     pub permissions: Vec<String>,
+    #[serde(rename = "requestedPaths", default)]
+    pub requested_paths: Vec<String>,
+    #[serde(rename = "envVars", default)]
+    pub env_vars: Vec<String>,
+    #[serde(default)]
+    pub network: Option<String>,
+    #[serde(default)]
+    pub checksum: Option<String>,
+    #[serde(default)]
+    pub signature: Option<String>,
     #[serde(rename = "defaultEnabled", default)]
     pub default_enabled: bool,
     #[serde(default)]

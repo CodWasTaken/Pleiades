@@ -45,6 +45,12 @@ pub struct PluginMetadata {
     pub source: String,
     pub default_enabled: bool,
     pub root: Option<PathBuf>,
+    pub requested_paths: Vec<String>,
+    pub env_vars: Vec<String>,
+    pub network: Option<String>,
+    pub checksum: Option<String>,
+    pub signature: Option<String>,
+    pub commands: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -238,6 +244,16 @@ impl PluginDefinition {
             source,
             default_enabled: manifest.default_enabled,
             root: Some(root.to_path_buf()),
+            requested_paths: manifest.requested_paths,
+            env_vars: manifest.env_vars,
+            network: manifest.network,
+            checksum: manifest.checksum,
+            signature: manifest.signature,
+            commands: manifest
+                .commands
+                .iter()
+                .map(|command| format!("{}: {}", command.name, command.command))
+                .collect(),
         };
         let hooks = manifest.hooks;
         let lifecycle = manifest.lifecycle;

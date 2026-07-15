@@ -416,6 +416,18 @@ enum PluginCommand {
         /// Plugin ID
         id: String,
     },
+
+    /// Accept a plugin trust report
+    Trust {
+        /// Plugin ID
+        id: String,
+    },
+
+    /// Revoke trust and disable a plugin
+    Untrust {
+        /// Plugin ID
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1769,6 +1781,8 @@ fn handle_plugin_info(loader: &ConfigLoader, id: &str) {
             println!("  Enabled:     {}", plugin.enabled);
             println!("  Source:      {}", plugin.source);
             println!("  Description: {}", plugin.description);
+            println!("  Trusted:     {}", plugin.trusted);
+            println!("  Trust req.:  {}", plugin.trust_required);
             println!("  Tools:       {}", plugin.tool_count);
             println!("  Hooks:       {}", plugin.has_hooks);
             println!(
@@ -1778,6 +1792,32 @@ fn handle_plugin_info(loader: &ConfigLoader, id: &str) {
                 } else {
                     plugin.permissions.join(", ")
                 }
+            );
+            println!(
+                "  Exec hooks:  {}",
+                cli_list_or_none(&plugin.executable_hooks)
+            );
+            println!(
+                "  Lifecycle:   {}",
+                cli_list_or_none(&plugin.lifecycle_commands)
+            );
+            println!(
+                "  Commands:    {}",
+                cli_list_or_none(&plugin.custom_commands)
+            );
+            println!(
+                "  Paths:       {}",
+                cli_list_or_none(&plugin.requested_paths)
+            );
+            println!("  Network:     {}", plugin.network_access);
+            println!("  Env vars:    {}", cli_list_or_none(&plugin.env_vars));
+            println!(
+                "  Checksum:    {}",
+                plugin.checksum.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "  Signature:   {}",
+                plugin.signature.as_deref().unwrap_or("(none)")
             );
         }
         Err(error) => {
@@ -1813,8 +1853,20 @@ fn handle_plugin_uninstall(loader: &ConfigLoader, id: &str) {
 }
 
 fn handle_plugin_enable(loader: &ConfigLoader, id: &str) {
-    match plugin_service(loader).enable(id) {
-        Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin enabled: {}", id),
+    let service = plugin_service(loader);
+    match service.info(id) {
+        Ok(plugin) if plugin.trust_required && !plugin.trusted => {
+            println!("Plugin `{id}` requires trust before enabling.");
+            println!("Review with `pleiades plugin info {id}`.");
+            println!("Accept with `pleiades plugin trust {id}`, then run enable again.");
+        }
+        Ok(_) => match service.enable(id) {
+            Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin enabled: {}", id),
+            Err(e) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m Enable failed: {}", e);
+                std::process::exit(1);
+            }
+        },
         Err(e) => {
             eprintln!("\x1b[1;31m✗\x1b[0m Enable failed: {}", e);
             std::process::exit(1);
@@ -1840,6 +1892,26 @@ fn handle_plugin_update(loader: &ConfigLoader, id: &str) {
         ),
         Err(error) => {
             eprintln!("\x1b[1;31m✗\x1b[0m Update failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_plugin_trust(loader: &ConfigLoader, id: &str) {
+    match plugin_service(loader).trust(id) {
+        Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin trusted: {}", id),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Trust failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn handle_plugin_untrust(loader: &ConfigLoader, id: &str) {
+    match plugin_service(loader).untrust(id) {
+        Ok(_) => println!("\x1b[1;32m✓\x1b[0m Plugin untrusted and disabled: {}", id),
+        Err(error) => {
+            eprintln!("\x1b[1;31m✗\x1b[0m Untrust failed: {error}");
             std::process::exit(1);
         }
     }
@@ -2880,6 +2952,8 @@ fn main() {
             PluginCommand::Enable { id } => handle_plugin_enable(&loader, &id),
             PluginCommand::Disable { id } => handle_plugin_disable(&loader, &id),
             PluginCommand::Update { id } => handle_plugin_update(&loader, &id),
+            PluginCommand::Trust { id } => handle_plugin_trust(&loader, &id),
+            PluginCommand::Untrust { id } => handle_plugin_untrust(&loader, &id),
         },
         Some(Commands::Mcp(cmd)) => match cmd {
             McpCommand::List => handle_mcp_list(&loader),
