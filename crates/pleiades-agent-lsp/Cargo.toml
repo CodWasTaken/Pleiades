@@ -1,0 +1,19 @@
+[package]
+name = "pleiades-agent-lsp"
+version = "2.0.0"
+edition = "2024"
+description = "Language-service integration for Pleiades"
+authors = ["Nataniel"]
+license = "MIT"
+repository = "https://github.com/CodWasTaken/Pleiades"
+
+[dependencies]
+pleiades-agent-core = { path = "../pleiades-agent-core", version = "2.0.0" }
+
+lsp-types = "0.97.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "rt", "macros"] }
+
+[dev-dependencies]
+tempfile = "3"

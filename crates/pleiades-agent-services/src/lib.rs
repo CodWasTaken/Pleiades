@@ -87,6 +87,12 @@ impl ApplicationServices {
         )
     }
 
+    pub fn lsp(&self) -> pleiades_agent_lsp::LspService {
+        pleiades_agent_lsp::LspService::new(
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        )
+    }
+
     pub fn loader(&self) -> pleiades_agent_config::ConfigLoader {
         pleiades_agent_config::ConfigLoader::with_dirs(
             self.global_config_dir.clone(),

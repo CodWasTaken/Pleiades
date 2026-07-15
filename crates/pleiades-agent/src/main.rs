@@ -134,6 +134,10 @@ enum Commands {
     #[command(subcommand)]
     Git(GitCommand),
 
+    /// Inspect language-service diagnostics and symbols
+    #[command(subcommand)]
+    Lsp(LspCommand),
+
     /// Start an interactive REPL session
     Repl {
         /// Session ID to load
@@ -645,6 +649,23 @@ enum GitCommand {
     Diff {
         #[arg(long)]
         staged: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum LspCommand {
+    /// Show detected language-service status
+    Status,
+    /// List detected language-service servers
+    Servers,
+    /// Restart language-service backends where supported
+    Restart,
+    /// Run language diagnostics
+    Diagnostics,
+    /// Search workspace symbols
+    Symbols {
+        /// Symbol name fragment
+        query: String,
     },
 }
 
@@ -2093,6 +2114,14 @@ fn skill_service(loader: &ConfigLoader) -> pleiades_agent_services::SkillService
     .skill()
 }
 
+fn lsp_service(loader: &ConfigLoader) -> pleiades_agent_lsp::LspService {
+    pleiades_agent_services::ApplicationServices::with_config_dirs(
+        loader.global_dir().to_path_buf(),
+        loader.project_dir().to_path_buf(),
+    )
+    .lsp()
+}
+
 fn handle_skills_list(loader: &ConfigLoader) {
     match skill_service(loader).list() {
         Ok(skills) => {
@@ -2211,6 +2240,98 @@ fn handle_skills_disable(loader: &ConfigLoader, name: &str) {
 fn handle_skills_reload() {
     println!("Skills are reloaded automatically by headless commands.");
     println!("The live workspace reloads skills through `/skills reload`.");
+}
+
+fn handle_lsp_command(loader: &ConfigLoader, command: LspCommand) {
+    let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
+    let service = lsp_service(loader);
+    match command {
+        LspCommand::Status | LspCommand::Servers => match runtime.block_on(service.status()) {
+            Ok(report) => print_lsp_status(&report),
+            Err(error) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+                std::process::exit(1);
+            }
+        },
+        LspCommand::Restart => {
+            println!("No persistent LSP server process is running in this slice.");
+            println!("Diagnostics are executed on demand through `pleiades lsp diagnostics`.");
+        }
+        LspCommand::Diagnostics => match runtime.block_on(service.diagnostics()) {
+            Ok(report) => print_lsp_diagnostics(&report),
+            Err(error) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+                std::process::exit(1);
+            }
+        },
+        LspCommand::Symbols { query } => match runtime.block_on(service.symbols(&query)) {
+            Ok(report) => print_lsp_symbols(&report),
+            Err(error) => {
+                eprintln!("\x1b[1;31m✗\x1b[0m {error}");
+                std::process::exit(1);
+            }
+        },
+    }
+}
+
+fn print_lsp_status(report: &pleiades_agent_lsp::LspStatusReport) {
+    println!("Workspace: {}", report.workspace.display());
+    if report.servers.is_empty() {
+        println!("No detected language services.");
+        return;
+    }
+    for server in &report.servers {
+        println!(
+            "  {:<18} {:<8} {:<10} {}",
+            server.id,
+            server.language,
+            server.status.label(),
+            server.command
+        );
+        println!("    {}", server.notes);
+    }
+}
+
+fn print_lsp_diagnostics(report: &pleiades_agent_lsp::DiagnosticReport) {
+    println!("Workspace: {}", report.workspace.display());
+    println!(
+        "Command: {}",
+        report
+            .command
+            .as_deref()
+            .unwrap_or("no diagnostics command run")
+    );
+    if report.diagnostics.is_empty() {
+        println!("No diagnostics reported.");
+        return;
+    }
+    for file in &report.diagnostics {
+        for diagnostic in &file.diagnostics {
+            println!(
+                "{}:{}:{}: {}",
+                file.path.display(),
+                diagnostic.range.start.line + 1,
+                diagnostic.range.start.character + 1,
+                diagnostic.message
+            );
+        }
+    }
+}
+
+fn print_lsp_symbols(report: &pleiades_agent_lsp::SymbolSearchReport) {
+    if report.symbols.is_empty() {
+        println!("No symbols matched `{}`.", report.query);
+        return;
+    }
+    for symbol in &report.symbols {
+        println!(
+            "{} {:<24} {}:{}",
+            symbol.kind,
+            symbol.name,
+            symbol.location.display(),
+            symbol.line
+        );
+    }
 }
 
 fn cli_list_or_all(values: &[String]) -> String {
@@ -3172,6 +3293,7 @@ fn main() {
         Some(Commands::Git(cmd)) => {
             handle_git_command(&loader, cmd, cli.provider.as_deref(), cli.model.as_deref())
         }
+        Some(Commands::Lsp(cmd)) => handle_lsp_command(&loader, cmd),
         Some(Commands::Repl { session }) => {
             let config = match loader.load_with_interpolation() {
                 Ok(c) => c,

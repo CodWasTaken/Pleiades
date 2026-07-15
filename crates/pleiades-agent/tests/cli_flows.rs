@@ -219,6 +219,26 @@ fn skills_cli_create_enable_show_and_disable() {
 }
 
 #[test]
+fn lsp_cli_searches_rust_symbols() {
+    let workspace = tempfile::tempdir().unwrap();
+    let src = workspace.path().join("src");
+    fs::create_dir_all(&src).unwrap();
+    fs::write(
+        src.join("lib.rs"),
+        "pub struct StarCatalog;\npub fn CatalogBuilder() {}\n",
+    )
+    .unwrap();
+
+    command(workspace.path())
+        .current_dir(workspace.path())
+        .args(["lsp", "symbols", "Catalog"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("StarCatalog"))
+        .stdout(predicate::str::contains("CatalogBuilder"));
+}
+
+#[test]
 fn workflow_create_validate_list_and_run() {
     let workspace = tempfile::tempdir().unwrap();
     command(workspace.path())

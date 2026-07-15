@@ -102,6 +102,16 @@ pub enum AppEffect {
     ReviewDiff { staged: bool },
     /// Render `git status --short --branch`.
     GitStatus,
+    /// Render language-service status.
+    LspStatus,
+    /// Render configured/detected language-service servers.
+    LspServers,
+    /// Restart language-service backends where supported.
+    LspRestart,
+    /// Render language diagnostics.
+    LspDiagnostics,
+    /// Search workspace symbols.
+    LspSymbols(String),
     /// Cancel any running task.
     CancelTask,
     /// Quit the live workspace (does not shut down the runtime cleanly;

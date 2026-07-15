@@ -627,6 +627,7 @@ pub fn default_registry_with_services(
     register_context_family(&mut r);
     register_verification_family(&mut r);
     register_git_family(&mut r);
+    register_lsp_family(&mut r);
     register_custom_commands(&mut r, services);
     r
 }
@@ -2318,6 +2319,92 @@ fn register_git_family(r: &mut crate::registry::CommandRegistry) {
     }
 }
 
+fn register_lsp_family(r: &mut crate::registry::CommandRegistry) {
+    r.register(
+        CommandSpec::builder(
+            vec!["lsp"],
+            "Inspect language-service state",
+            handler(|_| Ok(CommandResult::effects([AppEffect::LspStatus]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["lsp", "status"],
+            "Show language-service status",
+            handler(|_| Ok(CommandResult::effects([AppEffect::LspStatus]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["lsp", "servers"],
+            "List detected language-service servers",
+            handler(|_| Ok(CommandResult::effects([AppEffect::LspServers]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["lsp", "restart"],
+            "Restart language-service backends where supported",
+            handler(|_| Ok(CommandResult::effects([AppEffect::LspRestart]))),
+        )
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Interactive)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["lsp", "diagnostics"],
+            "Run language diagnostics and render compiler findings",
+            handler(|_| Ok(CommandResult::effects([AppEffect::LspDiagnostics]))),
+        )
+        .category(CommandCategory::Verification)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Dangerous)
+        .build(),
+    )
+    .ok();
+    r.register(
+        CommandSpec::builder(
+            vec!["lsp", "symbols"],
+            "Search workspace symbols",
+            handler(|args| {
+                if args.is_empty() {
+                    return Err(Error::invalid_input("usage: /lsp symbols <query>"));
+                }
+                Ok(CommandResult::effects([AppEffect::LspSymbols(
+                    args.join(" "),
+                )]))
+            }),
+        )
+        .arguments(vec![ArgumentSpec::required(
+            "query",
+            "Symbol name fragment to search for.",
+        )])
+        .category(CommandCategory::Project)
+        .availability(CommandAvailability::Both)
+        .permission(PermissionRequirement::Read)
+        .build(),
+    )
+    .ok();
+}
+
 #[derive(Debug, Clone)]
 struct CustomCommandHandler {
     definition: CustomCommandDefinition,
@@ -2588,6 +2675,12 @@ mod tests {
             "git log",
             "git branch",
             "git worktree",
+            "lsp",
+            "lsp status",
+            "lsp servers",
+            "lsp restart",
+            "lsp diagnostics",
+            "lsp symbols",
         ] {
             assert!(r.get(path).is_some(), "expected `/{path}` to be registered");
         }
@@ -2885,6 +2978,35 @@ mod tests {
             result,
             CommandResult::Effects(effects) if effects == vec![AppEffect::GitStatus]
         ));
+    }
+
+    #[tokio::test]
+    async fn lsp_commands_emit_typed_effects() {
+        let context = CommandContextBuilder::default().build();
+        let result = default_registry()
+            .dispatch("/lsp diagnostics", &context, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            result,
+            CommandResult::Effects(effects) if effects == vec![AppEffect::LspDiagnostics]
+        ));
+
+        let result = default_registry()
+            .dispatch("/lsp symbols Runtime", &context, true)
+            .await
+            .unwrap();
+        let CommandResult::Effects(effects) = result else {
+            panic!("lsp symbols should emit an effect");
+        };
+        assert_eq!(effects, vec![AppEffect::LspSymbols("Runtime".to_string())]);
+
+        let suggestions = default_registry().suggest("/lsp ", true);
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.label == "lsp diagnostics")
+        );
     }
 
     #[tokio::test]
