@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   commands backed by structured verification reports. Verification runs in a
   background task, captures changed files, diff stats, commands, exit status,
   stdout/stderr snippets, and refuses to report executed success in Plan mode.
+- Added runtime doom-loop detection with `agent.max_repeats` and a tested stop
+  path for repeated identical tool failures.
 - Split runtime access control into typed `ApprovalPolicy` and
   `SandboxPolicy` values, and added `auto` and `yolo` mode presets. Auto runs
   without prompts inside the workspace; YOLO is the explicit full-host preset.

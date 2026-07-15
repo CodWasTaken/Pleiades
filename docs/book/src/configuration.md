@@ -43,6 +43,7 @@ Configuration is merged in this order: built-in defaults, global configuration, 
 | `agent.system_prompt_prefix` | string? | unset |
 | `agent.default_tools` | string list | empty |
 | `agent.max_tool_iterations` | integer | `25` |
+| `agent.max_repeats` | integer | `3` |
 | `agent.auto_edit` | boolean | `false` |
 
 Never commit expanded secrets. Prefer `${OPENAI_API_KEY}` and equivalent environment references. Plugin hooks are ordinary child processes, not sandboxed; only install manifests you trust.
