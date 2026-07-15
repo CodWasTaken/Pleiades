@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9d772bc4.js";
+            window.path_to_searchindex_js = "searchindex-ff972910.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-3fcdb90d.js"></script>
+        <script src="toc-c11df699.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -830,6 +830,41 @@ covered by a regression test that restores file content exactly.</p>
 <li>staged hunk restoration is rejected in this slice;</li>
 <li>binary diffs are not reverted;</li>
 <li>split-view rendering and hunk staging are planned follow-up work.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="language-services"><a class="header" href="#language-services">Language services</a></h1>
+<p>Pleiades includes a shared language-service foundation used by both the CLI and
+the live workspace.</p>
+<p>Commands:</p>
+<pre><code class="language-text">/lsp status
+/lsp servers
+/lsp restart
+/lsp diagnostics
+/lsp symbols &lt;query&gt;
+</code></pre>
+<p>Headless equivalents:</p>
+<pre><code class="language-bash">pleiades lsp status
+pleiades lsp servers
+pleiades lsp restart
+pleiades lsp diagnostics
+pleiades lsp symbols &lt;query&gt;
+</code></pre>
+<h2 id="current-rust-support"><a class="header" href="#current-rust-support">Current Rust support</a></h2>
+<p>For Rust workspaces, Pleiades detects <code>Cargo.toml</code>, reports <code>rust-analyzer</code>
+availability, and runs diagnostics through:</p>
+<pre><code class="language-bash">cargo check --message-format=json
+</code></pre>
+<p>Compiler messages are normalized into LSP-compatible diagnostics using
+<code>lsp-types</code>, so future persistent language-server clients can feed the same
+runtime and UI documents.</p>
+<p>Symbol search currently scans Rust source files for common definitions such as
+functions, structs, enums, and traits. The scan skips <code>.git</code> and <code>target</code>.</p>
+<h2 id="limits-1"><a class="header" href="#limits-1">Limits</a></h2>
+<ul>
+<li>Persistent JSON-RPC LSP server processes are not started yet.</li>
+<li><code>/lsp restart</code> reports that no persistent server exists in this slice.</li>
+<li>Diagnostics may write normal Cargo build artifacts under <code>target/</code>.</li>
+<li>Non-Rust language servers are planned follow-up work.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
