@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3221004a.js";
+            window.path_to_searchindex_js = "searchindex-2ba6d8aa.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-18fbc06d.js"></script>
+        <script src="toc-4fe40847.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -562,6 +562,60 @@ malformed source leaves the active copy unchanged. Plugins installed before
 source tracking was introduced must be reinstalled once before they can be
 updated.</p>
 <p>The current runtime supports shell hooks for <code>PreToolUse</code>, <code>PostToolUse</code>, and <code>PostToolUseFailure</code>. Hook input is provided as JSON on standard input with contextual environment variables. Treat third-party hook commands as executable code and inspect them before installation.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="mcp-servers"><a class="header" href="#mcp-servers">MCP servers</a></h1>
+<p>Pleiades has a shared MCP management layer used by the CLI and live workspace.
+The current Release 2.4 slice manages configured servers and tool exposure
+filters. Runtime connections, live logs, reconnects, OAuth flows, and schema
+discovery build on this foundation in the next MCP slices.</p>
+<h2 id="live-workspace-commands"><a class="header" href="#live-workspace-commands">Live workspace commands</a></h2>
+<pre><code class="language-text">/mcp
+/mcp list
+/mcp info &lt;id&gt;
+/mcp add
+/mcp remove &lt;id&gt;
+/mcp enable &lt;id&gt;
+/mcp disable &lt;id&gt;
+/mcp auth &lt;id&gt;
+/mcp logout &lt;id&gt;
+/mcp tools &lt;id&gt;
+/mcp tool-info &lt;server&gt; &lt;tool&gt;
+/mcp reload
+/mcp restart &lt;id&gt;
+/mcp logs &lt;id&gt;
+/mcp debug &lt;id&gt;
+</code></pre>
+<p><code>/mcp add</code>, <code>/mcp auth</code>, <code>/mcp logout</code>, <code>/mcp restart</code>, <code>/mcp logs</code>, and
+<code>/mcp debug</code> open the native MCP manager overlay. The overlay is intentionally
+read-only until runtime connections and log streams are wired.</p>
+<h2 id="headless-cli-commands"><a class="header" href="#headless-cli-commands">Headless CLI commands</a></h2>
+<pre><code class="language-bash">pleiades mcp list
+pleiades mcp info docs
+pleiades mcp disable docs
+pleiades mcp enable docs
+pleiades mcp remove docs
+pleiades mcp tools docs
+pleiades mcp tool-info docs search
+pleiades mcp reload
+</code></pre>
+<p>Headless commands read the latest configuration on each invocation. Secrets are
+not resolved for display; query parameters such as <code>token</code>, <code>key</code>, <code>api_key</code>,
+and <code>access_token</code> are redacted.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>MCP servers live under <code>mcp.servers</code>:</p>
+<pre><code class="language-toml">[mcp.servers.docs]
+transport = "streamable-http"
+url = "https://example.test/mcp"
+timeout_secs = 30
+tool_allowlist = ["search"]
+
+[mcp.servers.docs.auth]
+type = "bearer"
+token_env = "DOCS_MCP_TOKEN"
+</code></pre>
+<p>Pleiades stores environment variable names for credentials, not credential
+values. Tool allowlists and denylists are configuration filters only until live
+schema discovery is connected.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="prompt-templates"><a class="header" href="#prompt-templates">Prompt templates</a></h1>
 <p>Pleiades ships assistant, summarizer, review, commit, PR summary, diff explanation, refactoring, and test-generation templates. Templates substitute <code>{{name}}</code>; <code>{{name|default}}</code> supplies a fallback.</p>
