@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-19975f40.js";
+            window.path_to_searchindex_js = "searchindex-09630e98.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -200,8 +200,12 @@ help and nested autocomplete query the same registry, eliminating parallel
 command lists and numeric palette dispatch.</p>
 <p>The terminal loop uses <code>tokio::select!</code> across Crossterm’s <code>EventStream</code>, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.</p>
 <h2 id="agent-runtime"><a class="header" href="#agent-runtime">Agent runtime</a></h2>
-<p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, checkpoint store, context pins, compression history, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, checkpoint operations, context inspection/compaction, and shutdown.</p>
+<p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, checkpoint store, context pins, compression history, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, checkpoint operations, context inspection/compaction, verification requests, and shutdown.</p>
 <p>Provider streams normalize text, reasoning summaries, tool calls, provider-managed activity, tool output, usage, completion, and errors. The runtime adds typed lifecycle events for planning, permission waits, execution, validation, diff review, completion, failure, and cancellation.</p>
+<p>Verification commands run as background runtime tasks. They detect project
+tooling, inspect the diff, execute bounded checks, and emit structured evidence
+documents so completion reports can distinguish passed, failed, skipped, and
+unverified work.</p>
 <h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate responsibilities</a></h2>
 <ul>
 <li><code>pleiades-agent-core</code> — provider/tool traits and normalized domain types.</li>

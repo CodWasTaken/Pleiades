@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-19975f40.js";
+            window.path_to_searchindex_js = "searchindex-09630e98.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -254,11 +254,12 @@ executes provider or tool logic in the TUI.</p>
 <p>The currently implemented workspace commands include <code>/help</code>, <code>/status</code>,
 <code>/mode</code>, <code>/provider</code>, <code>/model</code>, <code>/files</code>, <code>/sessions</code>, <code>/load</code>, <code>/diff</code>,
 <code>/output</code>, <code>/checkpoint</code>, <code>/context</code>, <code>/undo</code>, <code>/redo</code>, <code>/rewind</code>, <code>/doctor</code>,
-<code>/config</code>, <code>/clear</code>, <code>/save</code>, and <code>/quit</code>. The provider family includes <code>list</code>, <code>use</code>,
-<code>info</code>, <code>add</code>, <code>remove</code>, and <code>reload</code>. Provider reports are obtained through the
-same application service used by the external CLI and always mask credentials.
-Model and plugin command families are also registered with nested completion
-and structured documents.</p>
+<code>/verify</code>, <code>/test</code>, <code>/run</code>, <code>/review</code>, <code>/config</code>, <code>/clear</code>, <code>/save</code>, and
+<code>/quit</code>. The provider family includes <code>list</code>, <code>use</code>, <code>info</code>, <code>add</code>, <code>remove</code>,
+and <code>reload</code>. Provider reports are obtained through the same application
+service used by the external CLI and always mask credentials. Model and plugin
+command families are also registered with nested completion and structured
+documents.</p>
 <h2 id="checkpoints"><a class="header" href="#checkpoints">Checkpoints</a></h2>
 <p>Use <code>/checkpoint create [name]</code> before risky work. A checkpoint stores the
 conversation, active provider/model/mode, Git head and branch, changed files,
@@ -279,6 +280,18 @@ in this release. <code>/context compact</code> summarizes older non-system messa
 records before/after token estimates. Token counts use a deterministic
 four-characters-per-token approximation until provider-specific tokenizers are
 integrated.</p>
+<h2 id="verification"><a class="header" href="#verification">Verification</a></h2>
+<p>Use <code>/verify</code> before reporting a development task as complete. Pleiades
+detects the project type, captures the current Git diff summary and changed
+files, runs a small definition-of-done command plan, and renders a structured
+evidence report. Rust projects currently run <code>cargo fmt --all -- --check</code>,
+<code>cargo clippy --workspace --all-targets --all-features -- -D warnings</code>, and
+<code>cargo test --workspace</code>. Node projects run <code>npm test</code> and <code>npm run lint --if-present</code>.</p>
+<p>Use <code>/test</code> to run only detected tests, <code>/run &lt;command&gt;</code> to capture evidence
+from an explicit command, and <code>/review</code> to open the diff overlay. In Plan mode,
+verification commands are planned but not executed because Plan mode is
+read-only. A report must show executed successful commands before Pleiades can
+truthfully claim verification passed.</p>
 <h2 id="terminal-compatibility"><a class="header" href="#terminal-compatibility">Terminal compatibility</a></h2>
 <p>The default <code>seven-sisters</code> theme uses restrained navy, blue-violet, cyan, and starlight tokens. <code>andromeda</code>, <code>orion</code>, <code>event-horizon</code>, <code>solar-wind</code>, <code>high-contrast</code>, and <code>ascii</code> are built in. The ASCII theme avoids Unicode symbols and rounded borders. Ratatui and Crossterm handle resizing and color capability fallback; no terminal background settings are modified.</p>
 <p>Pleiades enters the alternate screen with raw input, bracketed paste, and mouse capture. A terminal guard restores raw mode, cursor visibility, mouse capture, bracketed paste, and the original screen on normal exit, errors, and panics.</p>
@@ -295,7 +308,7 @@ integrated.</p>
 <li>review the resulting workspace diff;</li>
 <li>report the cause or goal, files changed, decisions, observed checks, and remaining risk.</li>
 </ol>
-<p>The agent is explicitly prohibited from claiming a check passed unless it ran and observed that result. Tool and provider activity is normalized into typed events, so the terminal can show what actually happened separately from the final prose response.</p>
+<p>The agent is explicitly prohibited from claiming a check passed unless it ran and observed that result. Use <code>/verify</code> to gather explicit definition-of-done evidence: Pleiades detects project tooling, inspects the diff, runs bounded checks, and renders command outcomes. If checks are skipped, blocked, or fail, the report must say so instead of implying the task is fully verified. Tool and provider activity is normalized into typed events, so the terminal can show what actually happened separately from the final prose response.</p>
 <h2 id="provider-execution-paths"><a class="header" href="#provider-execution-paths">Provider execution paths</a></h2>
 <p>API and OpenAI-compatible providers return normalized text, reasoning summaries, tool calls, usage, finish reasons, and errors. The Pleiades runtime executes their built-in tools, applies permission policy, captures output, records tool results in the conversation, and continues the agent loop.</p>
 <p>The <code>openai-subscription</code> adapter delegates autonomous execution and ChatGPT authentication to the official Codex CLI. Credentials remain in Codex’s store. Pleiades maps provider JSON events into the same activity model and selects Codex’s <code>read-only</code>, <code>workspace-write</code>, or <code>danger-full-access</code> sandbox from the active mode. Codex owns individual command execution in this delegated path, so Pleiades cannot display its own per-tool approval modal for those internal calls; the selected sandbox remains the enforced boundary.</p>
@@ -559,8 +572,12 @@ help and nested autocomplete query the same registry, eliminating parallel
 command lists and numeric palette dispatch.</p>
 <p>The terminal loop uses <code>tokio::select!</code> across Crossterm’s <code>EventStream</code>, the agent event receiver, background file discovery, and a 50 ms render interval. Rendering is immediate-mode: every frame is derived from state.</p>
 <h2 id="agent-runtime"><a class="header" href="#agent-runtime">Agent runtime</a></h2>
-<p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, checkpoint store, context pins, compression history, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, checkpoint operations, context inspection/compaction, and shutdown.</p>
+<p><code>AgentRuntime</code> owns the configured <code>Engine</code>, <code>Conversation</code>, <code>SessionStore</code>, checkpoint store, context pins, compression history, permission-session decisions, task queue, and cancellation token. A submitted task runs in a Tokio task while the runtime actor continues accepting cancellation, follow-ups, permission decisions, mode changes, provider/model changes, session operations, checkpoint operations, context inspection/compaction, verification requests, and shutdown.</p>
 <p>Provider streams normalize text, reasoning summaries, tool calls, provider-managed activity, tool output, usage, completion, and errors. The runtime adds typed lifecycle events for planning, permission waits, execution, validation, diff review, completion, failure, and cancellation.</p>
+<p>Verification commands run as background runtime tasks. They detect project
+tooling, inspect the diff, execute bounded checks, and emit structured evidence
+documents so completion reports can distinguish passed, failed, skipped, and
+unverified work.</p>
 <h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate responsibilities</a></h2>
 <ul>
 <li><code>pleiades-agent-core</code> — provider/tool traits and normalized domain types.</li>

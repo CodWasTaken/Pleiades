@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-19975f40.js";
+            window.path_to_searchindex_js = "searchindex-09630e98.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -192,7 +192,7 @@
 <li>review the resulting workspace diff;</li>
 <li>report the cause or goal, files changed, decisions, observed checks, and remaining risk.</li>
 </ol>
-<p>The agent is explicitly prohibited from claiming a check passed unless it ran and observed that result. Tool and provider activity is normalized into typed events, so the terminal can show what actually happened separately from the final prose response.</p>
+<p>The agent is explicitly prohibited from claiming a check passed unless it ran and observed that result. Use <code>/verify</code> to gather explicit definition-of-done evidence: Pleiades detects project tooling, inspects the diff, runs bounded checks, and renders command outcomes. If checks are skipped, blocked, or fail, the report must say so instead of implying the task is fully verified. Tool and provider activity is normalized into typed events, so the terminal can show what actually happened separately from the final prose response.</p>
 <h2 id="provider-execution-paths"><a class="header" href="#provider-execution-paths">Provider execution paths</a></h2>
 <p>API and OpenAI-compatible providers return normalized text, reasoning summaries, tool calls, usage, finish reasons, and errors. The Pleiades runtime executes their built-in tools, applies permission policy, captures output, records tool results in the conversation, and continues the agent loop.</p>
 <p>The <code>openai-subscription</code> adapter delegates autonomous execution and ChatGPT authentication to the official Codex CLI. Credentials remain in Codex’s store. Pleiades maps provider JSON events into the same activity model and selects Codex’s <code>read-only</code>, <code>workspace-write</code>, or <code>danger-full-access</code> sandbox from the active mode. Codex owns individual command execution in this delegated path, so Pleiades cannot display its own per-tool approval modal for those internal calls; the selected sandbox remains the enforced boundary.</p>
