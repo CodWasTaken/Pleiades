@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-09630e98.js";
+            window.path_to_searchindex_js = "searchindex-aba4e4ac.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -199,6 +199,10 @@
 <h2 id="cancellation-and-follow-ups"><a class="header" href="#cancellation-and-follow-ups">Cancellation and follow-ups</a></h2>
 <p>Every task has a cancellation token. <code>Ctrl+C</code> interrupts a provider stream, tool wait, or permission wait and records a cancellation event. Switching access mode also cancels work running under the old boundary before applying the new one.</p>
 <p>Messages sent while a task runs enter a FIFO queue. The runtime starts each queued follow-up automatically using the updated conversation and emits queue-count changes for the status bar.</p>
+<p>The runtime also stops repeated identical failures before they consume the
+entire tool-iteration budget. <code>agent.max_repeats</code> defaults to <code>3</code>; when the
+same tool failure repeats that many times, Pleiades emits a clear failure such
+as <code>Stopping: identical failure ... repeated 3 times</code> and saves the session.</p>
 <h2 id="evidence-and-persistence"><a class="header" href="#evidence-and-persistence">Evidence and persistence</a></h2>
 <p>Sessions save after tool iterations, completion, cancellation, explicit <code>/save</code>, and shutdown. At completion, the runtime captures the current Git diff and branch state for in-interface review. Model and tool output is bounded on UTF-8 boundaries, while the conversation viewport renders a moving window so unusually large sessions do not monopolize redraw work.</p>
 

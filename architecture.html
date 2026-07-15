@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-09630e98.js";
+            window.path_to_searchindex_js = "searchindex-aba4e4ac.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-18fbc06d.js"></script>
@@ -206,6 +206,9 @@ command lists and numeric palette dispatch.</p>
 tooling, inspect the diff, execute bounded checks, and emit structured evidence
 documents so completion reports can distinguish passed, failed, skipped, and
 unverified work.</p>
+<p>The runtime records repeated failure signals during autonomous work. Identical
+tool failures are stopped at <code>agent.max_repeats</code> with a typed <code>TaskFailed</code>
+event so the UI can show why the agent stopped.</p>
 <h2 id="crate-responsibilities"><a class="header" href="#crate-responsibilities">Crate responsibilities</a></h2>
 <ul>
 <li><code>pleiades-agent-core</code> — provider/tool traits and normalized domain types.</li>
