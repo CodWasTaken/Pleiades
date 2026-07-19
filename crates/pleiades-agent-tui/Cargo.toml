@@ -14,7 +14,7 @@ pleiades-agent-commands = { path = "../pleiades-agent-commands", version = "2.0.
 pleiades-agent-engine = { path = "../pleiades-agent-engine", version = "2.0.0" }
 pleiades-agent-services = { path = "../pleiades-agent-services", version = "2.0.0" }
 
-pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
 ratatui = "0.28"
 crossterm = { version = "0.28", features = ["event-stream"] }
