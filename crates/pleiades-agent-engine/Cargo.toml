@@ -24,7 +24,7 @@ pleiades-agent-services = { path = "../pleiades-agent-services", version = "2.0.
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
+toml = "1.1"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 async-trait = "0.1"
